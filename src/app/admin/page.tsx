@@ -1,18 +1,32 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
 import { getDailyCode } from '@/lib/matchSchedule'
+
+type EntryRow = {
+  name: string; phone: string; email: string | null; pick: string
+  is_correct: boolean | null; raffle_entries: number; pub_id: string; created_at: string
+  matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; stage: string; kickoff_at: string } | null
+}
+type DayStat = [string, { haverhill: number; nashua: number; total: number }]
+type Totals = { total_entries: number; unique_phones: number; emails_collected: number; correct: number; haverhill: number; nashua: number }
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [tab, setTab] = useState<'results' | 'entrants' | 'stats'>('results')
   const [todaysMatches, setTodaysMatches] = useState<Match[]>([])
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
   const [results, setResults] = useState<Record<string, 'home' | 'draw' | 'away'>>({})
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState<'success' | 'error'>('success')
+  const [stats, setStats] = useState<DayStat[]>([])
+  const [totals, setTotals] = useState<Totals | null>(null)
+  const [entrants, setEntrants] = useState<EntryRow[]>([])
+  const [selectedDate, setSelectedDate] = useState('')
+  const [loadingEntrants, setLoadingEntrants] = useState(false)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -21,55 +35,58 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, action: 'ping', payload: {} })
     })
-    if (res.ok) {
-      setAuthed(true)
-      setAuthError('')
-    } else {
-      setAuthError('Wrong password')
-    }
+    if (res.ok) { setAuthed(true); setAuthError('') }
+    else setAuthError('Wrong password')
   }
+
+  const loadMatches = useCallback(async () => {
+    const now = new Date()
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+    const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+    const threeDaysAhead = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+
+    const { data: today } = await supabase.from('matches').select('*')
+      .gte('kickoff_at', todayStart.toISOString())
+      .lte('kickoff_at', todayEnd.toISOString())
+      .neq('stage', 'Demo Match').order('kickoff_at')
+    setTodaysMatches(today || [])
+
+    const { data: recent } = await supabase.from('matches').select('*')
+      .gte('kickoff_at', threeDaysAgo.toISOString())
+      .lt('kickoff_at', todayStart.toISOString())
+      .is('result', null).neq('stage', 'Demo Match')
+      .order('kickoff_at', { ascending: false })
+    setRecentMatches(recent || [])
+
+    const { data: upcoming } = await supabase.from('matches').select('*')
+      .gt('kickoff_at', todayEnd.toISOString())
+      .lte('kickoff_at', threeDaysAhead.toISOString())
+      .neq('stage', 'Demo Match').order('kickoff_at')
+    setUpcomingMatches(upcoming || [])
+  }, [])
+
+  const loadStats = useCallback(async () => {
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=stats`)
+    const data = await res.json()
+    if (data.stats) { setStats(data.stats); setTotals(data.totals) }
+  }, [password])
+
+  const loadEntrants = useCallback(async (date?: string) => {
+    setLoadingEntrants(true)
+    const url = `/api/admin-data?password=${encodeURIComponent(password)}&action=entrants${date ? `&date=${date}` : ''}`
+    const res = await fetch(url)
+    const data = await res.json()
+    setEntrants(data.entries || [])
+    setLoadingEntrants(false)
+  }, [password])
 
   useEffect(() => {
     if (!authed) return
-    async function load() {
-      const now = new Date()
-      const todayStart = new Date(now)
-      todayStart.setHours(0, 0, 0, 0)
-      const todayEnd = new Date(now)
-      todayEnd.setHours(23, 59, 59, 999)
-
-      // Today's matches
-      const { data: today } = await supabase
-        .from('matches')
-        .select('*')
-        .gte('kickoff_at', todayStart.toISOString())
-        .lte('kickoff_at', todayEnd.toISOString())
-        .order('kickoff_at')
-      setTodaysMatches(today || [])
-
-      // Recent unscored matches (last 3 days)
-      const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
-      const { data: recent } = await supabase
-        .from('matches')
-        .select('*')
-        .gte('kickoff_at', threeDaysAgo.toISOString())
-        .lt('kickoff_at', todayStart.toISOString())
-        .is('result', null)
-        .order('kickoff_at', { ascending: false })
-      setRecentMatches(recent || [])
-
-      // Next 3 days upcoming
-      const threeDaysAhead = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-      const { data: upcoming } = await supabase
-        .from('matches')
-        .select('*')
-        .gt('kickoff_at', todayEnd.toISOString())
-        .lte('kickoff_at', threeDaysAhead.toISOString())
-        .order('kickoff_at')
-      setUpcomingMatches(upcoming || [])
-    }
-    load()
-  }, [authed])
+    loadMatches()
+    loadStats()
+    loadEntrants()
+  }, [authed, loadMatches, loadStats, loadEntrants])
 
   async function setResult(match: Match) {
     const result = results[match.id]
@@ -82,12 +99,8 @@ export default function AdminPage() {
     const data = await res.json()
     if (data.success) {
       flash(`✅ Result set! ${data.updated} entries updated.`, 'success')
-      // Mark locally
-      setTodaysMatches(prev => prev.map(m => m.id === match.id ? { ...m, result } : m))
-      setRecentMatches(prev => prev.filter(m => m.id !== match.id))
-    } else {
-      flash(data.error, 'error')
-    }
+      loadMatches(); loadStats(); loadEntrants()
+    } else flash(data.error, 'error')
   }
 
   function flash(text: string, type: 'success' | 'error') {
@@ -96,20 +109,18 @@ export default function AdminPage() {
   }
 
   function fmt(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
-    })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
   }
-
   function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric'
-    })
+    return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  }
+  function fmtFull(iso: string) {
+    return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   }
 
   function MatchResultRow({ m }: { m: Match }) {
-    const isOpen = new Date(m.entries_close_at) > new Date()
     const hasResult = !!m.result
+    const isOpen = new Date(m.entries_close_at) > new Date()
     return (
       <div className="admin-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 160 }}>
@@ -118,30 +129,26 @@ export default function AdminPage() {
           </div>
           <div className="muted" style={{ fontSize: 12 }}>
             {m.stage} · {fmt(m.kickoff_at)}
-            {isOpen && <span style={{ color: 'var(--green)', marginLeft: 6 }}>● Entries open</span>}
+            {isOpen && <span style={{ color: 'var(--green)', marginLeft: 6 }}>● Open</span>}
           </div>
           {hasResult && (
-            <div style={{ fontSize: 12, marginTop: 2, color: 'var(--green)' }}>
-              Result already set: {m.result === 'home' ? `${m.home_team} win` : m.result === 'away' ? `${m.away_team} win` : 'Draw'}
+            <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 2 }}>
+              ✓ {m.result === 'home' ? `${m.home_team} win` : m.result === 'away' ? `${m.away_team} win` : 'Draw'}
             </div>
           )}
         </div>
         {!hasResult && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <select
-              value={results[m.id] || ''}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <select value={results[m.id] || ''}
               onChange={e => setResults(prev => ({ ...prev, [m.id]: e.target.value as 'home' | 'draw' | 'away' }))}
               style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13 }}>
-              <option value="">Select result…</option>
+              <option value="">Result…</option>
               <option value="home">{m.home_flag} {m.home_team} win</option>
               <option value="draw">Draw</option>
               <option value="away">{m.away_flag} {m.away_team} win</option>
             </select>
-            <button
-              className="btn btn-primary"
-              style={{ width: 'auto', padding: '7px 14px', fontSize: 13 }}
-              disabled={!results[m.id]}
-              onClick={() => setResult(m)}>
+            <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13 }}
+              disabled={!results[m.id]} onClick={() => setResult(m)}>
               Confirm
             </button>
           </div>
@@ -157,13 +164,10 @@ export default function AdminPage() {
         <div className="card">
           <div className="field">
             <label>Password</label>
-            <input
-              type="password"
-              value={password}
+            <input type="password" value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && login()}
-              placeholder="Enter admin password"
-            />
+              placeholder="Enter admin password" />
             {authError && <p className="error">{authError}</p>}
           </div>
           <button className="btn btn-primary" onClick={login}>Login</button>
@@ -175,96 +179,203 @@ export default function AdminPage() {
   return (
     <div className="container">
       <h1 style={{ marginBottom: 4 }}>Admin Panel</h1>
-      <p className="muted" style={{ marginBottom: 20 }}>The Peddler&apos;s Daughter — World Cup 2026</p>
+      <p className="muted" style={{ marginBottom: 16 }}>The Peddler&apos;s Daughter — World Cup 2026</p>
 
       {msg && (
-        <div style={{
-          padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14,
+        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14,
           background: msgType === 'success' ? 'var(--green-light)' : 'var(--red-light)',
-          color: msgType === 'success' ? 'var(--green-dark)' : 'var(--red)'
-        }}>{msg}</div>
+          color: msgType === 'success' ? 'var(--green-dark)' : 'var(--red)' }}>{msg}</div>
       )}
 
-      {/* Daily code — auto-generated, no action needed */}
-      <div className="card">
-        <h2>Today&apos;s patron code</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
-          <div style={{
-            fontSize: 28, fontWeight: 700, letterSpacing: 4,
-            background: 'var(--green-light)', color: 'var(--green-dark)',
-            padding: '12px 24px', borderRadius: 10, border: '2px solid var(--green)'
-          }}>
-            {dailyCode}
-          </div>
-          <div>
-            <p style={{ fontSize: 14, fontWeight: 500 }}>Tell patrons this code when they ask</p>
-            <p className="muted" style={{ fontSize: 13 }}>Changes automatically at midnight each day</p>
-          </div>
-        </div>
-      </div>
-
-      {/* How it works */}
-      <div className="card" style={{ background: 'var(--amber-light)', border: '1px solid var(--amber)' }}>
-        <h3 style={{ marginBottom: 8 }}>⚙️ Fully automatic</h3>
-        <p style={{ fontSize: 13, lineHeight: 1.6 }}>
-          Matches activate and close automatically based on kick-off times.<br />
-          The patron code changes automatically each day.<br />
-          <strong>Your only job: set the result after each match.</strong>
-        </p>
-      </div>
-
-      {/* Today's matches */}
-      <div className="card">
-        <h2>Today&apos;s matches</h2>
-        {todaysMatches.length === 0
-          ? <p className="muted">No matches scheduled today.</p>
-          : todaysMatches.map(m => <MatchResultRow key={m.id} m={m} />)
-        }
-      </div>
-
-      {/* Recent unscored */}
-      {recentMatches.length > 0 && (
-        <div className="card">
-          <h2>Recent — result not set</h2>
-          {recentMatches.map(m => <MatchResultRow key={m.id} m={m} />)}
-        </div>
-      )}
-
-      {/* Upcoming */}
-      {upcomingMatches.length > 0 && (
-        <div className="card">
-          <h2>Coming up</h2>
-          {upcomingMatches.map(m => (
-            <div key={m.id} className="admin-row">
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>
-                  {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
-                </div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {fmtDate(m.kickoff_at)} · {fmt(m.kickoff_at)} · {m.stage}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Quick links */}
-      <div className="card">
-        <h2>Quick links</h2>
-        {[
-          ['Haverhill entry form', '/?pub=haverhill'],
-          ['Nashua entry form', '/?pub=nashua'],
-          ['Leaderboard — all', '/leaderboard'],
-          ['Leaderboard — Haverhill', '/leaderboard?pub=haverhill'],
-          ['Leaderboard — Nashua', '/leaderboard?pub=nashua'],
-        ].map(([label, href]) => (
-          <div key={href} className="admin-row">
-            <span style={{ fontSize: 14 }}>{label}</span>
-            <a href={href} target="_blank" style={{ color: 'var(--green)', fontSize: 13 }}>Open ↗</a>
-          </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {(['results', 'entrants', 'stats'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
+              background: tab === t ? 'var(--green)' : 'transparent',
+              color: tab === t ? '#fff' : 'var(--text)', fontWeight: tab === t ? 600 : 400,
+              cursor: 'pointer', fontSize: 13, textTransform: 'capitalize' }}>
+            {t}
+          </button>
         ))}
       </div>
+
+      {/* RESULTS TAB */}
+      {tab === 'results' && (
+        <>
+          <div className="card" style={{ background: 'var(--amber-light)', border: '1px solid var(--amber)', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: 3,
+                background: 'var(--green-light)', color: 'var(--green-dark)',
+                padding: '8px 16px', borderRadius: 8, border: '2px solid var(--green)' }}>
+                {dailyCode}
+              </div>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600 }}>Today&apos;s patron code</p>
+                <p className="muted" style={{ fontSize: 12 }}>Changes automatically at midnight</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Today&apos;s matches</h2>
+            {todaysMatches.length === 0
+              ? <p className="muted">No matches today.</p>
+              : todaysMatches.map(m => <MatchResultRow key={m.id} m={m} />)}
+          </div>
+
+          {recentMatches.length > 0 && (
+            <div className="card">
+              <h2>Recent — result not set</h2>
+              {recentMatches.map(m => <MatchResultRow key={m.id} m={m} />)}
+            </div>
+          )}
+
+          {upcomingMatches.length > 0 && (
+            <div className="card">
+              <h2>Coming up</h2>
+              {upcomingMatches.map(m => (
+                <div key={m.id} className="admin-row">
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>{fmtDate(m.kickoff_at)} · {fmt(m.kickoff_at)} · {m.stage}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="card">
+            <h2>Quick links</h2>
+            {[
+              ['Haverhill entry', '/?pub=haverhill'],
+              ['Nashua entry', '/?pub=nashua'],
+              ['Leaderboard', '/leaderboard'],
+              ['Schedule', '/schedule'],
+            ].map(([label, href]) => (
+              <div key={href} className="admin-row">
+                <span style={{ fontSize: 14 }}>{label}</span>
+                <a href={href} target="_blank" style={{ color: 'var(--green)', fontSize: 13 }}>Open ↗</a>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ENTRANTS TAB */}
+      {tab === 'entrants' && (
+        <>
+          <div className="card">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="date" value={selectedDate}
+                onChange={e => { setSelectedDate(e.target.value); loadEntrants(e.target.value) }}
+                style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 14 }}
+              />
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }}
+                onClick={() => { setSelectedDate(''); loadEntrants() }}>
+                Show all
+              </button>
+              <a href={`/api/admin-data?password=${encodeURIComponent(password)}&action=export-csv`}
+                className="btn btn-primary"
+                style={{ width: 'auto', padding: '8px 14px', fontSize: 13, textDecoration: 'none', display: 'inline-block' }}>
+                ↓ Export CSV
+              </a>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              {entrants.length} entries shown
+            </p>
+          </div>
+
+          {loadingEntrants
+            ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
+            : entrants.map((e, i) => (
+              <div key={i} style={{
+                background: 'var(--white)', border: '1px solid var(--gray-border)',
+                borderRadius: 10, padding: '12px 14px', marginBottom: 8
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
+                    <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+                      {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                  📞 {e.phone}
+                  {e.email && <span style={{ marginLeft: 12 }}>✉️ {e.email}</span>}
+                </div>
+                {e.matches && (
+                  <div style={{ marginTop: 6, fontSize: 13 }}>
+                    {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
+                    {' · '}
+                    <strong>
+                      {e.pick === 'home' ? `${e.matches.home_team} win` :
+                       e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
+                    </strong>
+                    {' · '}
+                    {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct</span>}
+                    {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                    {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                  </div>
+                )}
+              </div>
+            ))
+          }
+        </>
+      )}
+
+      {/* STATS TAB */}
+      {tab === 'stats' && totals && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+            {[
+              { label: 'Total entries', value: totals.total_entries },
+              { label: 'Unique players', value: totals.unique_phones },
+              { label: 'Emails collected', value: totals.emails_collected },
+              { label: 'Correct picks', value: totals.correct },
+              { label: 'Haverhill entries', value: totals.haverhill },
+              { label: 'Nashua entries', value: totals.nashua },
+            ].map(({ label, value }) => (
+              <div key={label} className="card" style={{ textAlign: 'center', padding: '14px 8px', marginBottom: 0 }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--green)' }}>{value}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <h2 style={{ marginBottom: 12 }}>Entries by day</h2>
+            {stats.length === 0
+              ? <p className="muted">No entries yet.</p>
+              : stats.map(([date, counts]) => (
+                <div key={date} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 70, fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>{date}</div>
+                  <div style={{ flex: 1, background: 'var(--gray-bg)', borderRadius: 6, overflow: 'hidden', height: 22 }}>
+                    <div style={{
+                      height: '100%', display: 'flex',
+                      width: `${Math.min(100, (counts.total / Math.max(...stats.map(([, c]) => c.total))) * 100)}%`
+                    }}>
+                      <div style={{ flex: counts.haverhill, background: 'var(--green)', opacity: 0.8 }} />
+                      <div style={{ flex: counts.nashua, background: 'var(--amber)', opacity: 0.8 }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, width: 24, textAlign: 'right', flexShrink: 0 }}>
+                    {counts.total}
+                  </div>
+                </div>
+              ))
+            }
+            <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--green)', borderRadius: 2, marginRight: 4 }} />Haverhill</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--amber)', borderRadius: 2, marginRight: 4 }} />Nashua</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

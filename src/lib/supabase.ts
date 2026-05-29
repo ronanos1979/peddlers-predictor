@@ -34,6 +34,7 @@ export type Entry = {
   match_id: string
   name: string
   phone: string
+  email: string | null
   pick: 'home' | 'draw' | 'away'
   is_correct: boolean | null
   raffle_entries: number

@@ -1,0 +1,198 @@
+'use client'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+
+type EntryWithMatch = {
+  id: string
+  pick: 'home' | 'draw' | 'away'
+  is_correct: boolean | null
+  raffle_entries: number
+  created_at: string
+  pub_id: string
+  matches: {
+    home_team: string
+    away_team: string
+    home_flag: string
+    away_flag: string
+    kickoff_at: string
+    stage: string
+    result: string | null
+  }
+}
+
+type Stats = {
+  total: number
+  correct: number
+  pending: number
+  raffle_entries: number
+}
+
+export default function MyPicksPage({ searchParams }: { searchParams: { phone?: string } }) {
+  const [phone, setPhone] = useState(searchParams.phone || '')
+  const [searched, setSearched] = useState(!!searchParams.phone)
+  const [entries, setEntries] = useState<EntryWithMatch[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function lookup(p?: string) {
+    const num = p || phone
+    if (!num.trim()) return
+    setLoading(true)
+    setError('')
+    setSearched(true)
+    try {
+      const res = await fetch(`/api/my-picks?phone=${encodeURIComponent(num.trim())}`)
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); setLoading(false); return }
+      setEntries(data.entries)
+      setStats(data.stats)
+    } catch {
+      setError('Network error — please try again')
+    }
+    setLoading(false)
+  }
+
+  // Auto-lookup if phone in URL
+  useEffect(() => {
+    if (searchParams.phone) lookup(searchParams.phone)
+  }, []) // eslint-disable-line
+
+  function pickLabel(pick: string, m: EntryWithMatch['matches']) {
+    if (pick === 'home') return `${m.home_flag} ${m.home_team} win`
+    if (pick === 'away') return `${m.away_flag} ${m.away_team} win`
+    return 'Draw'
+  }
+
+  function fmtDate(iso: string) {
+    return new Date(iso).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    })
+  }
+
+  return (
+    <div className="container">
+      <div style={{ marginBottom: 20 }}>
+        <h1>My picks</h1>
+        <p className="muted">Enter your phone number to see all your predictions.</p>
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="tel"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && lookup()}
+            placeholder="+1 (555) 000-0000"
+            style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 15 }}
+          />
+          <button className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }}
+            onClick={() => lookup()}>
+            Search
+          </button>
+        </div>
+        {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
+      </div>
+
+      {loading && <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>}
+
+      {!loading && searched && stats && (
+        <>
+          {/* Stats bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+            {[
+              { label: 'Entered', value: stats.total },
+              { label: 'Correct', value: stats.correct },
+              { label: 'Pending', value: stats.pending },
+              { label: 'Raffle tickets', value: stats.raffle_entries },
+            ].map(({ label, value }) => (
+              <div key={label} className="card" style={{ textAlign: 'center', padding: '12px 8px', marginBottom: 0 }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--green)' }}>{value}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {entries.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center' }}>
+              <p className="muted">No picks found for this number.</p>
+              <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
+                Make sure you use the same number you entered at the pub.
+              </p>
+            </div>
+          ) : (
+            entries.map(e => {
+              const m = e.matches
+              if (!m) return null
+              return (
+                <div key={e.id} style={{
+                  background: 'var(--white)',
+                  border: `1px solid ${
+                    e.is_correct === true ? 'var(--green)' :
+                    e.is_correct === false ? 'var(--red)' :
+                    'var(--gray-border)'
+                  }`,
+                  borderRadius: 10, padding: '14px', marginBottom: 8
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>
+                        {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {m.stage} · {fmtDate(m.kickoff_at)}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                      {e.is_correct === true && (
+                        <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green-dark)' }}>
+                          ✓ Correct
+                        </span>
+                      )}
+                      {e.is_correct === false && (
+                        <span className="badge" style={{ background: 'var(--red-light)', color: 'var(--red)' }}>
+                          ✗ Wrong
+                        </span>
+                      )}
+                      {e.is_correct === null && (
+                        <span className="badge badge-pending">Pending</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px',
+                    background: 'var(--gray-bg)', borderRadius: 8,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Your pick: </span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(e.pick, m)}</span>
+                    </div>
+                    {m.result && (
+                      <div>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Result: </span>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(m.result, m)}</span>
+                      </div>
+                    )}
+                    {e.raffle_entries > 0 && (
+                      <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
+                        +{e.raffle_entries} tickets
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </>
+      )}
+
+      <Link href="/" className="btn btn-secondary"
+        style={{ textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: 12 }}>
+        ← Back
+      </Link>
+    </div>
+  )
+}
