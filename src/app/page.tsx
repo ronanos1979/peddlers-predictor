@@ -127,7 +127,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     <div className="container">
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <p className="muted" style={{ marginBottom: 4 }}>🍺 {pub?.name} · {pub?.city}</p>
+        <p className="muted" style={{ marginBottom: 4 }}>📍 {pub?.city}</p>
         <h1>Make your pick</h1>
         <p className="muted">Predict the result — top pickers win the TV draw!</p>
       </div>
