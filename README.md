@@ -1,67 +1,37 @@
-# Peddler's Predictor — World Cup App
+# 🍺 Peddler's Predictor — World Cup 2026
 
-A pub prediction game for The Peddler's Daughter (Haverhill, MA + Nashua, NH).
-Patrons scan a QR code, predict match results, and compete on a live leaderboard
-for a TV giveaway at the end of the tournament.
-
-## How it works
-
-1. Patron scans QR code at the pub
-2. Enters name, phone, today's pub code (given by bartender), and picks a result
-3. Geolocation verifies they're inside the pub
-4. Correct predictions earn 3 raffle entries toward the TV prize
-5. Leaderboard updates live — can be displayed on a TV in the pub
+A live match prediction game for **The Peddler's Daughter** pubs in Haverhill, MA and Nashua, NH. Patrons scan a QR code at the bar, predict World Cup match results, and compete on a live leaderboard for a TV giveaway at the end of the tournament.
 
 ---
 
-## Stack
+## Live URLs
 
-- **Frontend + API**: Next.js 14 (hosted on Vercel, free)
-- **Database**: Supabase (hosted Postgres, free tier)
-- **QR codes**: Any free QR generator pointing to your Vercel URL
+| Purpose | URL |
+|---------|-----|
+| Haverhill patron entry | `https://peddlers-predictor.vercel.app/?pub=haverhill` |
+| Nashua patron entry | `https://peddlers-predictor.vercel.app/?pub=nashua` |
+| Leaderboard (all) | `https://peddlers-predictor.vercel.app/leaderboard` |
+| Haverhill leaderboard | `https://peddlers-predictor.vercel.app/leaderboard?pub=haverhill` |
+| Nashua leaderboard | `https://peddlers-predictor.vercel.app/leaderboard?pub=nashua` |
+| Admin panel | `https://peddlers-predictor.vercel.app/admin` |
 
 ---
 
-## Local development setup
+## Quick Start (Local Development)
 
-### 1. Prerequisites
+### Prerequisites
+- Node.js 18+ (`node --version` to check)
+- A Supabase project (see [docs/SETUP.md](docs/SETUP.md))
+- Git
 
-- Node.js 18+ installed (`node --version` to check)
-- A Supabase project created at supabase.com
-- Git installed
-
-### 2. Clone and install
+### Install and run
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/peddlers-predictor.git
 cd peddlers-predictor
 npm install
-```
-
-### 3. Environment variables
-
-Copy the example file and fill in your values:
-
-```bash
 cp .env.example .env.local
-```
-
-Edit `.env.local`:
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-SUPABASE_SECRET_KEY=sb_secret_...
-ADMIN_PASSWORD=choose_a_strong_password
-```
-
-### 4. Set up the database
-
-Go to your Supabase dashboard → SQL Editor → New query.
-Paste and run the contents of `supabase/schema.sql`.
-
-### 5. Run locally
-
-```bash
+# Edit .env.local with your Supabase keys
 npm run dev
 ```
 
@@ -69,77 +39,82 @@ Open http://localhost:3000
 
 ---
 
-## Pages
+## Project Structure
 
-| URL | Purpose |
-|-----|---------|
-| `/?pub=haverhill` | Patron entry form — Haverhill pub |
-| `/?pub=nashua` | Patron entry form — Nashua pub |
-| `/leaderboard?pub=haverhill` | Leaderboard (filter by pub or all) |
-| `/admin` | Admin panel — set results, change codes, create matches |
-
----
-
-## QR codes to print
-
-Generate QR codes for these two URLs (replace with your Vercel domain):
-
-- **Haverhill**: `https://your-app.vercel.app/?pub=haverhill`
-- **Nashua**: `https://your-app.vercel.app/?pub=nashua`
-
-Use https://qr.io or https://www.qr-code-generator.com (free).
-
----
-
-## Daily workflow
-
-### Before each match
-1. Go to `/admin`
-2. Click **Create match** — fill in teams, kick-off time, close time
-3. Update the **daily pub code** for each pub (e.g. `ANCHOR7`)
-4. Tell bar staff the code — they tell patrons
-
-### After each match
-1. Go to `/admin`
-2. Select the result (home win / draw / away win)
-3. Click **Confirm result** — leaderboard updates automatically
-
-### End of tournament (TV raffle)
-Run this query in Supabase SQL Editor to get all raffle entries:
-```sql
-select name, phone, sum(raffle_entries) as total_entries
-from entries
-group by name, phone
-order by total_entries desc;
 ```
-Each entry = one raffle ticket. Pick a winner!
+peddlers-predictor/
+├── src/
+│   ├── app/
+│   │   ├── page.tsx              # Patron entry form
+│   │   ├── layout.tsx            # Root layout with header/logo
+│   │   ├── globals.css           # Global styles
+│   │   ├── leaderboard/
+│   │   │   └── page.tsx          # Live leaderboard
+│   │   ├── admin/
+│   │   │   └── page.tsx          # Admin panel
+│   │   └── api/
+│   │       ├── entries/route.ts  # POST: submit prediction
+│   │       ├── matches/route.ts  # GET: active match
+│   │       └── admin/route.ts    # POST: admin actions
+│   └── lib/
+│       ├── supabase.ts           # Browser Supabase client + types
+│       ├── supabaseAdmin.ts      # Server Supabase client (secret key)
+│       └── geo.ts                # Geolocation utilities
+├── public/
+│   └── logo.avif                 # Pub logo
+├── supabase/
+│   ├── schema.sql                # Database schema (run once)
+│   └── seed_matches.sql          # All 104 World Cup matches
+├── docs/
+│   ├── SETUP.md                  # Full setup guide
+│   ├── DESIGN.md                 # Architecture & design decisions
+│   ├── OPERATIONS.md             # Day-to-day operations guide
+│   └── RAFFLE.md                 # End of tournament raffle guide
+├── .env.example                  # Environment variable template
+└── README.md                     # This file
+```
 
 ---
 
-## Deployment (Vercel)
+## Documentation
 
-1. Push this repo to GitHub
-2. Go to vercel.com → New Project → import from GitHub
-3. Add environment variables (same as .env.local) in the Vercel dashboard
-4. Deploy — Vercel gives you a free URL like `peddlers-predictor.vercel.app`
+| Document | Purpose |
+|----------|---------|
+| [SETUP.md](docs/SETUP.md) | Full deployment guide — Supabase, Vercel, GitHub |
+| [DESIGN.md](docs/DESIGN.md) | Architecture, tech stack, design decisions |
+| [OPERATIONS.md](docs/OPERATIONS.md) | How to run the app day-to-day during the tournament |
+| [RAFFLE.md](docs/RAFFLE.md) | How to run the TV raffle at the end |
 
 ---
 
-## Security notes
+## Tech Stack
 
-- `.env.local` is in `.gitignore` — your keys never go to GitHub
-- The secret key is only used server-side in API routes
-- Row Level Security is enabled on all Supabase tables
+| Layer | Technology | Why |
+|-------|-----------|-----|
+| Frontend | Next.js 14 + React | Frontend + API in one project |
+| Language | TypeScript | Type safety, catches errors early |
+| Database | Supabase (Postgres) | Realtime, free tier, hosted |
+| Hosting | Vercel | Free, auto-deploys from GitHub |
+| Styling | Custom CSS | Lightweight, no dependencies |
+
+---
+
+## Security
+
+- `.env.local` is in `.gitignore` — keys never go to GitHub
+- Secret key is server-side only (API routes), never in the browser
+- Row Level Security enabled on all Supabase tables
 - Admin panel is password-protected
-- **After initial setup, regenerate your Supabase secret key** in the Supabase dashboard
+- Entry code + geolocation dual verification for patron entries
+- One entry per phone number per match (duplicate prevention)
 
 ---
 
-## Pub coordinates (update if needed)
+## Tournament Dates
 
-| Pub | Lat | Lng | Radius |
-|-----|-----|-----|--------|
-| Haverhill, MA | 42.7762 | -71.0773 | 300m |
-| Nashua, NH | 42.7654 | -71.4676 | 300m |
-
-To update: go to Supabase dashboard → Table Editor → pubs table.
+- **Group stage**: June 11 – June 27, 2026
+- **Round of 32**: June 28 – July 4, 2026
+- **Round of 16**: July 4 – July 8, 2026
+- **Quarter Finals**: July 10 – July 12, 2026
+- **Semi Finals**: July 14 – July 15, 2026
+- **Final**: July 19, 2026 — MetLife Stadium, NJ

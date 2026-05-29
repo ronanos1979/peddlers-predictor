@@ -5,12 +5,16 @@ export async function POST(req: NextRequest) {
   try {
     const { password, action, payload } = await req.json()
 
-    // Simple password check
     if (password !== process.env.ADMIN_PASSWORD) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Set match result
+    // Login check
+    if (action === 'ping') {
+      return NextResponse.json({ success: true })
+    }
+
+    // Set match result and score all entries
     if (action === 'set_result') {
       const { match_id, result } = payload
 
@@ -18,13 +22,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid result' }, { status: 400 })
       }
 
-      // Update match result
       await supabaseAdmin
         .from('matches')
-        .update({ result, is_active: false })
+        .update({ result })
         .eq('id', match_id)
 
-      // Mark entries as correct/wrong and award raffle entries
       const { data: entries } = await supabaseAdmin
         .from('entries')
         .select('id, pick')
@@ -41,35 +43,6 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, updated: entries?.length || 0 })
-    }
-
-    // Update daily code for a pub
-    if (action === 'update_code') {
-      const { pub_id, daily_code } = payload
-      await supabaseAdmin
-        .from('pubs')
-        .update({ daily_code: daily_code.toUpperCase() })
-        .eq('id', pub_id)
-      return NextResponse.json({ success: true })
-    }
-
-    // Create a new match
-    if (action === 'create_match') {
-      const { home_team, away_team, home_flag, away_flag, kickoff_at, entries_close_at, stage } = payload
-
-      // Deactivate any current active match first
-      await supabaseAdmin
-        .from('matches')
-        .update({ is_active: false })
-        .eq('is_active', true)
-
-      const { data } = await supabaseAdmin
-        .from('matches')
-        .insert({ home_team, away_team, home_flag, away_flag, kickoff_at, entries_close_at, stage, is_active: true })
-        .select()
-        .single()
-
-      return NextResponse.json({ success: true, match: data })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

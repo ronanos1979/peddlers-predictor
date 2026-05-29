@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase, type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
+import { getDailyCode } from '@/lib/matchSchedule'
 import Link from 'next/link'
 
 type GeoStatus = 'checking' | 'ok' | 'fail'
@@ -11,29 +12,51 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
 
   const [pub, setPub] = useState<Pub | null>(null)
   const [match, setMatch] = useState<Match | null>(null)
+  const [upcomingMatch, setUpcomingMatch] = useState<Match | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('checking')
   const [geoMessage, setGeoMessage] = useState('Checking your location…')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
-  const [code, setCode] = useState('')
   const [pick, setPick] = useState<'home' | 'draw' | 'away' | null>(null)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [timeLeft, setTimeLeft] = useState('')
+  const [dailyCode] = useState(() => getDailyCode())
 
-  // Load pub + active match
+  // Load pub + auto-select current match by datetime
   useEffect(() => {
     async function load() {
       const { data: pubData } = await supabase.from('pubs').select('*').eq('id', pubId).single()
       if (pubData) setPub(pubData)
 
-      const { data: matchData } = await supabase
+      const now = new Date()
+      const windowStart = new Date(now.getTime() - 2 * 60 * 60 * 1000) // 2 hours ago
+      const windowEnd = new Date(now.getTime() + 3 * 60 * 60 * 1000)   // 3 hours ahead
+
+      // Get matches in a ±window around now, ordered by kickoff
+      const { data: matches } = await supabase
         .from('matches')
         .select('*')
-        .eq('is_active', true)
-        .single()
-      if (matchData) setMatch(matchData)
+        .gte('kickoff_at', windowStart.toISOString())
+        .lte('kickoff_at', windowEnd.toISOString())
+        .order('kickoff_at', { ascending: true })
+
+      if (matches && matches.length > 0) {
+        // Find a match that's currently open for entries
+        const live = matches.find((m: Match) =>
+          new Date(m.kickoff_at) <= now &&
+          new Date(m.entries_close_at) >= now
+        )
+        // Or the next upcoming one
+        const upcoming = matches.find((m: Match) => new Date(m.kickoff_at) > now)
+
+        if (live) {
+          setMatch(live)
+        } else if (upcoming) {
+          setUpcomingMatch(upcoming)
+        }
+      }
     }
     load()
   }, [pubId])
@@ -67,9 +90,8 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
         setGeoMessage(`You must be inside the pub to enter (${Math.round(dist)}m away)`)
       }
     } catch {
-      // Geo failed - fall back to code-only verification
       setGeoStatus('ok')
-      setGeoMessage('📍 Location check skipped — entry code required')
+      setGeoMessage('📍 Location check skipped — pub code required')
     }
   }, [pub])
 
@@ -78,7 +100,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
   }, [pub, checkGeo])
 
   const isClosed = match ? new Date(match.entries_close_at) < new Date() : false
-  const canSubmit = name && phone && code && pick && geoStatus !== 'fail' && !isClosed && !submitting
+  const canSubmit = name && phone && pick && geoStatus !== 'fail' && !isClosed && !submitting
 
   async function handleSubmit() {
     setError('')
@@ -87,7 +109,12 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       const res = await fetch('/api/entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pub_id: pubId, match_id: match?.id, name, phone, pick, code })
+        body: JSON.stringify({
+          pub_id: pubId,
+          match_id: match?.id,
+          name, phone, pick,
+          code: dailyCode  // sent automatically — patron doesn't type it
+        })
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Something went wrong'); setSubmitting(false); return }
@@ -98,7 +125,19 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     }
   }
 
-  if (submitted) {
+  // Format kickoff time nicely
+  function formatTime(iso: string) {
+    return new Date(iso).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    })
+  }
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric'
+    })
+  }
+
+  if (submitted && match) {
     return (
       <div className="container">
         <div className="card" style={{ textAlign: 'center', paddingTop: 32, paddingBottom: 32 }}>
@@ -108,14 +147,18 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           <div className="card" style={{ background: 'var(--green-light)', border: '1px solid var(--green)' }}>
             <p style={{ fontSize: 14, color: 'var(--green-dark)' }}>
               <strong>{name}</strong><br />
-              {match?.home_flag} {match?.home_team} vs {match?.away_flag} {match?.away_team}<br />
-              Your pick: <strong>{pick === 'home' ? `${match?.home_team} win` : pick === 'away' ? `${match?.away_team} win` : 'Draw'}</strong>
+              {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}<br />
+              Your pick: <strong>
+                {pick === 'home' ? `${match.home_team} win` :
+                 pick === 'away' ? `${match.away_team} win` : 'Draw'}
+              </strong>
             </p>
           </div>
           <p className="muted" style={{ fontSize: 13, marginBottom: 20 }}>
             Every correct pick earns <strong>3 raffle entries</strong> toward the TV giveaway!
           </p>
-          <Link href={`/leaderboard?pub=${pubId}`} className="btn btn-primary" style={{ textDecoration: 'none', display: 'block' }}>
+          <Link href={`/leaderboard?pub=${pubId}`} className="btn btn-primary"
+            style={{ textDecoration: 'none', display: 'block' }}>
             View leaderboard
           </Link>
         </div>
@@ -125,68 +168,52 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
 
   return (
     <div className="container">
-      {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <p className="muted" style={{ marginBottom: 4 }}>📍 {pub?.city}</p>
         <h1>Make your pick</h1>
         <p className="muted">Predict the result — top pickers win the TV draw!</p>
       </div>
 
-      {/* Match card */}
-      {match ? (
-        <div className="card" style={{ textAlign: 'center' }}>
-          <span className={`badge ${isClosed ? 'badge-closed' : 'badge-live'}`} style={{ marginBottom: 10, display: 'inline-block' }}>
-            {isClosed ? 'Entries closed' : '● Live now'}
-          </span>
-          <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>
-            {match.home_flag} {match.home_team} &nbsp;vs&nbsp; {match.away_flag} {match.away_team}
-          </div>
-          <p className="muted">{match.stage} · {isClosed ? 'Closed' : `Closes in ${timeLeft}`}</p>
-        </div>
-      ) : (
-        <div className="card" style={{ textAlign: 'center' }}>
-          <p className="muted">No active match right now. Check back soon!</p>
-        </div>
-      )}
-
+      {/* Active match — entries open */}
       {match && !isClosed && (
         <>
-          {/* Geo strip */}
+          <div className="card" style={{ textAlign: 'center' }}>
+            <span className="badge badge-live" style={{ marginBottom: 10, display: 'inline-block' }}>
+              ● Entries open
+            </span>
+            <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>
+              {match.home_flag} {match.home_team} &nbsp;vs&nbsp; {match.away_flag} {match.away_team}
+            </div>
+            <p className="muted">{match.stage} · Closes in {timeLeft}</p>
+          </div>
+
           <div className="geo-strip">
             <div className={`geo-dot ${geoStatus}`} />
             <span>{geoMessage}</span>
           </div>
 
-          {/* Form */}
           <div className="card">
             <div className="field">
               <label>Your name</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="First name + last initial" />
+              <input value={name} onChange={e => setName(e.target.value)}
+                placeholder="First name + last initial" />
             </div>
             <div className="field">
-              <label>Phone number (for raffle contact)</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="+1 (555) 000-0000" />
-            </div>
-            <div className="field">
-              <label>Today&apos;s pub code <span className="muted">(ask your bartender)</span></label>
-              <input
-                value={code}
-                onChange={e => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. PEDDLER1"
-                style={{ letterSpacing: 2, textAlign: 'center', fontSize: 18 }}
-                maxLength={10}
-              />
+              <label>Phone number <span className="muted">(for raffle contact)</span></label>
+              <input value={phone} onChange={e => setPhone(e.target.value)}
+                type="tel" placeholder="+1 (555) 000-0000" />
             </div>
 
-            <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Your prediction</label>
+            <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
+              Your prediction
+            </label>
             <div className="pick-grid">
               {(['home', 'draw', 'away'] as const).map(p => (
-                <button
-                  key={p}
-                  className={`pick-btn ${pick === p ? 'selected' : ''}`}
-                  onClick={() => setPick(p)}
-                >
-                  <div className="pick-label">{p === 'home' ? 'Home win' : p === 'draw' ? 'Draw' : 'Away win'}</div>
+                <button key={p} className={`pick-btn ${pick === p ? 'selected' : ''}`}
+                  onClick={() => setPick(p)}>
+                  <div className="pick-label">
+                    {p === 'home' ? 'Home win' : p === 'draw' ? 'Draw' : 'Away win'}
+                  </div>
                   <div className="pick-team">
                     {p === 'home' ? `${match.home_flag} ${match.home_team}` :
                      p === 'draw' ? '—' :
@@ -197,7 +224,6 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
             </div>
 
             {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}
-
             <button className="btn btn-primary" disabled={!canSubmit} onClick={handleSubmit}>
               {submitting ? 'Submitting…' : 'Submit prediction'}
             </button>
@@ -205,7 +231,36 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
         </>
       )}
 
-      <Link href={`/leaderboard?pub=${pubId}`} className="btn btn-secondary" style={{ textDecoration: 'none', display: 'block', textAlign: 'center' }}>
+      {/* Upcoming match — entries not open yet */}
+      {!match && upcomingMatch && (
+        <div className="card" style={{ textAlign: 'center' }}>
+          <span className="badge badge-pending" style={{ marginBottom: 10, display: 'inline-block' }}>
+            Coming up
+          </span>
+          <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+            {upcomingMatch.home_flag} {upcomingMatch.home_team} &nbsp;vs&nbsp; {upcomingMatch.away_flag} {upcomingMatch.away_team}
+          </div>
+          <p className="muted">{upcomingMatch.stage}</p>
+          <p style={{ marginTop: 8, fontSize: 14 }}>
+            {formatDate(upcomingMatch.kickoff_at)}<br />
+            <strong>Kick-off: {formatTime(upcomingMatch.kickoff_at)}</strong>
+          </p>
+          <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
+            Predictions open at kick-off. Come back then!
+          </p>
+        </div>
+      )}
+
+      {/* No matches today */}
+      {!match && !upcomingMatch && (
+        <div className="card" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 32, marginBottom: 12 }}>⚽</p>
+          <p className="muted">No matches right now. Check back on the next match day!</p>
+        </div>
+      )}
+
+      <Link href={`/leaderboard?pub=${pubId}`} className="btn btn-secondary"
+        style={{ textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: 12 }}>
         View leaderboard
       </Link>
     </div>
