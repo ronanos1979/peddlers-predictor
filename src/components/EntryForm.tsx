@@ -4,13 +4,15 @@ import { type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
 import { getDailyCode } from '@/lib/matchSchedule'
 import { savePatron, loadPatron, firstName } from '@/lib/patron'
+import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean }
 
 export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) {
+  const { t } = useLocale()
   const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'fail'>('checking')
-  const [geoMessage, setGeoMessage] = useState('Checking your location…')
+  const [geoMessage, setGeoMessage] = useState(t.checkingLocation)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -38,7 +40,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
     if (isDemo) { setTimeLeft(''); return }
     const tick = () => {
       const diff = new Date(match.entries_close_at).getTime() - Date.now()
-      if (diff <= 0) { setTimeLeft('Closed'); return }
+      if (diff <= 0) { setTimeLeft(t.entriesClosed); return }
       const m = Math.floor(diff / 60000)
       const s = Math.floor((diff % 60000) / 1000)
       setTimeLeft(`${m}:${s.toString().padStart(2, '0')}`)
@@ -46,13 +48,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
     tick()
     const iv = setInterval(tick, 1000)
     return () => clearInterval(iv)
-  }, [match, isDemo])
+  }, [match, isDemo, t.entriesClosed])
 
   // Geolocation
   const checkGeo = useCallback(async () => {
     if (!pub || isDemo) {
       setGeoStatus('ok')
-      setGeoMessage('📍 Demo mode — no location check')
+      setGeoMessage(t.demoMode)
       return
     }
     try {
@@ -60,16 +62,16 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
       const dist = distanceMetres(pos.coords.latitude, pos.coords.longitude, pub.lat, pub.lng)
       if (dist <= pub.radius_m) {
         setGeoStatus('ok')
-        setGeoMessage(`📍 Location verified — ${pub.city}`)
+        setGeoMessage(`📍 ${t.locationVerified} - ${pub.city}`)
       } else {
         setGeoStatus('fail')
-        setGeoMessage(`Must be inside the pub to enter (${Math.round(dist)}m away)`)
+        setGeoMessage(`${t.locationFail} (${Math.round(dist)}m away)`)
       }
     } catch {
       setGeoStatus('ok')
-      setGeoMessage('📍 Pub code required to verify location')
+      setGeoMessage(t.pubCodeRequired)
     }
-  }, [pub, isDemo])
+  }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationFail, t.pubCodeRequired])
 
   useEffect(() => { checkGeo() }, [checkGeo])
 
@@ -92,7 +94,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         })
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Something went wrong'); setSubmitting(false); return }
+      if (!res.ok) { setError(data.error || t.somethingWentWrong); setSubmitting(false); return }
 
       // Save patron cookie on successful entry
       if (!isDemo) {
@@ -100,15 +102,15 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
       }
       setSubmitted(true)
     } catch {
-      setError('Network error — please try again')
+      setError(t.networkError)
       setSubmitting(false)
     }
   }
 
   function pickLabel(p: string | null) {
-    if (p === 'home') return `${match.home_flag} ${match.home_team} to win`
-    if (p === 'away') return `${match.away_flag} ${match.away_team} to win`
-    return 'A Draw'
+    if (p === 'home') return `${match.home_flag} ${t.homeTeamWin.replace('{team}', match.home_team)}`
+    if (p === 'away') return `${match.away_flag} ${t.awayTeamWin.replace('{team}', match.away_team)}`
+    return t.drawPick
   }
 
   async function handleShare() {
@@ -132,18 +134,18 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         </div>
         <div className="slide-up">
           <h1 style={{ marginBottom: 6 }}>
-            {isDemo ? 'Demo done!' : `Nice one${returningPatron ? '' : ', ' + firstName(name)}!`}
+            {isDemo ? t.youreDone : `${t.niceOne}${returningPatron ? '' : ', ' + firstName(name)}!`}
           </h1>
           <p className="muted" style={{ marginBottom: 20 }}>
             {isDemo
-              ? "That's how it works — real picks start June 11!"
-              : 'Your prediction has been locked in. Good luck! 🍀'}
+              ? t.demoSuccess
+              : t.predictionLocked}
           </p>
         </div>
 
         <div className="slide-up-delay card card-glow" style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8 }}>
-            Your prediction
+            {t.yourPredictionLabel}
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 6 }}>
             {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}
@@ -159,7 +161,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
             <div className="card" style={{ background: 'linear-gradient(135deg, #1a1200, #111)', border: '1px solid rgba(245,197,24,0.25)', padding: '14px 16px' }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--gold)', letterSpacing: 2 }}>+3</div>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Raffle entries if correct
+                {t.raffleEntriesIfCorrect}
               </div>
             </div>
           </div>
@@ -168,23 +170,23 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         <div className="slide-up-delay-2" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {!isDemo && (
             <button className="share-btn" onClick={handleShare}>
-              {shared ? '✓ Copied to clipboard!' : '↑ Share your prediction'}
+              {shared ? t.copiedClipboard : t.sharePrediction}
             </button>
           )}
           {!isDemo && (
             <Link href={`/my-picks?phone=${encodeURIComponent(phone)}`}
               className="btn btn-primary" style={{ textDecoration: 'none' }}>
-              View my picks
+              {t.viewMyPicks}
             </Link>
           )}
           <Link href={`/leaderboard?pub=${pubId}`}
             className="btn btn-secondary" style={{ textDecoration: 'none', textAlign: 'center' }}>
-            🏆 See the leaderboard
+            {t.seeLeaderboard}
           </Link>
           {isDemo && (
             <Link href={`/?pub=${pubId}`}
               className="btn btn-gold" style={{ textDecoration: 'none', marginTop: 4 }}>
-              Make a real prediction →
+              {t.makeRealPrediction}
             </Link>
           )}
         </div>
@@ -204,10 +206,10 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         }}>
           <div>
             <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--green)' }}>
-              Welcome back, {returningPatron}! 👋
+              {t.welcomeBack}, {returningPatron}! 👋
             </span>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
-              Your name and number are pre-filled
+              {t.prefilledPatron}
             </div>
           </div>
           <button
@@ -220,7 +222,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
             }}
             style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, padding: '4px 8px' }}
           >
-            Not you?
+            {t.notYou}
           </button>
         </div>
       )}
@@ -229,13 +231,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
       <div className="match-hero">
         {isDemo && (
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
-            Demo Match
+            {t.demoMatch}
           </div>
         )}
         <span className={`badge ${isClosed ? 'badge-closed' : 'badge-live'}`}
           style={{ marginBottom: 12, display: 'inline-flex' }}>
           <span>{isClosed ? '✕' : '●'}</span>
-          {isClosed ? 'Entries Closed' : 'Entries Open'}
+          {isClosed ? t.entriesClosed : t.entriesOpen}
         </span>
         <div className="match-teams-display">
           <div>{match.home_flag} {match.home_team}</div>
@@ -245,7 +247,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-dim)', marginTop: 6 }}>
           {match.stage}
           {!isDemo && timeLeft && !isClosed && (
-            <span style={{ color: 'var(--green)', marginLeft: 8 }}>· {timeLeft} remaining</span>
+            <span style={{ color: 'var(--green)', marginLeft: 8 }}>· {timeLeft} {t.remaining}</span>
           )}
         </div>
       </div>
@@ -259,15 +261,15 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
 
           <div className="card">
             <div className="field">
-              <label>Your name</label>
+              <label>{t.yourName}</label>
               <input value={name} onChange={e => setName(e.target.value)}
-                placeholder="First name + last initial" />
+                placeholder={t.namePlaceholder} />
             </div>
             <div className="field">
               <label>
-                Phone number{' '}
+                {t.phoneNumber}{' '}
                 <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                  (for raffle contact)
+                  {t.phoneNote}
                 </span>
               </label>
               <input value={phone} onChange={e => setPhone(e.target.value)}
@@ -275,17 +277,17 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
             </div>
             <div className="field">
               <label>
-                Email{' '}
+                {t.email}{' '}
                 <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                  (optional — match updates)
+                  {t.emailNote}
                 </span>
               </label>
               <input value={email} onChange={e => setEmail(e.target.value)}
-                type="email" placeholder="you@example.com" />
+                type="email" placeholder={t.emailPlaceholder} />
             </div>
 
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-              Your prediction
+              {t.yourPrediction}
             </div>
             <div className="pick-grid">
               {(['home', 'draw', 'away'] as const).map(p => (
@@ -293,7 +295,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
                   className={`pick-btn ${pick === p ? 'selected' : ''}`}
                   onClick={() => setPick(p)}>
                   <div className="pick-label">
-                    {p === 'home' ? 'Home' : p === 'draw' ? 'Draw' : 'Away'}
+                    {p === 'home' ? t.homeWin : p === 'draw' ? t.draw : t.awayWin}
                   </div>
                   <div className="pick-team">
                     {p === 'home' ? `${match.home_flag} ${match.home_team}` :
@@ -306,7 +308,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
 
             {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}
             <button className="btn btn-primary" disabled={!canSubmit} onClick={handleSubmit}>
-              {submitting ? 'Submitting…' : isDemo ? 'Submit Demo Pick' : 'Lock In My Prediction'}
+              {submitting ? t.submitting : isDemo ? t.submitDemo : t.lockIn}
             </button>
           </div>
         </>

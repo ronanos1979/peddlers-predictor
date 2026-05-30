@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type EntryWithMatch = {
@@ -28,6 +29,7 @@ type Stats = {
 }
 
 export default function MyPicksPage({ searchParams }: { searchParams: { phone?: string } }) {
+  const { t } = useLocale()
   const [phone, setPhone] = useState(searchParams.phone || '')
   const [searched, setSearched] = useState(!!searchParams.phone)
   const [entries, setEntries] = useState<EntryWithMatch[]>([])
@@ -48,7 +50,7 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
       setEntries(data.entries)
       setStats(data.stats)
     } catch {
-      setError('Network error — please try again')
+      setError(t.networkError)
     }
     setLoading(false)
   }
@@ -59,9 +61,9 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
   }, []) // eslint-disable-line
 
   function pickLabel(pick: string, m: EntryWithMatch['matches']) {
-    if (pick === 'home') return `${m.home_flag} ${m.home_team} win`
-    if (pick === 'away') return `${m.away_flag} ${m.away_team} win`
-    return 'Draw'
+    if (pick === 'home') return `${m.home_flag} ${t.teamWon.replace('{team}', m.home_team)}`
+    if (pick === 'away') return `${m.away_flag} ${t.teamWon.replace('{team}', m.away_team)}`
+    return t.draw
   }
 
   function fmtDate(iso: string) {
@@ -73,8 +75,8 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <h1>My picks</h1>
-        <p className="muted">Enter your phone number to see all your predictions.</p>
+        <h1>{t.myPicks}</h1>
+        <p className="muted">{t.myPicksSub}</p>
       </div>
 
       <div className="card">
@@ -89,23 +91,23 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
           />
           <button className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }}
             onClick={() => lookup()}>
-            Search
+            {t.search}
           </button>
         </div>
         {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
       </div>
 
-      {loading && <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>}
+      {loading && <p className="muted" style={{ textAlign: 'center', padding: 32 }}>{t.loading}</p>}
 
       {!loading && searched && stats && (
         <>
           {/* Stats bar */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
             {[
-              { label: 'Entered', value: stats.total },
-              { label: 'Correct', value: stats.correct },
-              { label: 'Pending', value: stats.pending },
-              { label: 'Raffle tickets', value: stats.raffle_entries },
+              { label: t.entered, value: stats.total },
+              { label: t.correct, value: stats.correct },
+              { label: t.pending, value: stats.pending },
+              { label: t.raffleTicketsShort, value: stats.raffle_entries },
             ].map(({ label, value }) => (
               <div key={label} className="card" style={{ textAlign: 'center', padding: '12px 8px', marginBottom: 0 }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--green)' }}>{value}</div>
@@ -116,9 +118,9 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
 
           {entries.length === 0 ? (
             <div className="card" style={{ textAlign: 'center' }}>
-              <p className="muted">No picks found for this number.</p>
+              <p className="muted">{t.noPicksFound}</p>
               <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-                Make sure you use the same number you entered at the pub.
+                {t.sameNumberHint}
               </p>
             </div>
           ) : (
@@ -147,16 +149,16 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
                     <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
                       {e.is_correct === true && (
                         <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green-dark)' }}>
-                          ✓ Correct
+                          ✓ {t.correct}
                         </span>
                       )}
                       {e.is_correct === false && (
                         <span className="badge" style={{ background: 'var(--red-light)', color: 'var(--red)' }}>
-                          ✗ Wrong
+                          ✗ {t.wrong}
                         </span>
                       )}
                       {e.is_correct === null && (
-                        <span className="badge badge-pending">Pending</span>
+                        <span className="badge badge-pending">{t.pending}</span>
                       )}
                     </div>
                   </div>
@@ -167,18 +169,18 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                   }}>
                     <div>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Your pick: </span>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.yourPick}: </span>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(e.pick, m)}</span>
                     </div>
                     {m.result && (
                       <div>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Result: </span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.result}: </span>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(m.result, m)}</span>
                       </div>
                     )}
                     {e.raffle_entries > 0 && (
                       <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
-                        +{e.raffle_entries} tickets
+                        +{e.raffle_entries} {t.tickets}
                       </span>
                     )}
                   </div>
@@ -191,7 +193,7 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
 
       <Link href="/" className="btn btn-secondary"
         style={{ textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: 12 }}>
-        ← Back
+        ← {t.back}
       </Link>
     </div>
   )

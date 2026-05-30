@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, type Entry, type Match } from '@/lib/supabase'
+import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type LeaderEntry = {
@@ -9,6 +10,7 @@ type LeaderEntry = {
 }
 
 export default function Leaderboard({ searchParams }: { searchParams: { pub?: string } }) {
+  const { t } = useLocale()
   const pubId = searchParams.pub
   const [entries, setEntries] = useState<LeaderEntry[]>([])
   const [match, setMatch] = useState<Match | null>(null)
@@ -46,18 +48,18 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
     if (!m) return pick
     if (pick === 'home') return `${m.home_flag} ${m.home_team}`
     if (pick === 'away') return `${m.away_flag} ${m.away_team}`
-    return 'Draw'
+    return t.draw
   }
 
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>
-          Live Rankings
+          {t.liveRankings}
         </div>
-        <h1>Leaderboard</h1>
+        <h1>{t.leaderboard}</h1>
         {match && (
-          <p className="muted">Current: {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}</p>
+          <p className="muted">{t.current}: {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}</p>
         )}
       </div>
 
@@ -71,19 +73,19 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
             fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
             letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
           }}>
-            {f === 'all' ? 'All locations' : 'This pub'}
+            {f === 'all' ? t.allLocations : t.thisPub}
           </button>
         ))}
         <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>↻ {lastUpdated}</span>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>Loading…</div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
       ) : filtered.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
           <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>No entries yet</p>
-          <p className="muted" style={{ marginTop: 6 }}>Be the first to make a prediction!</p>
+          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{t.noEntriesYet}</p>
+          <p className="muted" style={{ marginTop: 6 }}>{t.beFirstPrediction}</p>
         </div>
       ) : (
         filtered.map((e, i) => (
@@ -95,7 +97,7 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
               <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
-                {e.correct}/{e.total} correct · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                {e.correct}/{e.total} {t.correct} · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
               </div>
               {match && (
                 <span className={`pick-pill ${e.last_correct === true ? 'correct' : e.last_correct === false ? 'wrong' : ''}`}>
@@ -106,19 +108,19 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
             </div>
             <div style={{ textAlign: 'right' }}>
               <div className="lb-pts">{e.total_pts}</div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>tickets</div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{t.tickets}</div>
             </div>
           </div>
         ))
       )}
 
       <div style={{ marginTop: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #1a1200, #0f1a00)', borderRadius: 'var(--radius)', border: '1px solid rgba(245,197,24,0.2)', fontSize: 13, color: 'var(--text-muted)' }}>
-        🏆 <strong style={{ color: 'var(--gold)' }}>3 raffle entries</strong> per correct pick · TV giveaway after the Final on July 19
+        🏆 <strong style={{ color: 'var(--gold)' }}>3 {t.raffleEntries}</strong> {t.perCorrectPick}
       </div>
 
       <Link href={`/?pub=${pubId || 'haverhill'}`} className="btn btn-secondary"
         style={{ textDecoration: 'none', textAlign: 'center', marginTop: 12 }}>
-        ← Make a prediction
+        ← {t.makePrediction}
       </Link>
     </div>
   )

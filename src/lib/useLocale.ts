@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { type Locale, translations, type Translations } from './i18n'
 
 const COOKIE = 'peddlers_lang'
+const EVENT = 'peddlers_lang_change'
 
 export function saveLocale(locale: Locale) {
   const expires = new Date()
@@ -22,11 +23,20 @@ export function useLocale() {
 
   useEffect(() => {
     setLocaleState(getStoredLocale())
+    function handleLocaleChange(event: Event) {
+      const nextLocale = (event as CustomEvent<Locale>).detail
+      if (nextLocale === 'en' || nextLocale === 'es') {
+        setLocaleState(nextLocale)
+      }
+    }
+    window.addEventListener(EVENT, handleLocaleChange)
+    return () => window.removeEventListener(EVENT, handleLocaleChange)
   }, [])
 
   function setLocale(l: Locale) {
     saveLocale(l)
     setLocaleState(l)
+    window.dispatchEvent(new CustomEvent(EVENT, { detail: l }))
   }
 
   const t: Translations = translations[locale]

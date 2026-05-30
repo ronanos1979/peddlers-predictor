@@ -57,6 +57,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(await fetchFootball('players/topscorers', params))
 
       case 'teams': {
+        if (!team) {
+          return NextResponse.json(await fetchFootball('teams', params))
+        }
         // team info
         const res = await fetch(`${BASE}/teams?id=${team}`, {
           headers: { 'x-apisports-key': API_KEY }
@@ -71,6 +74,10 @@ export async function GET(req: NextRequest) {
         })
         const data = await res.json()
         return NextResponse.json(data)
+      }
+
+      case 'players': {
+        return NextResponse.json(await fetchFootball('players', params))
       }
 
       case 'coaches': {

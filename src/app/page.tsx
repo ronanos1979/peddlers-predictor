@@ -5,9 +5,11 @@ import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
 import { loadPatron, clearPatron, firstName } from '@/lib/patron'
+import { useLocale } from '@/lib/useLocale'
+import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
 
-function Countdown() {
+function Countdown({ t }: { t: Translations }) {
   const [time, setTime] = useState({ days: 0, hours: 0, mins: 0, secs: 0, started: false })
   useEffect(() => {
     const target = new Date('2026-06-11T19:00:00Z')
@@ -22,10 +24,10 @@ function Countdown() {
   return (
     <div className="card" style={{ textAlign: 'center', marginBottom: 20, background: 'linear-gradient(135deg, #0d1f16, #111)' }}>
       <div style={{ fontSize: 11, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 10 }}>
-        Tournament kicks off in
+        {t.tournamentKicksOff}
       </div>
       <div className="countdown-grid">
-        {[{ val: time.days, label: 'Days' }, { val: time.hours, label: 'Hours' }, { val: time.mins, label: 'Mins' }, { val: time.secs, label: 'Secs' }].map(({ val, label }) => (
+        {[{ val: time.days, label: t.days }, { val: time.hours, label: t.hours }, { val: time.mins, label: t.mins }, { val: time.secs, label: t.secs }].map(({ val, label }) => (
           <div key={label} className="countdown-cell">
             <div className="countdown-num">{String(val).padStart(2, '0')}</div>
             <div className="countdown-label">{label}</div>
@@ -33,13 +35,13 @@ function Countdown() {
         ))}
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 0.5 }}>
-        Mexico 🇲🇽 vs South Africa 🇿🇦 · June 11 · Mexico City
+        {t.openingMatch}
       </p>
     </div>
   )
 }
 
-function PatronWelcome({ onClear }: { onClear: () => void }) {
+function PatronWelcome({ onClear, t }: { onClear: () => void; t: Translations }) {
   const [patron, setPatron] = useState<{ name: string; phone: string } | null>(null)
   const [tickets, setTickets] = useState<number | null>(null)
 
@@ -73,29 +75,28 @@ function PatronWelcome({ onClear }: { onClear: () => void }) {
     }}>
       <div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: 'var(--green)', marginBottom: 2 }}>
-          Welcome back, {firstName(patron.name)}! 👋
+          {t.welcomeBack}, {firstName(patron.name)}! 👋
         </div>
         {tickets !== null && (
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)' }}>
-            You have{' '}
-            <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{tickets} raffle {tickets === 1 ? 'ticket' : 'tickets'}</span>
-            {' '}so far
+            {t.youHave}{' '}
+            <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{tickets} {tickets === 1 ? t.raffleTicket : t.raffleTickets}</span>
           </div>
         )}
         {tickets === 0 && (
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-            Make a correct pick to earn your first tickets!
+            {t.firstTicketsHint}
           </div>
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         <Link href={`/my-picks?phone=${encodeURIComponent(patron.phone)}`}
           style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--green)', textDecoration: 'none', textAlign: 'right' }}>
-          My picks →
+          {t.myPicksLink}
         </Link>
         <button onClick={() => { clearPatron(); setPatron(null); onClear() }}
           style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', cursor: 'pointer', textAlign: 'right', padding: 0 }}>
-          Not you?
+          {t.notYou}
         </button>
       </div>
     </div>
@@ -103,6 +104,7 @@ function PatronWelcome({ onClear }: { onClear: () => void }) {
 }
 
 export default function Home({ searchParams }: { searchParams: { pub?: string } }) {
+  const { t } = useLocale()
   const router = useRouter()
   const pubId = (searchParams.pub && PUB_DATA[searchParams.pub]) ? searchParams.pub : ''
   const [selectedPub, setSelectedPub] = useState(pubId)
@@ -154,26 +156,26 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '28px 0 24px' }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
-          FIFA World Cup 2026 · June 11 – July 19
+          FIFA World Cup 2026 · June 11 - July 19
         </div>
         <h1 style={{ fontSize: 42, marginBottom: 8 }}>
-          World Cup<br /><span style={{ color: 'var(--green)' }}>Predictor</span>
+          {t.heroTitle.split('\n')[0]}<br /><span style={{ color: 'var(--green)' }}>{t.heroTitle.split('\n')[1]}</span>
         </h1>
         <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, margin: '0 auto' }}>
-          Predict every match at The Peddler&apos;s Daughter. Most correct picks wins a TV.
+          {t.heroSub}
         </p>
       </div>
 
       {/* Returning patron greeting */}
-      <PatronWelcome key={patronKey} onClear={() => setPatronKey(k => k + 1)} />
+      <PatronWelcome key={patronKey} onClear={() => setPatronKey(k => k + 1)} t={t} />
 
       {/* Countdown */}
-      <Countdown />
+      <Countdown t={t} />
 
       {/* Location selector */}
       <div style={{ marginBottom: 4 }}>
         <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', textAlign: 'center', marginBottom: 8 }}>
-          Choose your location
+          {t.chooseLocation}
         </div>
         <div className="loc-selector">
           <button className={`loc-btn ${selectedPub === 'haverhill' ? 'active' : ''}`} onClick={() => choosePub('haverhill')}>
@@ -188,13 +190,13 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       {!selectedPub && (
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px', borderStyle: 'dashed', borderColor: 'var(--border2)' }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>👆</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 16, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Select your pub above</p>
-          <p className="muted">Choose Haverhill or Nashua to get started</p>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 16, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.selectPubAbove}</p>
+          <p className="muted">{t.selectPubSub}</p>
         </div>
       )}
 
       {selectedPub && loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>Loading…</div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
       )}
 
       {selectedPub && !loading && match && pub && (
@@ -206,7 +208,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
 
       {selectedPub && !loading && !match && upcomingMatch && (
         <div className="match-hero">
-          <span className="badge badge-pending" style={{ marginBottom: 12, display: 'inline-flex' }}>Coming up</span>
+          <span className="badge badge-pending" style={{ marginBottom: 12, display: 'inline-flex' }}>{t.comingUp}</span>
           <div className="match-teams-display">
             <div>{upcomingMatch.home_flag} {upcomingMatch.home_team}</div>
             <div className="vs-divider" style={{ fontSize: 14, margin: '4px 0' }}>vs</div>
@@ -216,35 +218,36 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>
             {fmtDate(upcomingMatch.kickoff_at)} · {fmtKickoff(upcomingMatch.kickoff_at)}
           </div>
-          <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>Predictions open at kick-off and close at the final whistle</p>
+          <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>{t.predictionsOpen}</p>
         </div>
       )}
 
       {selectedPub && !loading && !match && !upcomingMatch && (
         <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
           <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>No matches right now</p>
-          <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Check the schedule or try the demo.</p>
+          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.noMatchesNow}</p>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>{t.noMatchesSub}</p>
           <Link href={`/demo?pub=${selectedPub}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>
-            🎮 Try a demo prediction
+            {t.tryDemo}
           </Link>
         </div>
       )}
 
       {/* Nav grid */}
-      <div className="section-label" style={{ marginTop: 24 }}>Explore</div>
+      <div className="section-label" style={{ marginTop: 24 }}>{t.explore}</div>
       <div className="nav-grid">
         {[
-          { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: 'Schedule' },
-          { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: 'Leaderboard' },
-          { href: '/my-picks', icon: '👤', label: 'My Picks' },
-          { href: '/world-cup/standings', icon: '📊', label: 'Standings' },
-          { href: '/world-cup/results', icon: '⚽', label: 'Results' },
-          { href: '/world-cup/scorers', icon: '🥇', label: 'Scorers' },
-          { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: 'Golden Boot' },
-          { href: '/rules', icon: '📋', label: 'Rules' },
-          { href: `/demo?pub=${selectedPub || 'haverhill'}`, icon: '🎮', label: 'Try Demo' },
-          { href: '/locations', icon: '📍', label: 'Locations' },
+          { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: t.schedule },
+          { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: t.leaderboard },
+          { href: '/my-picks', icon: '👤', label: t.myPicks },
+          { href: '/world-cup/standings', icon: '📊', label: t.standings },
+          { href: '/world-cup/team', icon: '⭐', label: t.myTeam },
+          { href: '/world-cup/results', icon: '⚽', label: t.results },
+          { href: '/world-cup/scorers', icon: '🥇', label: t.scorers },
+          { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: t.goldenBoot },
+          { href: '/rules', icon: '📋', label: t.rules },
+          { href: `/demo?pub=${selectedPub || 'haverhill'}`, icon: '🎮', label: t.demo },
+          { href: '/locations', icon: '📍', label: t.locations },
         ].map(({ href, icon, label }) => (
           <Link key={label} href={href} className="nav-card">
             <div className="nav-card-icon">{icon}</div>

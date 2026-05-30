@@ -61,7 +61,7 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
       if (err) { setError(err.message); setSubmitting(false); return }
       setSubmitted(true)
     } catch {
-      setError('Something went wrong')
+      setError(t.somethingWentWrong)
       setSubmitting(false)
     }
   }
@@ -70,13 +70,13 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
     return (
       <div className="container">
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 Bonus Pick</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 {t.bonusPick}</div>
           <h1>{t.pickTopScorer}</h1>
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Make a match prediction first</p>
-          <p className="muted" style={{ marginBottom: 16 }}>You need to enter at least one match prediction before picking the Golden Boot winner.</p>
-          <Link href={`/?pub=${pubId}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>← Make a prediction</Link>
+          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{t.makeMatchPredictionFirst}</p>
+          <p className="muted" style={{ marginBottom: 16 }}>{t.needMatchPrediction}</p>
+          <Link href={`/?pub=${pubId}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>← {t.makePrediction}</Link>
         </div>
       </div>
     )
@@ -106,7 +106,7 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 Bonus Pick</div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 {t.bonusPick}</div>
         <h1>{t.pickTopScorer}</h1>
         <p className="muted">{t.topScorerSub}</p>
       </div>
@@ -120,12 +120,12 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
         />
       </div>
 
-      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>Loading players…</div>}
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.loadingPlayers}</div>}
 
       {!loading && filtered.length === 0 && (
         <div className="card" style={{ textAlign: 'center' }}>
-          <p className="muted">No players found. The tournament may not have started yet.</p>
-          <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>Search for any player name above.</p>
+          <p className="muted">{t.noPlayersFound}</p>
+          <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>{t.searchPlayerAbove}</p>
         </div>
       )}
 
@@ -152,7 +152,7 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: isSelected ? 'var(--gold)' : 'var(--text-dim)', letterSpacing: 1 }}>
                 {s.statistics[0]?.goals.total ?? 0}
               </div>
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase' }}>goals</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase' }}>{t.goalsLabel}</div>
             </div>
             {isSelected && <div style={{ color: 'var(--gold)', fontSize: 18, flexShrink: 0 }}>✓</div>}
           </div>
@@ -163,7 +163,7 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
         <div style={{ position: 'sticky', bottom: 16, marginTop: 16 }}>
           {error && <p className="error" style={{ marginBottom: 8, textAlign: 'center' }}>{error}</p>}
           <button className="btn btn-gold" disabled={submitting} onClick={handleSubmit}>
-            {submitting ? 'Submitting…' : `🥇 ${t.lockInTopScorer}: ${selected.player.name}`}
+            {submitting ? t.submitting : `🥇 ${t.lockInTopScorer}: ${selected.player.name}`}
           </button>
         </div>
       )}

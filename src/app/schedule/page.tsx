@@ -1,11 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
+import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type GroupedMatches = Record<string, Match[]>
 
 export default function SchedulePage({ searchParams }: { searchParams: { pub?: string } }) {
+  const { t } = useLocale()
   const pubId = searchParams.pub || 'haverhill'
   const [grouped, setGrouped] = useState<GroupedMatches>({})
   const [loading, setLoading] = useState(true)
@@ -52,23 +54,23 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
 
   const statusBadge = (m: Match) => {
     const s = getStatus(m)
-    if (s === 'live') return <span className="badge badge-live">● Entries open</span>
+    if (s === 'live') return <span className="badge badge-live">● {t.entriesOpen}</span>
     if (s === 'done') return <span className="badge" style={{ background: 'var(--gray-border)', color: 'var(--text-muted)' }}>
-      {m.result === 'home' ? `${m.home_team} won` :
-       m.result === 'away' ? `${m.away_team} won` : 'Draw'}
+      {m.result === 'home' ? t.teamWon.replace('{team}', m.home_team) :
+       m.result === 'away' ? t.teamWon.replace('{team}', m.away_team) : t.draw}
     </span>
-    if (s === 'closed') return <span className="badge badge-closed">Closed</span>
+    if (s === 'closed') return <span className="badge badge-closed">{t.closed}</span>
     return null
   }
 
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <h1>Match schedule</h1>
-        <p className="muted">All 104 matches · Times in your local timezone</p>
+        <h1>{t.matchSchedule}</h1>
+        <p className="muted">{t.scheduleSub}</p>
       </div>
 
-      {loading && <p className="muted" style={{ textAlign: 'center', padding: 40 }}>Loading…</p>}
+      {loading && <p className="muted" style={{ textAlign: 'center', padding: 40 }}>{t.loading}</p>}
 
       {Object.entries(grouped).map(([date, matches]) => {
         const isToday = date === new Date().toLocaleDateString('en-US', {
@@ -86,7 +88,7 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
                 <span style={{
                   background: 'var(--green)', color: '#fff',
                   fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 700
-                }}>TODAY</span>
+                }}>{t.today}</span>
               )}
             </div>
 
@@ -121,11 +123,11 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
         <Link href={`/?pub=${pubId}`} className="btn btn-primary"
           style={{ textDecoration: 'none', textAlign: 'center' }}>
-          ← Make a prediction
+          ← {t.makePrediction}
         </Link>
         <Link href={`/leaderboard?pub=${pubId}`} className="btn btn-secondary"
           style={{ textDecoration: 'none', textAlign: 'center' }}>
-          🏆 Leaderboard
+          🏆 {t.leaderboard}
         </Link>
       </div>
     </div>

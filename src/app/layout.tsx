@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import LangSwitcher from '@/components/LangSwitcher'
+import SiteFooter from '@/components/SiteFooter'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -29,34 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <main>{children}</main>
 
-        <footer style={{ borderTop: '1px solid #1a1a1a', padding: '24px 16px 40px', maxWidth: 480, margin: '0 auto', position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
-            {[
-              { href: 'https://www.thepeddlersdaughter.com/', label: 'Website', external: true },
-              { href: '/rules', label: 'Rules', external: false },
-              { href: '/locations', label: 'Locations', external: false },
-              { href: '/schedule', label: 'Schedule', external: false },
-              { href: '/world-cup/standings', label: 'Standings', external: false },
-              { href: '/world-cup/results', label: 'Results', external: false },
-              { href: '/world-cup/scorers', label: 'Scorers', external: false },
-            ].map(({ href, label, external }) =>
-              external ? (
-                <a key={label} href={href} target="_blank" rel="noopener noreferrer"
-                  style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                  {label}
-                </a>
-              ) : (
-                <Link key={label} href={href}
-                  style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                  {label}
-                </Link>
-              )
-            )}
-          </div>
-          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 0.5 }}>
-            © 2026 The Peddler&apos;s Daughter · Irish Restaurant &amp; Pub · Haverhill MA &amp; Nashua NH
-          </p>
-        </footer>
+        <SiteFooter />
       </body>
     </html>
   )

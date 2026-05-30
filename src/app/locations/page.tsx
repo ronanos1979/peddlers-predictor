@@ -1,14 +1,17 @@
+'use client'
 import Link from 'next/link'
 import { PUB_DATA, WEBSITE_URL } from '@/lib/pubData'
+import { useLocale } from '@/lib/useLocale'
 
 export default function LocationsPage() {
+  const { t } = useLocale()
   const pubs = Object.values(PUB_DATA)
 
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <h1>Our locations</h1>
-        <p className="muted">Two great Irish pubs — one great competition.</p>
+        <h1>{t.ourLocations}</h1>
+        <p className="muted">{t.locationsSub}</p>
       </div>
 
       {pubs.map(pub => (
@@ -35,7 +38,7 @@ export default function LocationsPage() {
           </a>
 
           <a href={pub.mapsUrl} target="_blank" rel="noopener noreferrer" className="map-btn">
-            🗺️ Get directions on Google Maps
+            🗺️ {t.getDirections}
           </a>
 
           <div className="social-row">
@@ -52,21 +55,21 @@ export default function LocationsPage() {
               Instagram
             </a>
             <a href={WEBSITE_URL} target="_blank" rel="noopener noreferrer" className="social-link">
-              🌐 Website
+              🌐 {t.website}
             </a>
           </div>
 
           {/* Mini map embed via static link */}
           <Link href={`/?pub=${pub.id}`} className="btn btn-primary"
             style={{ textDecoration: 'none', marginTop: 16 }}>
-            Make a prediction at {pub.city} →
+            {t.makePredictionAt.replace('{city}', pub.city)} →
           </Link>
         </div>
       ))}
 
       <Link href="/" className="btn btn-secondary"
         style={{ textDecoration: 'none', textAlign: 'center' }}>
-        ← Back to predictions
+        ← {t.backToPredictions}
       </Link>
     </div>
   )
