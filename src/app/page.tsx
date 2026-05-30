@@ -372,6 +372,11 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
         <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, margin: '0 auto' }}>
           {t.heroSub}
         </p>
+        {(rivalry.haverhill.entries + rivalry.nashua.entries) > 0 && (
+          <div style={{ display: 'inline-block', marginTop: 14, background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 20, padding: '6px 16px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)' }}>
+            🏃 {t.totalPlayers.replace('{count}', String(rivalry.haverhill.entries + rivalry.nashua.entries))}
+          </div>
+        )}
       </div>
 
       {/* Returning patron greeting */}
@@ -504,12 +509,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: t.schedule },
           { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: t.leaderboard },
           { href: '/my-picks', icon: '👤', label: t.myPicks },
-          { href: '/world-cup/groups', icon: '🗂️', label: 'Groups' },
-          { href: '/world-cup/standings', icon: '📊', label: t.standings },
-          { href: '/world-cup/bracket', icon: '🏆', label: t.bracket },
-          { href: '/world-cup/team', icon: '⭐', label: t.myTeam },
-          { href: '/world-cup/results', icon: '⚽', label: t.results },
-          { href: '/world-cup/scorers', icon: '🥇', label: t.scorers },
+          { href: '/world-cup', icon: '⚽', label: t.worldCup },
           { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: t.goldenBoot },
           { href: '/rules', icon: '📋', label: t.rules },
           { href: `/demo?pub=${selectedPub || 'haverhill'}`, icon: '🎮', label: t.demo },

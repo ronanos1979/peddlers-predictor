@@ -290,6 +290,30 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+
+          <div className="card">
+            <h2 style={{ marginBottom: 4 }}>QR Codes</h2>
+            <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>Screenshot and share on Instagram Stories or print for tables.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {[
+                { city: 'Haverhill', pub: 'haverhill' },
+                { city: 'Nashua', pub: 'nashua' },
+              ].map(({ city, pub }) => {
+                const url = `https://peddlers-predictor.vercel.app/?pub=${pub}`
+                const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(url)}`
+                return (
+                  <div key={pub} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{city}</div>
+                    <img src={qrSrc} alt={`QR code for ${city}`} width={160} height={160}
+                      style={{ borderRadius: 8, display: 'block', margin: '0 auto' }} />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, wordBreak: 'break-all' }}>
+                      peddlers-predictor.vercel.app/?pub={pub}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </>
       )}
 

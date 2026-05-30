@@ -207,6 +207,22 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
           </div>
         )}
 
+        {!isDemo && (
+          <div className="slide-up-delay" style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px 16px' }}>
+              <div style={{ fontSize: 24, flexShrink: 0 }}>⏱</div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>
+                  {t.checkBackResult}
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)' }}>
+                  Full time ~{new Date(new Date(match.entries_close_at).getTime()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!isDemo && pubInfo && (
           <div className="slide-up-delay card" style={{ marginBottom: 14, textAlign: 'left' }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
@@ -290,6 +306,29 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
           >
             {t.notYou}
           </button>
+        </div>
+      )}
+
+      {/* Big match banner */}
+      {!isDemo && ['Quarter Final', 'Semi Final', 'Third Place', 'Final'].includes(match.stage) && (
+        <div style={{
+          background: match.stage === 'Final'
+            ? 'linear-gradient(135deg, #1f1000, #0f0800)'
+            : 'linear-gradient(135deg, #1a1200, #0f1000)',
+          border: `1px solid ${match.stage === 'Final' ? 'rgba(245,197,24,0.6)' : 'rgba(245,197,24,0.35)'}`,
+          borderRadius: 'var(--radius)',
+          padding: '14px 16px',
+          textAlign: 'center',
+          marginBottom: 12,
+        }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: match.stage === 'Final' ? 32 : 26, color: 'var(--gold)', letterSpacing: 3 }}>
+            {match.stage === 'Final' ? '⭐ THE FINAL ⭐' : `⚡ ${match.stage.toUpperCase()} ⚡`}
+          </div>
+          {match.stage === 'Final' && (
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--gold)', opacity: 0.75, letterSpacing: 1, textTransform: 'uppercase', marginTop: 6 }}>
+              {t.finalNight}
+            </div>
+          )}
         </div>
       )}
 
