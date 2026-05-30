@@ -10,12 +10,13 @@ type EntryRow = {
 }
 type DayStat = [string, { haverhill: number; nashua: number; total: number }]
 type Totals = { total_entries: number; unique_phones: number; emails_collected: number; correct: number; haverhill: number; nashua: number }
+type FeedbackRow = { id: string; message: string; email: string | null; page: string | null; created_at: string; read: boolean }
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [tab, setTab] = useState<'results' | 'entrants' | 'stats'>('results')
+  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback'>('results')
   const [todaysMatches, setTodaysMatches] = useState<Match[]>([])
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
@@ -27,6 +28,7 @@ export default function AdminPage() {
   const [entrants, setEntrants] = useState<EntryRow[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [loadingEntrants, setLoadingEntrants] = useState(false)
+  const [feedback, setFeedback] = useState<FeedbackRow[]>([])
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -81,12 +83,19 @@ export default function AdminPage() {
     setLoadingEntrants(false)
   }, [password])
 
+  const loadFeedback = useCallback(async () => {
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=feedback`)
+    const data = await res.json()
+    setFeedback(data.feedback || [])
+  }, [password])
+
   useEffect(() => {
     if (!authed) return
     loadMatches()
     loadStats()
     loadEntrants()
-  }, [authed, loadMatches, loadStats, loadEntrants])
+    loadFeedback()
+  }, [authed, loadMatches, loadStats, loadEntrants, loadFeedback])
 
   async function setResult(match: Match) {
     const result = results[match.id]
@@ -106,6 +115,15 @@ export default function AdminPage() {
   function flash(text: string, type: 'success' | 'error') {
     setMsg(text); setMsgType(type)
     setTimeout(() => setMsg(''), 5000)
+  }
+
+  async function markFeedbackRead(id: string) {
+    await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'mark_feedback_read', payload: { id } })
+    })
+    setFeedback(prev => prev.map(f => f.id === id ? { ...f, read: true } : f))
   }
 
   function fmt(iso: string) {
@@ -188,17 +206,28 @@ export default function AdminPage() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {(['results', 'entrants', 'stats'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
-              background: tab === t ? 'var(--green)' : 'transparent',
-              color: tab === t ? '#fff' : 'var(--text)', fontWeight: tab === t ? 600 : 400,
-              cursor: 'pointer', fontSize: 13, textTransform: 'capitalize' }}>
-            {t}
-          </button>
-        ))}
-      </div>
+      {(() => {
+        const unread = feedback.filter(f => !f.read).length
+        return (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+            {(['results', 'entrants', 'stats', 'feedback'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
+                  background: tab === t ? 'var(--green)' : 'transparent',
+                  color: tab === t ? '#fff' : 'var(--text)', fontWeight: tab === t ? 600 : 400,
+                  cursor: 'pointer', fontSize: 13, textTransform: 'capitalize',
+                  display: 'flex', alignItems: 'center', gap: 6 }}>
+                {t}
+                {t === 'feedback' && unread > 0 && (
+                  <span style={{ background: 'var(--red)', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '1px 6px', lineHeight: 1.4 }}>
+                    {unread}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* RESULTS TAB */}
       {tab === 'results' && (
@@ -374,6 +403,42 @@ export default function AdminPage() {
               <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--amber)', borderRadius: 2, marginRight: 4 }} />Nashua</span>
             </div>
           </div>
+        </>
+      )}
+
+      {/* FEEDBACK TAB */}
+      {tab === 'feedback' && (
+        <>
+          {feedback.length === 0 && (
+            <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
+              <p className="muted">No feedback submitted yet.</p>
+            </div>
+          )}
+          {feedback.map(f => (
+            <div key={f.id} className="card" style={{
+              marginBottom: 12, opacity: f.read ? 0.55 : 1,
+              borderColor: f.read ? 'var(--gray-border)' : 'var(--amber)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>
+                  {new Date(f.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {f.email && <span style={{ marginLeft: 8, color: 'var(--green)' }}>· {f.email}</span>}
+                </div>
+                {!f.read && (
+                  <button onClick={() => markFeedbackRead(f.id)}
+                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
+                    Mark read
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: 14, lineHeight: 1.6, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>{f.message}</p>
+              {f.page && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', wordBreak: 'break-all' }}>
+                  Page: {f.page}
+                </div>
+              )}
+            </div>
+          ))}
         </>
       )}
     </div>

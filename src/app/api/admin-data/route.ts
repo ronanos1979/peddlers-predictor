@@ -87,5 +87,14 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  if (action === 'feedback') {
+    const { data } = await supabaseAdmin
+      .from('feedback')
+      .select('id, message, email, page, created_at, read')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    return NextResponse.json({ feedback: data || [] })
+  }
+
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }

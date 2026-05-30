@@ -40,6 +40,7 @@ export default function SiteFooter() {
       {/* Nav links */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
         {[
+          { href: '/feedback', label: '🐛 Feedback' },
           { href: '/rules', label: t.rules },
           { href: '/locations', label: t.locations },
           { href: '/schedule', label: t.schedule },

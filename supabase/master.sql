@@ -62,6 +62,16 @@ create table if not exists scorer_picks (
   unique(phone)
 );
 
+-- User feedback / bug reports
+create table if not exists feedback (
+  id         uuid primary key default gen_random_uuid(),
+  message    text not null,
+  email      text,
+  page       text,
+  read       boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
 -- Team data cache (populated by /api/team, refreshed weekly)
 create table if not exists team_cache (
   team_id    integer primary key,
@@ -81,6 +91,7 @@ alter table matches        enable row level security;
 alter table entries        enable row level security;
 alter table scorer_picks   enable row level security;
 alter table team_cache     enable row level security;
+alter table feedback       enable row level security;
 
 -- Public read on pubs and matches
 create policy "Public read pubs"
@@ -105,6 +116,10 @@ create policy "Public read scorer_picks"
 
 create policy "Public insert scorer_picks"
   on scorer_picks for insert with check (true);
+
+-- Feedback: anyone can submit, only service key (admin) can read
+create policy "Public insert feedback"
+  on feedback for insert with check (true);
 
 -- =============================================================
 -- 3. PUB DATA

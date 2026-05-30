@@ -45,6 +45,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, updated: entries?.length || 0 })
     }
 
+    if (action === 'mark_feedback_read') {
+      const { id } = payload
+      await supabaseAdmin.from('feedback').update({ read: true }).eq('id', id)
+      return NextResponse.json({ success: true })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err) {
     console.error('Admin API error:', err)
