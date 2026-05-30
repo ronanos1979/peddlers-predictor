@@ -211,7 +211,7 @@ export interface FdTeamData {
     team: { id: number; name: string; country: string; logo: string; founded: number | null; national: boolean }
     venue: { name: string; city: string; capacity: number }
   } | null
-  squad: Array<{ id: number; name: string; age: number; number: number; position: string; photo: string }>
+  squad: Array<{ id: number; name: string; age: number; number: number; position: string; photo: string; afId?: number; club?: { name: string; logo?: string } }>
   coach: { id: number; name: string; nationality: string; photo: string; career: unknown[] } | null
   fixtures: Array<{
     fixture: { id: number; date: string; status: { short: string } }
