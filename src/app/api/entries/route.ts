@@ -10,6 +10,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
     }
 
+    const normalizedPhone = String(phone).replace(/\D/g, '')
+    const digits = normalizedPhone.length === 11 && normalizedPhone.startsWith('1')
+      ? normalizedPhone.slice(1)
+      : normalizedPhone
+    if (digits.length !== 10) {
+      return NextResponse.json({ error: 'Enter a valid 10-digit US phone number' }, { status: 400 })
+    }
+
     if (!['home', 'draw', 'away'].includes(pick)) {
       return NextResponse.json({ error: 'Invalid pick' }, { status: 400 })
     }
@@ -51,7 +59,7 @@ export async function POST(req: NextRequest) {
     // Prevent duplicates (allow re-entry on demo)
     if (!is_demo) {
       const { data: existing } = await supabaseAdmin
-        .from('entries').select('id').eq('phone', phone).eq('match_id', match_id).single()
+        .from('entries').select('id').eq('phone', digits).eq('match_id', match_id).single()
       if (existing) {
         return NextResponse.json({ error: 'You have already entered this match' }, { status: 400 })
       }
@@ -64,7 +72,7 @@ export async function POST(req: NextRequest) {
         pub_id,
         match_id,
         name,
-        phone,
+        phone: digits,
         pick,
         email: email || null,
         is_correct: null,

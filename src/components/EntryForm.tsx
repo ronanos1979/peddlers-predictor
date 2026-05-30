@@ -10,6 +10,22 @@ import Link from 'next/link'
 
 type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean }
 
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+}
+
+function isValidPhone(raw: string): boolean {
+  return normalizePhone(raw).length === 10
+}
+
 export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) {
   const { t } = useLocale()
   const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'fail'>('checking')
@@ -79,7 +95,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
   useEffect(() => { checkGeo() }, [checkGeo])
 
   const isClosed = !isDemo && new Date(match.entries_close_at) < new Date()
-  const canSubmit = name && phone && pick && geoStatus !== 'fail' && !isClosed && !submitting
+  const phoneValid = isValidPhone(phone)
+  const canSubmit = name && phone && phoneValid && pick && geoStatus !== 'fail' && !isClosed && !submitting
 
   async function handleSubmit() {
     setError('')
@@ -90,7 +107,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pub_id: pubId, match_id: match.id,
-          name, phone, pick,
+          name, phone: normalizePhone(phone), pick,
           email: email || null,
           code: dailyCode,
           is_demo: isDemo
@@ -319,8 +336,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
                   {t.phoneNote}
                 </span>
               </label>
-              <input value={phone} onChange={e => setPhone(e.target.value)}
-                type="tel" placeholder={t.phonePlaceholder} />
+              <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))}
+                type="tel" placeholder="(555) 867-5309" inputMode="numeric" />
+              {phone && !phoneValid && (
+                <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 4, fontFamily: 'var(--font-cond)' }}>
+                  Enter a 10-digit US phone number
+                </div>
+              )}
             </div>
             <div className="field">
               <label>
