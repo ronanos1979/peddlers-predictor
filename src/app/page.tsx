@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
+import ShareCard from '@/components/ShareCard'
 import { loadPatron, clearPatron, firstName } from '@/lib/patron'
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
@@ -421,6 +422,8 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           </Link>
         ))}
       </div>
+
+      <ShareCard />
     </div>
   )
 }
