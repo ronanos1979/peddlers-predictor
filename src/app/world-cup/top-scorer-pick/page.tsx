@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '@/lib/useLocale'
 import { supabase } from '@/lib/supabase'
-import { loadPatron } from '@/lib/patron'
+import { loadPatron, savePatron } from '@/lib/patron'
 import Link from 'next/link'
 import { GOLDEN_BOOT_CONTENDERS, type Contender } from '@/lib/goldenBootContenders'
 
@@ -26,6 +26,8 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
   const [submitting, setSubmitting]   = useState(false)
   const [submitted, setSubmitted]     = useState(false)
   const [error, setError]             = useState('')
+  const [guestName, setGuestName]     = useState('')
+  const [guestPhone, setGuestPhone]   = useState('')
 
   const patron = typeof window !== 'undefined' ? loadPatron() : null
 
@@ -72,41 +74,28 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
     .filter(s => !norm || s.player.name.toLowerCase().includes(norm) || s.player.nationality.toLowerCase().includes(norm))
 
   async function handleSubmit() {
-    if (!selected || !patron) return
+    if (!selected) return
+    const name  = patron?.name  || guestName.trim()
+    const phone = patron?.phone || guestPhone.trim()
+    if (!name || !phone) { setError('Please enter your name and phone number.'); return }
     setSubmitting(true)
     setError('')
     try {
       const { error: err } = await supabase.from('scorer_picks').insert({
         pub_id:      pubId,
-        phone:       patron.phone,
-        name:        patron.name,
+        phone,
+        name,
         player_name: selected.name,
         player_team: selected.team,
         player_id:   selected.id,
       })
       if (err) { setError(err.message); setSubmitting(false); return }
+      if (!patron) savePatron({ name, phone, pub_id: pubId })
       setSubmitted(true)
     } catch {
       setError(t.somethingWentWrong)
       setSubmitting(false)
     }
-  }
-
-  // ── No patron ────────────────────────────────────────────────────────────────
-  if (!patron) {
-    return (
-      <div className="container">
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 {t.bonusPick}</div>
-          <h1>{t.pickTopScorer}</h1>
-        </div>
-        <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{t.makeMatchPredictionFirst}</p>
-          <p className="muted" style={{ marginBottom: 16 }}>{t.needMatchPrediction}</p>
-          <Link href={`/?pub=${pubId}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>← {t.makePrediction}</Link>
-        </div>
-      </div>
-    )
   }
 
   // ── Already picked ───────────────────────────────────────────────────────────
@@ -144,7 +133,7 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
 
   // ── Main picker ───────────────────────────────────────────────────────────────
   return (
-    <div className="container" style={{ paddingBottom: selected ? 100 : 24 }}>
+    <div className="container" style={{ paddingBottom: selected ? (patron ? 100 : 160) : 24 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 {t.bonusPick}</div>
         <h1>{t.pickTopScorer}</h1>
@@ -257,7 +246,7 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
         </div>
       )}
 
-      {/* Sticky lock-in button */}
+      {/* Sticky lock-in bar */}
       {selected && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
@@ -265,6 +254,31 @@ export default function TopScorerPickPage({ searchParams }: { searchParams: { pu
           padding: '12px 16px',
         }}>
           <div style={{ maxWidth: 480, margin: '0 auto' }}>
+            {!patron && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input
+                  value={guestName}
+                  onChange={e => setGuestName(e.target.value)}
+                  placeholder="Your name"
+                  style={{
+                    flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '10px 12px', color: 'var(--text)',
+                    fontSize: 14, fontFamily: 'var(--font-body)',
+                  }}
+                />
+                <input
+                  value={guestPhone}
+                  onChange={e => setGuestPhone(e.target.value)}
+                  placeholder="Phone number"
+                  type="tel"
+                  style={{
+                    flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '10px 12px', color: 'var(--text)',
+                    fontSize: 14, fontFamily: 'var(--font-body)',
+                  }}
+                />
+              </div>
+            )}
             {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{error}</p>}
             <button className="btn btn-gold" disabled={submitting} onClick={handleSubmit} style={{ width: '100%' }}>
               {submitting ? t.submitting : `🥇 ${t.lockInTopScorer}: ${selected.name}`}
