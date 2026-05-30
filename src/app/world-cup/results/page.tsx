@@ -27,7 +27,7 @@ export default function ResultsPage() {
         const results = (data.response || []) as Fixture[]
         results.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime())
         setFixtures(results)
-        const uniqueStages = [...new Set(results.map(f => f.league.round))]
+        const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
         setStages(uniqueStages)
       } catch {
         setError('Could not load results. Check back soon.')

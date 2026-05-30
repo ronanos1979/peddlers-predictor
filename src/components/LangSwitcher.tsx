@@ -17,7 +17,6 @@ export default function LangSwitcher() {
             borderRadius: 6,
             padding: '4px 8px',
             cursor: 'pointer',
-            fontSize: 14,
             color: locale === l ? 'var(--green)' : 'var(--text-muted)',
             fontFamily: 'var(--font-cond)',
             fontWeight: 700,
