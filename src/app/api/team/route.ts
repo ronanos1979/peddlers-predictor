@@ -89,14 +89,24 @@ async function resolveNameToId(name: string): Promise<number | null> {
   const norm    = name.toLowerCase().trim()
   const aliased = NAME_ALIASES[norm] || norm
 
-  // 1. WC 2026 teams list (scoped — no club-team false positives)
+  // 1. WC 2026 teams list (most reliable when available — scoped to tournament)
   const wcTeamsData = await apiFetch('teams', { league: LEAGUE, season: SEASON })
   const fromList = resolveFromWcList(name, wcTeamsData.response || [])
   if (fromList) return fromList
 
-  // 2. Fallback: search with aliased name, filter to senior national teams
-  const searchData = await apiFetch('teams', { search: aliased !== norm ? aliased : norm })
-  return resolveFromSearch(name, searchData.response || [])
+  // 2. Search with aliased name (e.g. "united states" for "USA").
+  //    This catches cases where the API official name matches the alias.
+  if (aliased !== norm) {
+    const aliasData = await apiFetch('teams', { search: aliased })
+    const fromAlias = resolveFromSearch(name, aliasData.response || [])
+    if (fromAlias) return fromAlias
+  }
+
+  // 3. Search with the original display name (e.g. "USA").
+  //    Catches cases where API-Football stores the abbreviation rather than the full name.
+  //    This is the fix for USA: API-Football may register the team as "USA" not "United States".
+  const origData = await apiFetch('teams', { search: norm })
+  return resolveFromSearch(name, origData.response || [])
 }
 
 // Read a cache row and return null if the entry looks wrong (youth team cached by mistake).
