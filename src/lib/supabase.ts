@@ -26,6 +26,7 @@ export type Match = {
   stage: string
   result: 'home' | 'draw' | 'away' | null
   is_active: boolean
+  venue: string | null
 }
 
 export type Entry = {

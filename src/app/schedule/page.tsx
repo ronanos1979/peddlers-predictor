@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
@@ -9,8 +9,9 @@ type GroupedMatches = Record<string, Match[]>
 export default function SchedulePage({ searchParams }: { searchParams: { pub?: string } }) {
   const { t } = useLocale()
   const pubId = searchParams.pub || 'haverhill'
-  const [grouped, setGrouped] = useState<GroupedMatches>({})
+  const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -19,90 +20,141 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
         .select('*')
         .neq('stage', 'Demo Match')
         .order('kickoff_at', { ascending: true })
-
-      if (data) {
-        const groups: GroupedMatches = {}
-        data.forEach((m: Match) => {
-          const date = new Date(m.kickoff_at).toLocaleDateString('en-US', {
-            weekday: 'long', month: 'long', day: 'numeric'
-          })
-          if (!groups[date]) groups[date] = []
-          groups[date].push(m)
-        })
-        setGrouped(groups)
-      }
+      setMatches((data as Match[]) || [])
       setLoading(false)
     }
     load()
   }, [])
 
+  const norm = filter.toLowerCase().trim()
+
+  const filtered = useMemo(() => {
+    if (!norm) return matches
+    return matches.filter(m =>
+      m.home_team.toLowerCase().includes(norm) ||
+      m.away_team.toLowerCase().includes(norm) ||
+      (m.venue || '').toLowerCase().includes(norm) ||
+      m.stage.toLowerCase().includes(norm)
+    )
+  }, [matches, norm])
+
+  const grouped = useMemo(() => {
+    const g: GroupedMatches = {}
+    filtered.forEach(m => {
+      const date = new Date(m.kickoff_at).toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric',
+      })
+      if (!g[date]) g[date] = []
+      g[date].push(m)
+    })
+    return g
+  }, [filtered])
+
   function fmtTime(iso: string) {
     return new Date(iso).toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
     })
   }
 
   function getStatus(m: Match) {
     const now = new Date()
     const kickoff = new Date(m.kickoff_at)
-    const close = new Date(m.entries_close_at)
+    const close   = new Date(m.entries_close_at)
     if (m.result) return 'done'
     if (now >= kickoff && now <= close) return 'live'
     if (now < kickoff) return 'upcoming'
     return 'closed'
   }
 
-  const statusBadge = (m: Match) => {
+  function statusBadge(m: Match) {
     const s = getStatus(m)
     if (s === 'live') return <span className="badge badge-live">● {t.entriesOpen}</span>
-    if (s === 'done') return <span className="badge" style={{ background: 'var(--gray-border)', color: 'var(--text-muted)' }}>
-      {m.result === 'home' ? t.teamWon.replace('{team}', m.home_team) :
-       m.result === 'away' ? t.teamWon.replace('{team}', m.away_team) : t.draw}
-    </span>
+    if (s === 'done') return (
+      <span className="badge" style={{ background: 'var(--gray-border)', color: 'var(--text-muted)' }}>
+        {m.result === 'home' ? t.teamWon.replace('{team}', m.home_team) :
+         m.result === 'away' ? t.teamWon.replace('{team}', m.away_team) : t.draw}
+      </span>
+    )
     if (s === 'closed') return <span className="badge badge-closed">{t.closed}</span>
     return null
   }
 
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  })
+
   return (
     <div className="container">
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <h1>{t.matchSchedule}</h1>
         <p className="muted">{t.scheduleSub}</p>
       </div>
 
+      {/* Search / filter */}
+      <div style={{ position: 'relative', marginBottom: 20 }}>
+        <input
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="Filter by team, venue, or stage…"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '11px 40px 11px 40px',
+            color: 'var(--text)', fontSize: 15, fontFamily: 'var(--font-body)',
+          }}
+        />
+        <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}>🔍</span>
+        {filter && (
+          <button
+            onClick={() => setFilter('')}
+            style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+          >×</button>
+        )}
+      </div>
+
+      {/* Result count when filtering */}
+      {norm && !loading && (
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: filtered.length ? 'var(--green)' : 'var(--text-muted)', marginBottom: 16 }}>
+          {filtered.length} {filtered.length === 1 ? 'match' : 'matches'} found
+        </div>
+      )}
+
       {loading && <p className="muted" style={{ textAlign: 'center', padding: 40 }}>{t.loading}</p>}
 
-      {Object.entries(grouped).map(([date, matches]) => {
-        const isToday = date === new Date().toLocaleDateString('en-US', {
-          weekday: 'long', month: 'long', day: 'numeric'
-        })
-        return (
-          <div key={date} style={{ marginBottom: 24 }}>
-            <div style={{
-              fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: 1,
-              marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8
-            }}>
-              {date}
-              {isToday && (
-                <span style={{
-                  background: 'var(--green)', color: '#fff',
-                  fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 700
-                }}>{t.today}</span>
-              )}
-            </div>
+      {!loading && filtered.length === 0 && norm && (
+        <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
+          <p className="muted">No matches found for &ldquo;{filter}&rdquo;</p>
+          <button onClick={() => setFilter('')} className="btn btn-secondary" style={{ marginTop: 12, display: 'inline-block' }}>
+            Clear filter
+          </button>
+        </div>
+      )}
 
-            {matches.map(m => (
-              <div key={m.id} style={{
-                background: 'var(--white)',
-                border: `1px solid ${getStatus(m) === 'live' ? 'var(--green)' : 'var(--gray-border)'}`,
-                borderRadius: 10,
-                padding: '12px 14px',
-                marginBottom: 8,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12
-              }}>
+      {Object.entries(grouped).map(([date, dayMatches]) => (
+        <div key={date} style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: 1,
+            marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            {date}
+            {date === todayLabel && (
+              <span style={{ background: 'var(--green)', color: '#fff', fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>
+                {t.today}
+              </span>
+            )}
+          </div>
+
+          {dayMatches.map(m => (
+            <div key={m.id} style={{
+              background: 'var(--surface)',
+              border: `1px solid ${getStatus(m) === 'live' ? 'var(--green)' : 'var(--border)'}`,
+              borderRadius: 10,
+              padding: '12px 14px',
+              marginBottom: 8,
+            }}>
+              {/* Teams row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>
                     {m.home_flag} {m.home_team} &nbsp;vs&nbsp; {m.away_flag} {m.away_team}
@@ -115,10 +167,26 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
                   {statusBadge(m)}
                 </div>
               </div>
-            ))}
-          </div>
-        )
-      })}
+
+              {/* Venue row */}
+              {m.venue ? (
+                <div style={{
+                  marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
+                  fontFamily: 'var(--font-cond)', fontSize: 12,
+                  color: norm && m.venue.toLowerCase().includes(norm) ? 'var(--green)' : 'var(--text-muted)',
+                }}>
+                  <span>📍</span>
+                  <span>{m.venue}</span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 8, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--border)', letterSpacing: 0.5 }}>
+                  📍 Venue TBA
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
         <Link href={`/?pub=${pubId}`} className="btn btn-primary"

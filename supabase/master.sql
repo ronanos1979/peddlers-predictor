@@ -30,7 +30,8 @@ create table if not exists matches (
   entries_close_at timestamptz not null,
   stage            text not null default 'Group Stage',
   result           text check (result in ('home','draw','away')) default null,
-  is_active        boolean not null default false
+  is_active        boolean not null default false,
+  venue            text default null  -- e.g. 'MetLife Stadium, East Rutherford, NJ'
 );
 
 -- Entries
