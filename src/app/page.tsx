@@ -5,7 +5,7 @@ import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
 import ShareCard from '@/components/ShareCard'
-import { loadPatron, clearPatron, firstName } from '@/lib/patron'
+import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
@@ -236,8 +236,16 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     setSelectedPub(id)
     setMatch(null)
     setUpcomingMatch(null)
+    savePubPref(id)
     router.replace(`/?pub=${id}`, { scroll: false })
   }
+
+  // Restore saved pub on first load when no ?pub= in the URL
+  useEffect(() => {
+    if (pubId) return
+    const saved = loadPubPref()
+    if (saved && PUB_DATA[saved]) choosePub(saved)
+  }, []) // eslint-disable-line
 
   useEffect(() => {
     if (!selectedPub) return

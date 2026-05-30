@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useLocale } from '@/lib/useLocale'
+import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
 
 type EntryWithMatch = {
@@ -38,6 +39,7 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
   const [scorerPick, setScorerPick] = useState<ScorerPick | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [fromCookie, setFromCookie] = useState(false)
 
   async function lookup(p?: string) {
     const num = p || phone
@@ -58,9 +60,15 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
     setLoading(false)
   }
 
-  // Auto-lookup if phone in URL
+  // Auto-lookup: from URL param first, then patron cookie
   useEffect(() => {
-    if (searchParams.phone) lookup(searchParams.phone)
+    if (searchParams.phone) { lookup(searchParams.phone); return }
+    const patron = loadPatron()
+    if (patron?.phone) {
+      setPhone(patron.phone)
+      setFromCookie(true)
+      lookup(patron.phone)
+    }
   }, []) // eslint-disable-line
 
   function pickLabel(pick: string, m: EntryWithMatch['matches']) {
@@ -82,23 +90,34 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
         <p className="muted">{t.myPicksSub}</p>
       </div>
 
-      <div className="card">
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="tel"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && lookup()}
-            placeholder="+1 (555) 000-0000"
-            style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 15 }}
-          />
-          <button className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }}
-            onClick={() => lookup()}>
-            {t.search}
+      {fromCookie && searched && !error ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <button
+            onClick={() => { setFromCookie(false); setSearched(false); setEntries([]); setStats(null); setScorerPick(null); setPhone('') }}
+            style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 0' }}
+          >
+            {t.notYou} Search by phone →
           </button>
         </div>
-        {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
-      </div>
+      ) : (
+        <div className="card">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && lookup()}
+              placeholder="+1 (555) 000-0000"
+              style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 15 }}
+            />
+            <button className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }}
+              onClick={() => lookup()}>
+              {t.search}
+            </button>
+          </div>
+          {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
+        </div>
+      )}
 
       {loading && <p className="muted" style={{ textAlign: 'center', padding: 32 }}>{t.loading}</p>}
 

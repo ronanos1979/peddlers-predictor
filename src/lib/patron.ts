@@ -39,3 +39,18 @@ export function clearPatron() {
 export function firstName(fullName: string): string {
   return fullName.split(' ')[0] || fullName
 }
+
+const PUB_COOKIE = 'peddlers_pub'
+
+export function savePubPref(pubId: string) {
+  if (typeof document === 'undefined') return
+  const expires = new Date()
+  expires.setFullYear(expires.getFullYear() + 1)
+  document.cookie = `${PUB_COOKIE}=${pubId}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`
+}
+
+export function loadPubPref(): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.split('; ').find(row => row.startsWith(`${PUB_COOKIE}=`))
+  return match ? match.split('=')[1] : null
+}
