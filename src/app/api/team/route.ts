@@ -7,6 +7,15 @@ const LEAGUE = '1'
 const SEASON = '2026'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+// Map from common/local names (used in Supabase schedule data) → API-Football official names
+const NAME_ALIASES: Record<string, string> = {
+  'usa':          'united states',
+  'south korea':  'korea republic',
+  'ivory coast':  "côte d'ivoire",
+  'türkiye':      'turkey',
+  'czechia':      'czech republic',
+}
+
 type SquadPlayer = {
   id: number; name: string; age: number; number: number
   position: string; photo: string; club?: { name: string; logo?: string }
@@ -63,6 +72,33 @@ async function storeCache(teamId: number, teamName: string, data: ReturnType<typ
   )
 }
 
+// Resolve a team name to its numeric API-Football ID using the WC 2026 teams list.
+// This is more reliable than global search (/teams?search=X) which returns club teams.
+async function resolveNameToId(name: string): Promise<number | null> {
+  const norm = name.toLowerCase().trim()
+  const aliased = NAME_ALIASES[norm] || norm
+
+  const wcTeamsData = await apiFetch('teams', { league: LEAGUE, season: SEASON })
+  const wcTeams: Array<{ team: { id: number; name: string } }> = wcTeamsData.response || []
+
+  // 1. Exact match against alias-resolved name
+  const exactAlias = wcTeams.find(t => t.team.name.toLowerCase() === aliased)
+  if (exactAlias) return exactAlias.team.id
+
+  // 2. Exact match against original name
+  const exactOrig = wcTeams.find(t => t.team.name.toLowerCase() === norm)
+  if (exactOrig) return exactOrig.team.id
+
+  // 3. Substring: query contains API name or API name contains query
+  const partial = wcTeams.find(t => {
+    const api = t.team.name.toLowerCase()
+    return api.includes(norm) || norm.includes(api)
+  })
+  if (partial) return partial.team.id
+
+  return null
+}
+
 export async function GET(req: NextRequest) {
   if (!API_KEY) {
     return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
@@ -96,26 +132,36 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data)
     }
 
-    // Name-based: search cache first
-    const { data: cached } = await supabaseAdmin
+    // Name-based lookup — check cache by name first
+    const { data: cachedByName } = await supabaseAdmin
       .from('team_cache')
       .select('data')
       .ilike('team_name', name!)
       .gt('cached_at', cutoff)
       .maybeSingle()
 
-    if (cached?.data) return NextResponse.json(cached.data)
+    if (cachedByName?.data) return NextResponse.json(cachedByName.data)
 
-    // Search API-Football to resolve name → numeric ID
-    const searchData = await apiFetch('teams', { search: name! })
-    const foundTeam = (searchData.response || [])[0]?.team
-    if (!foundTeam) {
+    // Resolve name → numeric ID via WC 2026 teams list (not global search)
+    const resolvedId = await resolveNameToId(name!)
+    if (!resolvedId) {
       return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [] })
     }
 
-    const data = await buildTeamData(foundTeam.id)
+    // Check cache again by resolved numeric ID (handles alias mismatches)
+    const { data: cachedById } = await supabaseAdmin
+      .from('team_cache')
+      .select('data')
+      .eq('team_id', resolvedId)
+      .gt('cached_at', cutoff)
+      .maybeSingle()
+
+    if (cachedById?.data) return NextResponse.json(cachedById.data)
+
+    // Build full team data and cache it
+    const data = await buildTeamData(resolvedId)
     if (data.teamInfo) {
-      await storeCache(foundTeam.id, (data.teamInfo as { team: { name: string } }).team.name, data)
+      await storeCache(resolvedId, (data.teamInfo as { team: { name: string } }).team.name, data)
     }
     return NextResponse.json(data)
   } catch (err) {
