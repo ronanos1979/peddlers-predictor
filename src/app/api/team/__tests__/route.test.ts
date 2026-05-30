@@ -410,7 +410,8 @@ describe('?id=21 — numeric ID bypasses name resolution', () => {
   })
 
   test('serves from Supabase cache on second visit (no API calls)', async () => {
-    const cached = { teamInfo: US_TEAM_INFO, squad: US_SQUAD, coach: null, fixtures: [] }
+    // photosEnriched: true prevents the photo-enrichment AF call on cache read
+    const cached = { teamInfo: US_TEAM_INFO, squad: US_SQUAD, coach: null, fixtures: [], photosEnriched: true }
     mockFrom.mockReturnValue(hitCache(cached, 'United States'))
 
     const body = await GET(makeReq({ id: '21' })).then(r => r.json())

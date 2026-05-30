@@ -157,7 +157,13 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>
-                    {m.home_flag} {m.home_team} &nbsp;vs&nbsp; {m.away_flag} {m.away_team}
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                      {m.home_flag} {m.home_team}
+                    </Link>
+                    {' '}vs{' '}
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                      {m.away_flag} {m.away_team}
+                    </Link>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     {m.stage} · {fmtTime(m.kickoff_at)}

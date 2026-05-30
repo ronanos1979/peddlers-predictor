@@ -4,6 +4,14 @@ import { useLocale } from '@/lib/useLocale'
 import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
 
+function TeamLink({ name, flag }: { name: string; flag: string }) {
+  return (
+    <Link href={`/world-cup/team?name=${encodeURIComponent(name)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+      {flag} {name}
+    </Link>
+  )
+}
+
 type EntryWithMatch = {
   id: string
   pick: 'home' | 'draw' | 'away'
@@ -189,7 +197,9 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>
-                        {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
+                        <TeamLink name={m.home_team} flag={m.home_flag} />
+                        {' vs '}
+                        <TeamLink name={m.away_team} flag={m.away_flag} />
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                         {m.stage} · {fmtDate(m.kickoff_at)}

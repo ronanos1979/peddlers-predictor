@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import {
   NAME_ALIASES,
+  YOUTH_RE,
   resolveFromWcList,
   resolveFromSearch,
   toLocalScheduleName,
@@ -20,10 +21,10 @@ const AF_BASE = 'https://v3.football.api-sports.io'
 const LEAGUE  = '1'
 const SEASON  = '2026'
 
-// Player/team name data changes rarely — 60-day cache is safe and reduces API calls.
+// Player/team name data changes rarely — 60-day cache reduces API calls.
 const CACHE_TTL_MS = 60 * 24 * 60 * 60 * 1000
 
-// ── API-Football (fallback) ───────────────────────────────────────────────────
+// ── API-Football (fallback + photo source) ────────────────────────────────────
 
 type SquadPlayer = {
   id: number; name: string; age: number; number: number
@@ -103,9 +104,51 @@ async function afResolveNameToId(name: string): Promise<number | null> {
   return resolveFromSearch(name, origData.response || [])
 }
 
+// ── Photo enrichment ──────────────────────────────────────────────────────────
+// FD free tier has no player photos. We supplement with AF's photo URLs using
+// two AF calls (name search + squad). Photo URLs are stored in Supabase alongside
+// squad data — no external calls on subsequent page loads, just cached URL strings.
+
+type PhotoPlayer = { name: string; photo: string }
+
+async function tryEnrichWithPhotos(squad: PhotoPlayer[], teamName: string): Promise<boolean> {
+  if (!AF_KEY || squad.length === 0) return false
+  try {
+    const norm    = teamName.toLowerCase().trim()
+    const aliased = NAME_ALIASES[norm] || norm
+
+    // 1 AF call: find the AF senior national team ID
+    const searchData = await afFetch('teams', { search: aliased })
+    const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
+    const seniors = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+    const afTeam = seniors.find(t => {
+      const n = t.team.name.toLowerCase()
+      return n === aliased || n === norm
+    }) || seniors[0]
+    if (!afTeam) return true  // searched but not found — mark attempted
+
+    // 1 AF call: get squad with photo URLs
+    const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
+    const afPhotos = new Map<string, string>()
+    ;((squadData.response?.[0]?.players || []) as Array<{ name: string; photo: string }>)
+      .forEach(p => { if (p.name && p.photo) afPhotos.set(p.name.toLowerCase(), p.photo) })
+
+    // Match by player name and assign AF photo URL
+    squad.forEach(player => {
+      if (!player.photo) {
+        const photo = afPhotos.get(player.name.toLowerCase())
+        if (photo) player.photo = photo
+      }
+    })
+    return true
+  } catch (e) {
+    return !(e instanceof AfRateLimitError)  // retry next time if rate-limited
+  }
+}
+
 // ── Supabase cache ────────────────────────────────────────────────────────────
 
-type CachedTeamData = FdTeamData | Awaited<ReturnType<typeof buildAfTeamData>>
+type CachedTeamData = (FdTeamData | Awaited<ReturnType<typeof buildAfTeamData>>) & { photosEnriched?: boolean }
 
 async function storeCache(teamId: number, teamName: string, data: CachedTeamData) {
   await supabaseAdmin.from('team_cache').upsert(
@@ -130,6 +173,21 @@ async function fetchLocalSchedule(localTeamName: string) {
     .or(`home_team.eq.${localTeamName},away_team.eq.${localTeamName}`)
     .order('kickoff_at', { ascending: true })
   return data || []
+}
+
+// On cache reads: if squad exists but has no photos and enrichment hasn't been
+// attempted yet, enrich with AF photos and update the cache row.
+async function maybeEnrichCachedPhotos(apiData: CachedTeamData, teamId: number, teamName: string): Promise<void> {
+  const data = apiData as { squad?: PhotoPlayer[]; photosEnriched?: boolean }
+  const squad = data.squad || []
+  if (squad.length === 0 || data.photosEnriched) return
+  const allEmpty = squad.every(p => !p.photo)
+  if (!allEmpty) { data.photosEnriched = true; return }  // already has photos
+  const enriched = await tryEnrichWithPhotos(squad, teamName)
+  if (enriched) {
+    data.photosEnriched = true
+    await storeCache(teamId, teamName, apiData).catch(() => {})  // best-effort
+  }
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -165,8 +223,10 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
 
       if (validCacheData(cached)) {
-        const apiData = cached!.data
-        const localTeamName = toLocalScheduleName(null, (apiData as { teamInfo?: { team?: { name?: string } } }).teamInfo?.team?.name || '')
+        const apiData = cached!.data as CachedTeamData
+        const teamName = (apiData as { teamInfo?: { team?: { name?: string } } }).teamInfo?.team?.name || (cached!.team_name as string) || ''
+        await maybeEnrichCachedPhotos(apiData, teamId, teamName)
+        const localTeamName = toLocalScheduleName(null, teamName)
         const localSchedule = await fetchLocalSchedule(localTeamName)
         return NextResponse.json({ ...apiData, localSchedule, localTeamName })
       }
@@ -176,28 +236,28 @@ export async function GET(req: NextRequest) {
         try {
           const fdData = await buildFdTeamData(teamId)
           if (fdData?.teamInfo) {
-            await storeCache(teamId, fdData.teamInfo.team.name, fdData)
+            const enriched = await tryEnrichWithPhotos(fdData.squad, fdData.teamInfo.team.name)
+            const cacheData: CachedTeamData = Object.assign(fdData, { photosEnriched: enriched })
+            await storeCache(teamId, fdData.teamInfo.team.name, cacheData)
             const localTeamName = toLocalScheduleName(null, fdData.teamInfo.team.name)
             const localSchedule = await fetchLocalSchedule(localTeamName)
-            return NextResponse.json({ ...fdData, localSchedule, localTeamName })
+            return NextResponse.json({ ...cacheData, localSchedule, localTeamName })
           }
         } catch (e) {
-          if (e instanceof FdRateLimitError) {
-            console.warn('FD rate limited for id lookup, trying AF')
-          } else {
-            console.error('FD team fetch error (id):', e)
-          }
+          if (e instanceof FdRateLimitError) console.warn('FD rate limited for id lookup, trying AF')
+          else console.error('FD team fetch error (id):', e)
         }
       }
 
-      // 3. AF fallback
+      // 3. AF fallback (already has photos from players/squads)
       if (hasAf) {
         const afData = await buildAfTeamData(teamId)
         const ti = (afData as { teamInfo: { team: { name: string } } | null }).teamInfo
-        if (ti) await storeCache(teamId, ti.team.name, afData)
+        const cacheData: CachedTeamData = Object.assign(afData, { photosEnriched: true })
+        if (ti) await storeCache(teamId, ti.team.name, cacheData)
         const localTeamName = toLocalScheduleName(null, ti?.team?.name || '')
         const localSchedule = await fetchLocalSchedule(localTeamName)
-        return NextResponse.json({ ...afData, localSchedule, localTeamName })
+        return NextResponse.json({ ...cacheData, localSchedule, localTeamName })
       }
 
       return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule: [], localTeamName: '' })
@@ -214,8 +274,12 @@ export async function GET(req: NextRequest) {
       .maybeSingle()
 
     if (validCacheData(cachedByName)) {
+      const apiData = cachedByName!.data as CachedTeamData
+      const teamName = (apiData as { teamInfo?: { team?: { name?: string } } }).teamInfo?.team?.name || (cachedByName!.team_name as string) || ''
+      const teamId   = (apiData as { teamInfo?: { team?: { id?: number } } }).teamInfo?.team?.id || 0
+      await maybeEnrichCachedPhotos(apiData, teamId, teamName)
       const localSchedule = await fetchLocalSchedule(name!)
-      return NextResponse.json({ ...cachedByName!.data, localSchedule, localTeamName: name! })
+      return NextResponse.json({ ...apiData, localSchedule, localTeamName: name! })
     }
 
     // 2. Try FD primary: resolve name → FD ID → team profile
@@ -223,7 +287,7 @@ export async function GET(req: NextRequest) {
       try {
         const fdId = await resolveFdTeamId(name!)
         if (fdId) {
-          // Check cache by resolved FD ID
+          // Cache check by resolved FD ID
           const { data: cachedByFdId } = await supabaseAdmin
             .from('team_cache')
             .select('data, team_name')
@@ -232,23 +296,25 @@ export async function GET(req: NextRequest) {
             .maybeSingle()
 
           if (validCacheData(cachedByFdId)) {
+            const apiData = cachedByFdId!.data as CachedTeamData
+            const teamName = (cachedByFdId!.team_name as string) || name!
+            await maybeEnrichCachedPhotos(apiData, fdId, teamName)
             const localSchedule = await fetchLocalSchedule(name!)
-            return NextResponse.json({ ...cachedByFdId!.data, localSchedule, localTeamName: name! })
+            return NextResponse.json({ ...apiData, localSchedule, localTeamName: name! })
           }
 
           const fdData = await buildFdTeamData(fdId)
           if (fdData?.teamInfo) {
-            await storeCache(fdId, fdData.teamInfo.team.name, fdData)
+            const enriched = await tryEnrichWithPhotos(fdData.squad, fdData.teamInfo.team.name)
+            const cacheData: CachedTeamData = Object.assign(fdData, { photosEnriched: enriched })
+            await storeCache(fdId, fdData.teamInfo.team.name, cacheData)
             const localSchedule = await fetchLocalSchedule(name!)
-            return NextResponse.json({ ...fdData, localSchedule, localTeamName: name! })
+            return NextResponse.json({ ...cacheData, localSchedule, localTeamName: name! })
           }
         }
       } catch (e) {
-        if (e instanceof FdRateLimitError) {
-          console.warn('FD rate limited for name lookup, trying AF')
-        } else {
-          console.error('FD team fetch error (name):', e)
-        }
+        if (e instanceof FdRateLimitError) console.warn('FD rate limited for name lookup, trying AF')
+        else console.error('FD team fetch error (name):', e)
       }
     }
 
@@ -260,7 +326,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule, localTeamName: name! })
       }
 
-      // Cache check by AF ID
       const { data: cachedByAfId } = await supabaseAdmin
         .from('team_cache')
         .select('data, team_name')
@@ -269,19 +334,22 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
 
       if (validCacheData(cachedByAfId)) {
+        const apiData = cachedByAfId!.data as CachedTeamData
+        await maybeEnrichCachedPhotos(apiData, afId, cachedByAfId!.team_name as string || name!)
         const localSchedule = await fetchLocalSchedule(name!)
-        return NextResponse.json({ ...cachedByAfId!.data, localSchedule, localTeamName: name! })
+        return NextResponse.json({ ...apiData, localSchedule, localTeamName: name! })
       }
 
       const afData = await buildAfTeamData(afId)
       const ti = (afData as { teamInfo: { team: { name: string } } | null }).teamInfo
-      if (ti) await storeCache(afId, ti.team.name, afData)
+      const cacheData: CachedTeamData = Object.assign(afData, { photosEnriched: true })
+      if (ti) await storeCache(afId, ti.team.name, cacheData)
 
       const localSchedule = await fetchLocalSchedule(name!)
-      return NextResponse.json({ ...afData, localSchedule, localTeamName: name! })
+      return NextResponse.json({ ...cacheData, localSchedule, localTeamName: name! })
     }
 
-    // Both APIs exhausted — return local schedule only
+    // Both APIs exhausted
     const localSchedule = await fetchLocalSchedule(name!)
     return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule, localTeamName: name! })
 

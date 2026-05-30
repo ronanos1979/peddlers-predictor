@@ -7,8 +7,8 @@ const RULES = {
     title: 'Rules & How to Play',
     subtitle: "The Peddler's Daughter World Cup 2026 Predictor",
     prizeTitle: 'The Grand Prize',
-    prizeLead: 'One TV per pub - two winners total!',
-    prizeBody: 'Drawn by raffle at the end of the World Cup Final on July 19, 2026. The more correct predictions you make, the more raffle tickets you earn.',
+    prizeLead: 'One TV — one winner across both pubs!',
+    prizeBody: 'Drawn by raffle at the end of the World Cup Final on July 19, 2026. All entries from Haverhill and Nashua compete together. The more correct predictions you make, the more raffle tickets you earn.',
     sections: [
       ['📱 How to enter', [
         "Visit The Peddler's Daughter in Haverhill, MA or Nashua, NH during any World Cup match",
@@ -23,7 +23,7 @@ const RULES = {
         'You must be 21 years of age or older',
         'One prediction per person per match - no changes once submitted',
         'Use the same phone number every time so your picks stay together',
-        'Both pubs run separate competitions with separate TV prizes',
+        'Patrons from both Haverhill and Nashua compete in one shared draw',
         "Staff of The Peddler's Daughter are not eligible to win",
       ]],
       ['🎯 Scoring & raffle entries', [
