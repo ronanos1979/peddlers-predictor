@@ -6,6 +6,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: "Peddler's Predictor — World Cup 2026",
   description: "Predict World Cup results at The Peddler's Daughter and win a TV!",
+  themeColor: '#0a0a0a',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -20,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 alt="The Peddler's Daughter"
                 width={160}
                 height={60}
-                style={{ objectFit: 'contain', height: 48, width: 'auto' }}
+                style={{ objectFit: 'contain', height: 44, width: 'auto' }}
                 priority
               />
             </Link>
@@ -31,22 +32,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>{children}</main>
 
         <footer style={{
-          borderTop: '1px solid #222',
+          borderTop: '1px solid #1a1a1a',
           padding: '24px 16px 40px',
           maxWidth: 480,
           margin: '0 auto',
-          fontSize: 13,
-          color: '#666'
+          position: 'relative',
+          zIndex: 1,
         }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, flexWrap: 'wrap', marginBottom: 12 }}>
-            <a href="https://www.thepeddlersdaughter.com/" target="_blank" rel="noopener noreferrer"
-              style={{ color: '#888', textDecoration: 'none' }}>Website</a>
-            <Link href="/rules" style={{ color: '#888', textDecoration: 'none' }}>Rules</Link>
-            <Link href="/locations" style={{ color: '#888', textDecoration: 'none' }}>Locations</Link>
-            <Link href="/schedule" style={{ color: '#888', textDecoration: 'none' }}>Schedule</Link>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
+            {[
+              { href: 'https://www.thepeddlersdaughter.com/', label: 'Website', external: true },
+              { href: '/rules', label: 'Rules', external: false },
+              { href: '/locations', label: 'Locations', external: false },
+              { href: '/schedule', label: 'Schedule', external: false },
+              { href: '/my-picks', label: 'My Picks', external: false },
+            ].map(({ href, label, external }) =>
+              external ? (
+                <a key={label} href={href} target="_blank" rel="noopener noreferrer"
+                  style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  {label}
+                </a>
+              ) : (
+                <Link key={label} href={href}
+                  style={{ color: 'var(--text-dim)', textDecoration: 'none', fontSize: 12, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  {label}
+                </Link>
+              )
+            )}
           </div>
-          <p style={{ textAlign: 'center', fontSize: 12 }}>
-            © 2026 The Peddler&apos;s Daughter · Irish Restaurant &amp; Pub
+          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 0.5 }}>
+            © 2026 The Peddler&apos;s Daughter · Irish Restaurant &amp; Pub · Haverhill MA &amp; Nashua NH
           </p>
         </footer>
       </body>

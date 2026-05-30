@@ -4,13 +4,8 @@ import { supabase, type Entry, type Match } from '@/lib/supabase'
 import Link from 'next/link'
 
 type LeaderEntry = {
-  name: string
-  pub_id: string
-  total_pts: number
-  correct: number
-  total: number
-  last_pick: string
-  last_correct: boolean | null
+  name: string; pub_id: string; total_pts: number
+  correct: number; total: number; last_pick: string; last_correct: boolean | null
 }
 
 export default function Leaderboard({ searchParams }: { searchParams: { pub?: string } }) {
@@ -22,53 +17,32 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
   const [lastUpdated, setLastUpdated] = useState('')
 
   async function load() {
-    const { data: matchData } = await supabase
-      .from('matches')
-      .select('*')
-      .eq('is_active', true)
-      .single()
+    const { data: matchData } = await supabase.from('matches').select('*').eq('is_active', true).single()
     setMatch(matchData)
-
-    const { data: rawEntries } = await supabase
-      .from('entries')
-      .select('*')
-      .order('created_at', { ascending: false })
-
+    const { data: rawEntries } = await supabase.from('entries').select('*').order('created_at', { ascending: false })
     if (rawEntries) {
-      // Aggregate by phone number across all matches
       const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; total: number; last_pick: string; last_correct: boolean | null }> = {}
       rawEntries.forEach((e: Entry) => {
-        if (!byPhone[e.phone]) {
-          byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, total: 0, last_pick: e.pick, last_correct: e.is_correct }
-        }
+        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, total: 0, last_pick: e.pick, last_correct: e.is_correct }
         byPhone[e.phone].pts += e.raffle_entries
         byPhone[e.phone].total += 1
         if (e.is_correct) byPhone[e.phone].correct += 1
       })
-
       const sorted = Object.values(byPhone)
         .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))
         .sort((a, b) => b.total_pts - a.total_pts || b.correct - a.correct)
-
       setEntries(sorted)
       setLastUpdated(new Date().toLocaleTimeString())
     }
     setLoading(false)
   }
 
-  useEffect(() => {
-    load()
-    // Refresh every 30 seconds
-    const interval = setInterval(load, 30000)
-    return () => clearInterval(interval)
-  }, [])
+  useEffect(() => { load(); const iv = setInterval(load, 30000); return () => clearInterval(iv) }, [])
 
-  const filtered = filter === 'this_pub' && pubId
-    ? entries.filter(e => e.pub_id === pubId)
-    : entries
-
+  const filtered = filter === 'this_pub' && pubId ? entries.filter(e => e.pub_id === pubId) : entries
   const medals = ['🥇', '🥈', '🥉']
-  const pickLabel = (pick: string, m: Match | null) => {
+
+  function pickLabel(pick: string, m: Match | null) {
     if (!m) return pick
     if (pick === 'home') return `${m.home_flag} ${m.home_team}`
     if (pick === 'away') return `${m.away_flag} ${m.away_team}`
@@ -78,76 +52,72 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <p className="muted" style={{ marginBottom: 4 }}>🍺 The Peddler&apos;s Daughter</p>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>
+          Live Rankings
+        </div>
         <h1>Leaderboard</h1>
         {match && (
-          <p className="muted">Current match: {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}</p>
+          <p className="muted">Current: {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}</p>
         )}
       </div>
 
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
         {(['all', 'this_pub'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              padding: '7px 16px',
-              borderRadius: 20,
-              border: '1px solid var(--gray-border)',
-              background: filter === f ? 'var(--white)' : 'transparent',
-              fontWeight: filter === f ? 600 : 400,
-              cursor: 'pointer',
-              color: 'var(--text)',
-              fontSize: 13
-            }}
-          >
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding: '7px 16px', borderRadius: 20,
+            border: `1px solid ${filter === f ? 'var(--green)' : 'var(--border)'}`,
+            background: filter === f ? 'rgba(0,200,122,0.12)' : 'transparent',
+            color: filter === f ? 'var(--green)' : 'var(--text-muted)',
+            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+            letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
+          }}>
             {f === 'all' ? 'All locations' : 'This pub'}
           </button>
         ))}
-        <span className="muted" style={{ fontSize: 12, alignSelf: 'center', marginLeft: 'auto' }}>
-          Updated {lastUpdated}
-        </span>
+        <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>↻ {lastUpdated}</span>
       </div>
 
       {loading ? (
-        <p className="muted" style={{ textAlign: 'center', padding: 40 }}>Loading…</p>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>Loading…</div>
       ) : filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center' }}>
-          <p className="muted">No entries yet — be the first!</p>
+        <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
+          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>No entries yet</p>
+          <p className="muted" style={{ marginTop: 6 }}>Be the first to make a prediction!</p>
         </div>
       ) : (
         filtered.map((e, i) => (
-          <div key={i} className="lb-entry">
-            <div className="lb-rank">{medals[i] || i + 1}</div>
+          <div key={i} className={`lb-entry ${i < 3 ? 'top' : ''}`}
+            style={{ borderColor: i === 0 ? 'var(--gold)' : i < 3 ? 'rgba(245,197,24,0.3)' : 'var(--border)' }}>
+            <div className="lb-rank" style={{ color: i === 0 ? 'var(--gold)' : i === 1 ? '#aaa' : i === 2 ? '#cd7f32' : 'var(--text-dim)' }}>
+              {medals[i] || i + 1}
+            </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                {e.correct}/{e.total} correct
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
+                {e.correct}/{e.total} correct · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
               </div>
-              {match && e.last_correct === null && (
-                <span className={`pick-pill`}>{pickLabel(e.last_pick, match)} ⏳</span>
-              )}
-              {match && e.last_correct === true && (
-                <span className="pick-pill correct">{pickLabel(e.last_pick, match)} ✓</span>
-              )}
-              {match && e.last_correct === false && (
-                <span className="pick-pill wrong">{pickLabel(e.last_pick, match)}</span>
+              {match && (
+                <span className={`pick-pill ${e.last_correct === true ? 'correct' : e.last_correct === false ? 'wrong' : ''}`}>
+                  {pickLabel(e.last_pick, match)}
+                  {e.last_correct === true ? ' ✓' : e.last_correct === false ? ' ✗' : ' ⏳'}
+                </span>
               )}
             </div>
-            <div>
-              <div className="lb-pts">{e.total_pts} pts</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>raffle</div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="lb-pts">{e.total_pts}</div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>tickets</div>
             </div>
           </div>
         ))
       )}
 
-      <div style={{ marginTop: 20, padding: '12px 16px', background: 'var(--amber-light)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
-        🏆 <strong>3 raffle entries</strong> per correct prediction. TV giveaway at the end of the tournament!
+      <div style={{ marginTop: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #1a1200, #0f1a00)', borderRadius: 'var(--radius)', border: '1px solid rgba(245,197,24,0.2)', fontSize: 13, color: 'var(--text-muted)' }}>
+        🏆 <strong style={{ color: 'var(--gold)' }}>3 raffle entries</strong> per correct pick · TV giveaway after the Final on July 19
       </div>
 
-      <Link href={`/?pub=${pubId || 'haverhill'}`} className="btn btn-secondary" style={{ textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: 12 }}>
+      <Link href={`/?pub=${pubId || 'haverhill'}`} className="btn btn-secondary"
+        style={{ textDecoration: 'none', textAlign: 'center', marginTop: 12 }}>
         ← Make a prediction
       </Link>
     </div>
