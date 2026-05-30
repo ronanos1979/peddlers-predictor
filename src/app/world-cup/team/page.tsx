@@ -74,6 +74,7 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
   const [savedTeam, setSavedTeam] = useState<SavedTeam | null>(null)
   const [teams, setTeams] = useState<Standing[]>([])
   const [fromCache, setFromCache] = useState(false)
+  const [rateLimited, setRateLimited] = useState(false)
 
   useEffect(() => {
     setSavedTeam(readSavedTeam())
@@ -171,6 +172,12 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
       try {
         const res = await fetch(`/api/team?id=${teamId}`)
         const data = await res.json()
+        if (data.error === 'rate_limited') {
+          setRateLimited(true)
+          setLocalMatches(data.localSchedule || [])
+          setLoading(false)
+          return
+        }
         const nextTeamInfo = data.teamInfo || null
         const players: Player[] = data.squad || []
         players.sort((a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position))
@@ -225,6 +232,13 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
       try {
         const res = await fetch(`/api/team?name=${encodeURIComponent(localTeamName)}`)
         const data = await res.json()
+        if (data.error === 'rate_limited') {
+          setRateLimited(true)
+          setLocalMatches(data.localSchedule || [])
+          setLocalScheduleTeamName(data.localTeamName || localTeamName)
+          setLoading(false)
+          return
+        }
         if (data.teamInfo) {
           const players: Player[] = data.squad || []
           players.sort((a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position))
@@ -363,7 +377,13 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
 
             <div className="card" style={{ marginBottom: 14 }}>
               <h2>{t.teamInfo}</h2>
-              <p className="muted">{t.playerInfoUnavailable}</p>
+              {rateLimited ? (
+                <p className="muted" style={{ color: 'var(--amber)' }}>
+                  Player profiles are temporarily unavailable — check back in a few hours as the tournament gets closer.
+                </p>
+              ) : (
+                <p className="muted">{t.playerInfoUnavailable}</p>
+              )}
             </div>
 
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8, paddingLeft: 4 }}>

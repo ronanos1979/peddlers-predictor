@@ -9,18 +9,25 @@
  *  - Bad cache entry (U17) is rejected and fresh data is fetched
  *  - ?id=X bypasses name resolution
  *  - Algeria works independently of USA
+ *  - API rate limit returns structured error (not silent empty data)
+ *  - Club data attached when player stats are available
  */
 
 // Set env var before ANY import so the module-level API_KEY constant is correct
 process.env.API_FOOTBALL_KEY = 'test-key'
 
+// ── Supabase mock ─────────────────────────────────────────────────────────────
+// IMPORTANT: variable must start with 'mock' so Jest's hoisting exception applies.
+// jest.mock() calls are hoisted to the top of the file; any variable referenced
+// in the factory must start with 'mock' to avoid being undefined at factory execution time.
+const mockFrom = jest.fn()
+
+jest.mock('@/lib/supabaseAdmin', () => ({
+  supabaseAdmin: { from: (...args: unknown[]) => mockFrom(...args) },
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
-
-// ── Supabase mock ─────────────────────────────────────────────────────────────
-
-const supabaseMock = { from: jest.fn() }
-jest.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: supabaseMock }))
 
 function makeChain(maybeSingleResult: unknown) {
   const c: Record<string, jest.Mock> = {}
@@ -31,8 +38,14 @@ function makeChain(maybeSingleResult: unknown) {
   return c
 }
 
-function noCache()  { return makeChain({ data: null, team_name: null }) }
-function hitCache(data: unknown, teamName: string) { return makeChain({ data, team_name: teamName }) }
+// Supabase's maybeSingle() returns { data: <row>, error: null }.
+// For team_cache the row is { data: <json blob>, team_name: <string> }.
+// noCache: data property of the Supabase response is null (no row found).
+function noCache()  { return makeChain({ data: null, error: null }) }
+// hitCache: data property of the Supabase response is the actual row object.
+function hitCache(payload: unknown, teamName: string) {
+  return makeChain({ data: { data: payload, team_name: teamName }, error: null })
+}
 
 // ── Sample API-Football data ──────────────────────────────────────────────────
 
@@ -49,11 +62,18 @@ const US_SQUAD = [
   { id: 1001, name: 'Tyler Adams',       age: 25, number: 4,  position: 'Midfielder', photo: '' },
 ]
 const ALGERIA_SQUAD = [
-  { id: 5001, name: 'Riyad Mahrez', age: 33, number: 26, position: 'Attacker', photo: '' },
+  { id: 5001, name: 'Riyad Mahrez', age: 33, number: 26, position: 'Attacker', photo: 'https://media.api-sports.io/football/players/5001.png' },
+  { id: 5002, name: 'Ismael Bennacer', age: 26, number: 8, position: 'Midfielder', photo: 'https://media.api-sports.io/football/players/5002.png' },
 ]
 const COACH = { response: [{ id: 1, name: 'Coach Name', nationality: 'X', photo: '', career: [] }] }
 const US_FIXTURE = { response: [{ fixture: { id: 1, date: '2026-06-13T01:00:00Z', status: { short: 'NS' } }, league: { round: 'Group D' }, teams: { home: { id: 21, name: 'United States', logo: '', winner: null }, away: { id: 99, name: 'Paraguay', logo: '', winner: null } }, goals: { home: null, away: null } }] }
 const EMPTY = { response: [] }
+
+const RATE_LIMITED = {
+  errors: { requests: 'You have reached the request limit for the day, Go to https://dashboard.api-football.com to upgrade your plan.' },
+  results: 0,
+  response: [],
+}
 
 function searchFor(id: number, name: string, national = true) {
   return { response: [{ team: { id, name, national, country: name } }] }
@@ -83,11 +103,11 @@ const isFixtures     = (u: string) => u.includes('/fixtures?') && u.includes('te
 // ── Setup helpers ─────────────────────────────────────────────────────────────
 
 function setupNoCache() {
-  supabaseMock.from.mockReturnValue(noCache())
+  mockFrom.mockReturnValue(noCache())
 }
 
 function setupBadCache(youthName: string) {
-  supabaseMock.from.mockReturnValue(
+  mockFrom.mockReturnValue(
     hitCache({ teamInfo: { team: { id: 99, name: youthName } }, squad: [], coach: null, fixtures: [] }, youthName)
   )
 }
@@ -111,7 +131,9 @@ function makeReq(params: Record<string, string>): NextRequest {
 }
 
 beforeEach(() => {
-  jest.clearAllMocks()
+  // resetAllMocks clears implementations and return values, not just call history.
+  // This prevents mock state (e.g. mockFetch.mockImplementation) leaking across tests.
+  jest.resetAllMocks()
   process.env.API_FOOTBALL_KEY = 'test-key'
 })
 
@@ -280,11 +302,27 @@ describe('?name=Algeria — team profile and player profiles load correctly', ()
     expect(body.teamInfo?.team.id).toBe(7)
   })
 
-  test('returns Algeria squad (player profiles)', async () => {
+  test('returns Algeria squad (player profiles) with all players', async () => {
     setupAlgeria()
     const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
-    expect(body.squad).toHaveLength(1)
+    expect(body.squad).toHaveLength(2)
     expect(body.squad[0].name).toBe('Riyad Mahrez')
+    expect(body.squad[1].name).toBe('Ismael Bennacer')
+  })
+
+  test('player profiles include photo URLs when squad provides them', async () => {
+    setupAlgeria()
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    expect(body.squad[0].photo).toMatch(/^https?:\/\//)
+    expect(body.squad[1].photo).toMatch(/^https?:\/\//)
+  })
+
+  test('Algeria with empty squad still returns teamInfo (not local-only fallback)', async () => {
+    setupAlgeria([])  // pre-tournament: squad not yet submitted
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    expect(body.teamInfo).not.toBeNull()
+    expect(body.teamInfo?.team.id).toBe(7)
+    expect(body.squad).toHaveLength(0)
   })
 
   test('Algeria does not accidentally use USA alias logic', async () => {
@@ -292,6 +330,60 @@ describe('?name=Algeria — team profile and player profiles load correctly', ()
     await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
     const calls = mockFetch.mock.calls.map(([u]) => String(u))
     expect(calls.some(u => u.includes('united') || u.includes('united+states'))).toBe(false)
+  })
+
+  test('attaches club to Algeria player when playerStats has club data', async () => {
+    setupNoCache()
+    const playerStats = {
+      response: [
+        {
+          player: { id: 5001 },
+          statistics: [{ team: { name: 'Al-Ahli', logo: 'https://x.com/ahli.png' } }],
+        },
+      ],
+    }
+    mockFetch.mockImplementation((url: string) => {
+      if (isWcTeamsList(url))       return res(EMPTY)
+      if (isSearch('algeria')(url)) return res(searchFor(7, 'Algeria'))
+      if (isTeamById(7)(url))       return res({ response: [ALGERIA_TEAM_INFO] })
+      if (isSquad(url))             return res({ response: [{ players: ALGERIA_SQUAD }] })
+      if (isPlayerStats(url))       return res(playerStats)
+      if (isCoach(url))             return res(COACH)
+      if (isFixtures(url))          return res(EMPTY)
+      return res(EMPTY)
+    })
+
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    const mahrez = body.squad.find((p: { name: string }) => p.name === 'Riyad Mahrez')
+    expect(mahrez).toBeDefined()
+    expect(mahrez.club?.name).toBe('Al-Ahli')
+  })
+
+  test('does not attach club when club name equals national team name', async () => {
+    setupNoCache()
+    // Simulate player stats where the team IS Algeria (should not be set as club)
+    const playerStats = {
+      response: [
+        {
+          player: { id: 5001 },
+          statistics: [{ team: { name: 'Algeria', logo: '' } }],
+        },
+      ],
+    }
+    mockFetch.mockImplementation((url: string) => {
+      if (isWcTeamsList(url))       return res(EMPTY)
+      if (isSearch('algeria')(url)) return res(searchFor(7, 'Algeria'))
+      if (isTeamById(7)(url))       return res({ response: [ALGERIA_TEAM_INFO] })
+      if (isSquad(url))             return res({ response: [{ players: ALGERIA_SQUAD }] })
+      if (isPlayerStats(url))       return res(playerStats)
+      if (isCoach(url))             return res(COACH)
+      if (isFixtures(url))          return res(EMPTY)
+      return res(EMPTY)
+    })
+
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    const mahrez = body.squad.find((p: { name: string }) => p.name === 'Riyad Mahrez')
+    expect(mahrez.club).toBeUndefined()
   })
 })
 
@@ -319,7 +411,7 @@ describe('?id=21 — numeric ID bypasses name resolution', () => {
 
   test('serves from Supabase cache on second visit (no API calls)', async () => {
     const cached = { teamInfo: US_TEAM_INFO, squad: US_SQUAD, coach: null, fixtures: [] }
-    supabaseMock.from.mockReturnValue(hitCache(cached, 'United States'))
+    mockFrom.mockReturnValue(hitCache(cached, 'United States'))
 
     const body = await GET(makeReq({ id: '21' })).then(r => r.json())
     expect(body.teamInfo?.team.id).toBe(21)
@@ -340,6 +432,59 @@ describe('Cache validation — youth team entries rejected', () => {
     expect(body.teamInfo?.team.id).toBe(21)
     expect(body.teamInfo?.team.name).toBe('United States')
     expect(body.teamInfo?.team.name).not.toContain('U17')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API RATE LIMIT HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('API rate limit — graceful degradation', () => {
+  test('returns error:rate_limited when API is rate limited for name lookup', async () => {
+    setupNoCache()
+    // All API calls return the rate-limited error response
+    mockFetch.mockResolvedValue({ json: () => Promise.resolve(RATE_LIMITED) })
+
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    expect(body.error).toBe('rate_limited')
+    expect(body.teamInfo).toBeNull()
+    expect(body.squad).toEqual([])
+  })
+
+  test('returns error:rate_limited when API is rate limited for ID lookup', async () => {
+    setupNoCache()
+    mockFetch.mockResolvedValue({ json: () => Promise.resolve(RATE_LIMITED) })
+
+    const body = await GET(makeReq({ id: '7' })).then(r => r.json())
+    expect(body.error).toBe('rate_limited')
+    expect(body.teamInfo).toBeNull()
+    expect(body.squad).toEqual([])
+  })
+
+  test('rate_limited response has empty arrays (not undefined) for squad, coach, fixtures', async () => {
+    setupNoCache()
+    mockFetch.mockResolvedValue({ json: () => Promise.resolve(RATE_LIMITED) })
+
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    expect(Array.isArray(body.squad)).toBe(true)
+    expect(Array.isArray(body.fixtures)).toBe(true)
+    expect(body.coach).toBeNull()
+  })
+
+  test('rate_limited response preserves localTeamName so page can show match schedule', async () => {
+    setupNoCache()
+    mockFetch.mockResolvedValue({ json: () => Promise.resolve(RATE_LIMITED) })
+
+    const body = await GET(makeReq({ name: 'Algeria' })).then(r => r.json())
+    expect(body.localTeamName).toBe('Algeria')
+  })
+
+  test('still returns 200 status when rate limited (not 500)', async () => {
+    setupNoCache()
+    mockFetch.mockResolvedValue({ json: () => Promise.resolve(RATE_LIMITED) })
+
+    const response = await GET(makeReq({ name: 'Algeria' }))
+    expect(response.status).toBe(200)
   })
 })
 

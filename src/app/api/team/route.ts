@@ -23,6 +23,15 @@ type PlayerProfile = {
   statistics?: Array<{ team?: { name?: string; logo?: string } }>
 }
 
+class ApiRateLimitError extends Error {
+  constructor() {
+    super('API daily limit reached')
+    this.name = 'ApiRateLimitError'
+    // Required for instanceof to work when compiled to ES5
+    Object.setPrototypeOf(this, ApiRateLimitError.prototype)
+  }
+}
+
 async function apiFetch(path: string, params: Record<string, string> = {}) {
   const url = new URL(`${BASE}/${path}`)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
@@ -30,7 +39,9 @@ async function apiFetch(path: string, params: Record<string, string> = {}) {
     headers: { 'x-apisports-key': API_KEY! },
     cache: 'no-store',
   })
-  return res.json()
+  const data = await res.json()
+  if (data?.errors?.requests) throw new ApiRateLimitError()
+  return data
 }
 
 async function buildTeamData(teamId: number) {
@@ -43,15 +54,19 @@ async function buildTeamData(teamId: number) {
   ])
 
   const teamInfo = teamData.response?.[0] || null
-  const squad: SquadPlayer[] = [...(squadData.response?.[0]?.players || [])]
+  const rawPlayers: SquadPlayer[] = squadData.response?.[0]?.players || []
 
   const profiles = new Map<number, PlayerProfile>()
   ;((playerData.response || []) as PlayerProfile[]).forEach(p => profiles.set(p.player.id, p))
-  squad.forEach(player => {
+
+  const nationalName = (teamInfo as { team?: { name?: string } } | null)?.team?.name
+  // Spread each player into a new object so we never mutate the source array.
+  const squad: SquadPlayer[] = rawPlayers.map(player => {
     const club = profiles.get(player.id)?.statistics?.find(s => s.team?.name)?.team
-    if (club?.name && club.name !== (teamInfo as { team?: { name?: string } } | null)?.team?.name) {
-      player.club = { name: club.name, logo: club.logo }
+    if (club?.name && club.name !== nationalName) {
+      return { ...player, club: { name: club.name, logo: club.logo } }
     }
+    return { ...player }
   })
 
   const coach    = coachData.response?.[0] || null
@@ -205,6 +220,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ...data, localSchedule, localTeamName: name! })
 
   } catch (err) {
+    if (err instanceof ApiRateLimitError) {
+      const localSchedule = await fetchLocalSchedule(name || '').catch(() => [])
+      return NextResponse.json({
+        error: 'rate_limited',
+        teamInfo: null, squad: [], coach: null, fixtures: [],
+        localSchedule, localTeamName: name || '',
+      })
+    }
     console.error('Team data error:', err)
     return NextResponse.json({ error: 'Failed to fetch team data' }, { status: 500 })
   }
