@@ -22,6 +22,17 @@ const EMPTY_RIVALRY: Record<string, RivalryTotals> = {
   nashua: { entries: 0, tickets: 0, correct: 0, scored: 0 },
 }
 
+// Reverse map: API-Football name → Supabase schedule name
+const SCHEDULE_ALIASES: Record<string, string> = {
+  'United States': 'USA',
+  'Korea Republic': 'South Korea',
+  "Côte d'Ivoire": 'Ivory Coast',
+  'Turkey': 'Türkiye',
+  'Czech Republic': 'Czechia',
+}
+
+type SavedTeam = { id: string; name: string; logo?: string; savedAt: string }
+
 function fmtKickoff(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 }
@@ -52,6 +63,99 @@ function MatchCountdown({ kickoffAt, t }: { kickoffAt: string; t: Translations }
           <div className="countdown-label">{label}</div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function isImageUrl(val?: string) {
+  return !!val && /^https?:\/\//.test(val)
+}
+
+function MyTeamWidget({ t }: { t: Translations }) {
+  const [savedTeam, setSavedTeam] = useState<SavedTeam | null>(null)
+  const [nextMatch, setNextMatch] = useState<Match | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('peddlers_home_team')
+      if (!raw) { setLoaded(true); return }
+      const team: SavedTeam = JSON.parse(raw)
+      setSavedTeam(team)
+
+      const names = [team.name]
+      const alias = SCHEDULE_ALIASES[team.name]
+      if (alias) names.push(alias)
+      const orFilter = names.map(n => `home_team.eq.${n},away_team.eq.${n}`).join(',')
+
+      supabase.from('matches').select('*')
+        .or(orFilter)
+        .gt('kickoff_at', new Date().toISOString())
+        .neq('stage', 'Demo Match')
+        .order('kickoff_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => { setNextMatch(data); setLoaded(true) })
+    } catch {
+      setLoaded(true)
+    }
+  }, [])
+
+  if (!loaded || !savedTeam) return null
+
+  const teamHref = savedTeam.id.startsWith('name:')
+    ? `/world-cup/team?name=${encodeURIComponent(savedTeam.name)}`
+    : `/world-cup/team?id=${savedTeam.id}`
+
+  // Determine which side of the match is the opponent
+  const scheduleName = SCHEDULE_ALIASES[savedTeam.name] ?? savedTeam.name
+  const isHome = nextMatch && (nextMatch.home_team === scheduleName || nextMatch.home_team === savedTeam.name)
+  const opponentFlag = nextMatch ? (isHome ? nextMatch.away_flag : nextMatch.home_flag) : ''
+  const opponentName = nextMatch ? (isHome ? nextMatch.away_team : nextMatch.home_team) : ''
+
+  return (
+    <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #0d1520, #111)', borderColor: 'rgba(245,197,24,0.2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)' }}>
+          ⭐ {t.myTeam}
+        </div>
+        <Link href={teamHref} style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-dim)', textDecoration: 'none', textTransform: 'uppercase' }}>
+          {t.open} →
+        </Link>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: nextMatch ? 14 : 4 }}>
+        {isImageUrl(savedTeam.logo)
+          ? <img src={savedTeam.logo} alt="" style={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0 }} />
+          : <div style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{savedTeam.logo}</div>
+        }
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 1 }}>{savedTeam.name}</div>
+      </div>
+
+      {nextMatch ? (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
+            {t.upNextMatch}
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 4 }}>
+            {isHome
+              ? <>{savedTeam.logo && <span>{savedTeam.logo} </span>}{savedTeam.name} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {opponentFlag} {opponentName}</>
+              : <>{opponentFlag} {opponentName} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {savedTeam.logo && <span> {savedTeam.logo}</span>} {savedTeam.name}</>
+            }
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>
+            {nextMatch.stage}
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+            {fmtDate(nextMatch.kickoff_at)} · {fmtKickoff(nextMatch.kickoff_at)}
+          </div>
+          <MatchCountdown kickoffAt={nextMatch.kickoff_at} t={t} />
+        </div>
+      ) : (
+        <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+          {t.noUpcomingMatches}
+        </p>
+      )}
     </div>
   )
 }
@@ -501,6 +605,9 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           </Link>
         </div>
       )}
+
+      {/* My Team widget — only renders if a team is saved in localStorage */}
+      <MyTeamWidget t={t} />
 
       {/* Nav grid */}
       <div className="section-label" style={{ marginTop: 24 }}>{t.explore}</div>
