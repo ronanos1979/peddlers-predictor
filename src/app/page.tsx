@@ -167,17 +167,6 @@ function MatchNightHub({
           {shared ? t.copiedClipboard : t.inviteFriends}
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        {[
-          t.scanPlayWin,
-          t.peddlersCrowd,
-          t.askBartender,
-        ].map(item => (
-          <div key={item} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 8px', background: 'rgba(0,0,0,0.18)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, textAlign: 'center', color: 'var(--text-muted)' }}>
-            {item}
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
