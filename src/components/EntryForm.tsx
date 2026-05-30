@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, type Match, type Pub } from '@/lib/supabase'
+import { type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
 import { getDailyCode } from '@/lib/matchSchedule'
+import { savePatron, loadPatron, firstName } from '@/lib/patron'
 import Link from 'next/link'
 
 type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean }
@@ -19,8 +20,20 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
   const [submitting, setSubmitting] = useState(false)
   const [timeLeft, setTimeLeft] = useState('')
   const [shared, setShared] = useState(false)
+  const [returningPatron, setReturningPatron] = useState<string | null>(null)
   const dailyCode = getDailyCode()
 
+  // Load patron cookie on mount
+  useEffect(() => {
+    const patron = loadPatron()
+    if (patron) {
+      setName(patron.name)
+      setPhone(patron.phone)
+      setReturningPatron(firstName(patron.name))
+    }
+  }, [])
+
+  // Countdown timer
   useEffect(() => {
     if (isDemo) { setTimeLeft(''); return }
     const tick = () => {
@@ -35,8 +48,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
     return () => clearInterval(iv)
   }, [match, isDemo])
 
+  // Geolocation
   const checkGeo = useCallback(async () => {
-    if (!pub || isDemo) { setGeoStatus('ok'); setGeoMessage('📍 Demo mode — no location check'); return }
+    if (!pub || isDemo) {
+      setGeoStatus('ok')
+      setGeoMessage('📍 Demo mode — no location check')
+      return
+    }
     try {
       const pos = await getPosition()
       const dist = distanceMetres(pos.coords.latitude, pos.coords.longitude, pub.lat, pub.lng)
@@ -65,10 +83,21 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
       const res = await fetch('/api/entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pub_id: pubId, match_id: match.id, name, phone, pick, email: email || null, code: dailyCode, is_demo: isDemo })
+        body: JSON.stringify({
+          pub_id: pubId, match_id: match.id,
+          name, phone, pick,
+          email: email || null,
+          code: dailyCode,
+          is_demo: isDemo
+        })
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Something went wrong'); setSubmitting(false); return }
+
+      // Save patron cookie on successful entry
+      if (!isDemo) {
+        savePatron({ name, phone, pub_id: pubId })
+      }
       setSubmitted(true)
     } catch {
       setError('Network error — please try again')
@@ -83,11 +112,10 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
   }
 
   async function handleShare() {
-    const text = `I just predicted ${pickLabel(pick)} in ${match.home_flag} ${match.home_team} vs ${match.away_flag} ${match.away_team} at The Peddler's Daughter World Cup Predictor! ⚽🍺 Can you beat me? peddlers-predictor.vercel.app`
+    const text = `I just predicted ${pickLabel(pick)} in ${match.home_flag} ${match.home_team} vs ${match.away_flag} ${match.away_team} at The Peddler's Daughter World Cup Predictor! ⚽🍺\nCan you beat me? peddlers-predictor.vercel.app`
     try {
-      if (navigator.share) {
-        await navigator.share({ text })
-      } else {
+      if (navigator.share) await navigator.share({ text })
+      else {
         await navigator.clipboard.writeText(text)
         setShared(true)
         setTimeout(() => setShared(false), 2500)
@@ -95,9 +123,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
     } catch { /* ignore */ }
   }
 
+  // Success screen
   if (submitted) {
-    const correct = match.result === pick
-    const isScored = match.result !== null
     return (
       <div style={{ textAlign: 'center' }}>
         <div className="pop-in" style={{ fontSize: 64, marginBottom: 8, display: 'block' }}>
@@ -105,10 +132,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         </div>
         <div className="slide-up">
           <h1 style={{ marginBottom: 6 }}>
-            {isDemo ? 'Demo done!' : "You're in!"}
+            {isDemo ? 'Demo done!' : `Nice one${returningPatron ? '' : ', ' + firstName(name)}!`}
           </h1>
           <p className="muted" style={{ marginBottom: 20 }}>
-            {isDemo ? 'That\'s how it works — real picks start June 11!' : 'Your prediction has been locked in.'}
+            {isDemo
+              ? "That's how it works — real picks start June 11!"
+              : 'Your prediction has been locked in. Good luck! 🍀'}
           </p>
         </div>
 
@@ -116,19 +145,19 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8 }}>
             Your prediction
           </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 4 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 6 }}>
             {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}
           </div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 18, color: 'var(--green)', marginBottom: 4 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 20, color: 'var(--green)', marginBottom: 4 }}>
             {pickLabel(pick)}
           </div>
           <div className="muted" style={{ fontSize: 12 }}>{match.stage}</div>
         </div>
 
         {!isDemo && (
-          <div className="slide-up-delay-2" style={{ marginBottom: 14 }}>
-            <div className="card" style={{ background: 'linear-gradient(135deg, #0d1a0d, #111)', border: '1px solid rgba(245,197,24,0.2)', padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+3</div>
+          <div className="slide-up-delay" style={{ marginBottom: 14 }}>
+            <div className="card" style={{ background: 'linear-gradient(135deg, #1a1200, #111)', border: '1px solid rgba(245,197,24,0.25)', padding: '14px 16px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--gold)', letterSpacing: 2 }}>+3</div>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                 Raffle entries if correct
               </div>
@@ -163,15 +192,48 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
     )
   }
 
+  // Entry form
   return (
     <>
+      {/* Returning patron greeting */}
+      {returningPatron && !isDemo && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'rgba(0,200,122,0.08)', border: '1px solid rgba(0,200,122,0.2)',
+          borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: 14
+        }}>
+          <div>
+            <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--green)' }}>
+              Welcome back, {returningPatron}! 👋
+            </span>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+              Your name and number are pre-filled
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const { clearPatron } = require('@/lib/patron')
+              clearPatron()
+              setName('')
+              setPhone('')
+              setReturningPatron(null)
+            }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, padding: '4px 8px' }}
+          >
+            Not you?
+          </button>
+        </div>
+      )}
+
+      {/* Match card */}
       <div className="match-hero">
         {isDemo && (
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
             Demo Match
           </div>
         )}
-        <span className={`badge ${isClosed ? 'badge-closed' : 'badge-live'}`} style={{ marginBottom: 12, display: 'inline-flex' }}>
+        <span className={`badge ${isClosed ? 'badge-closed' : 'badge-live'}`}
+          style={{ marginBottom: 12, display: 'inline-flex' }}>
           <span>{isClosed ? '✕' : '●'}</span>
           {isClosed ? 'Entries Closed' : 'Entries Open'}
         </span>
@@ -198,15 +260,28 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
           <div className="card">
             <div className="field">
               <label>Your name</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="First name + last initial" />
+              <input value={name} onChange={e => setName(e.target.value)}
+                placeholder="First name + last initial" />
             </div>
             <div className="field">
-              <label>Phone number <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(for raffle contact)</span></label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="+1 (555) 000-0000" />
+              <label>
+                Phone number{' '}
+                <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                  (for raffle contact)
+                </span>
+              </label>
+              <input value={phone} onChange={e => setPhone(e.target.value)}
+                type="tel" placeholder="+1 (555) 000-0000" />
             </div>
             <div className="field">
-              <label>Email <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional — match updates)</span></label>
-              <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="you@example.com" />
+              <label>
+                Email{' '}
+                <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                  (optional — match updates)
+                </span>
+              </label>
+              <input value={email} onChange={e => setEmail(e.target.value)}
+                type="email" placeholder="you@example.com" />
             </div>
 
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
@@ -214,8 +289,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
             </div>
             <div className="pick-grid">
               {(['home', 'draw', 'away'] as const).map(p => (
-                <button key={p} className={`pick-btn ${pick === p ? 'selected' : ''}`} onClick={() => setPick(p)}>
-                  <div className="pick-label">{p === 'home' ? 'Home' : p === 'draw' ? 'Draw' : 'Away'}</div>
+                <button key={p}
+                  className={`pick-btn ${pick === p ? 'selected' : ''}`}
+                  onClick={() => setPick(p)}>
+                  <div className="pick-label">
+                    {p === 'home' ? 'Home' : p === 'draw' ? 'Draw' : 'Away'}
+                  </div>
                   <div className="pick-team">
                     {p === 'home' ? `${match.home_flag} ${match.home_team}` :
                      p === 'draw' ? '—' :
