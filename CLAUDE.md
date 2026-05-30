@@ -15,7 +15,8 @@ A World Cup 2026 prediction game web app for **The Peddler's Daughter** Irish pu
 | Hosting | Vercel (auto-deploys from GitHub on push to main) |
 | Styling | Custom CSS — globals.css, NO Tailwind, NO Bootstrap |
 | Fonts | Bebas Neue (display), Barlow Condensed (labels), Barlow (body) — loaded via Google Fonts in globals.css |
-| Football data | API-Football v3 (api-football.com) — proxied via /api/football route |
+| Football data | API-Football v3 (api-football.com) — proxied via /api/football and /api/team routes |
+| Testing | Jest + ts-jest (run with `npm test`) |
 
 ---
 
@@ -58,7 +59,7 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 **matches**
 - `id` (uuid), `home_team`, `away_team`, `home_flag`, `away_flag`
 - `kickoff_at`, `entries_close_at` (timestamptz, UTC)
-- `stage` (Group A–L, Round of 32, Round of 16, Quarter Final, Semi Final, Final, Demo Match)
+- `stage` (Group A–L, Round of 32, Round of 16, Quarter Final, Semi Final, Third Place, Final, Demo Match)
 - `result` (home/draw/away or null), `is_active` (boolean)
 - All 104 World Cup 2026 matches pre-loaded. entries_close_at = kickoff + 105 minutes.
 
@@ -72,8 +73,20 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - Golden Boot predictions: `phone`, `name`, `player_name`, `player_team`, `player_id`, `pub_id`
 - Unique: one per phone number
 
+**team_cache**
+- `team_id` (integer PK), `team_name` (text), `data` (jsonb), `cached_at` (timestamptz)
+- Populated by `/api/team` — caches squad, coach, fixtures for 7 days
+- Index on `team_name` for name-based lookups
+- **Important**: if this table has bad data (wrong team cached), run `truncate table team_cache;` in Supabase SQL editor to force a fresh fetch
+
+**feedback**
+- `id` (uuid PK), `message` (text), `email` (text nullable), `page` (text nullable)
+- `read` (boolean, default false), `created_at`
+- Public insert only; read via admin route (secret key bypasses RLS)
+- Visible in admin panel → Feedback tab with unread badge
+
 ### Row Level Security
-All tables have RLS enabled. Public read + insert on entries and scorer_picks. Public read on pubs and matches. Server-side admin routes use the secret key to bypass RLS.
+All tables have RLS enabled. Public read + insert on entries and scorer_picks. Public read on pubs and matches. Public insert on feedback. Server-side admin routes use the secret key to bypass RLS.
 
 ---
 
@@ -85,29 +98,35 @@ src/
 │   ├── page.tsx                    # Home — location selector, countdown, entry form
 │   ├── layout.tsx                  # Root layout — header with logo + lang switcher, footer
 │   ├── globals.css                 # ALL styles — black theme, custom fonts, animations
+│   ├── feedback/page.tsx           # Bug report / feedback form
 │   ├── leaderboard/page.tsx        # Live leaderboard
 │   ├── schedule/page.tsx           # All 104 matches grouped by date
 │   ├── demo/page.tsx               # USA vs Ireland demo match (always open)
 │   ├── my-picks/page.tsx           # Patron looks up their picks by phone number
 │   ├── rules/page.tsx              # Full rules and instructions
 │   ├── locations/page.tsx          # Pub addresses, maps, social links
-│   ├── admin/page.tsx              # Admin panel — set results, view entrants, stats
+│   ├── admin/page.tsx              # Admin panel — set results, view entrants, stats, feedback
 │   ├── world-cup/
 │   │   ├── standings/page.tsx      # Group standings from API-Football
 │   │   ├── results/page.tsx        # Completed match results from API-Football
 │   │   ├── scorers/page.tsx        # Top scorers / Golden Boot race
+│   │   ├── bracket/page.tsx        # Knockout bracket (R32→R16→QF→SF→Final)
 │   │   ├── team/page.tsx           # Team profile — squad, manager, fixtures
 │   │   └── top-scorer-pick/page.tsx # Patron picks Golden Boot winner
 │   └── api/
 │       ├── entries/route.ts        # POST — validate and save match prediction
 │       ├── matches/route.ts        # GET — active match
-│       ├── admin/route.ts          # POST — set result, ping (auth check)
-│       ├── admin-data/route.ts     # GET — stats, entrants list, CSV export
+│       ├── admin/route.ts          # POST — set result, ping, mark_feedback_read (auth)
+│       ├── admin-data/route.ts     # GET — stats, entrants, feedback, CSV export (auth)
+│       ├── feedback/route.ts       # POST — public feedback/bug report submission
 │       ├── my-picks/route.ts       # GET — patron's picks by phone
-│       └── football/route.ts       # GET — proxy to API-Football with 5min cache
+│       ├── football/route.ts       # GET — proxy to API-Football with 5min cache
+│       └── team/route.ts           # GET — team data with 7-day Supabase cache
 ├── components/
 │   ├── EntryForm.tsx               # Match prediction form — used by home + demo pages
-│   └── LangSwitcher.tsx            # EN/ES toggle buttons in header
+│   ├── LangSwitcher.tsx            # EN/ES toggle buttons in header
+│   ├── ShareCard.tsx               # "Love the app?" share card with Web Share API
+│   └── SiteFooter.tsx              # Footer — Facebook links, nav links, feedback link
 └── lib/
     ├── supabase.ts                 # Browser Supabase client + types (Pub, Match, Entry)
     ├── supabaseAdmin.ts            # Server Supabase client (secret key — server only)
@@ -115,7 +134,8 @@ src/
     ├── matchSchedule.ts            # getDailyCode(), isMatchLive(), selectActiveMatch()
     ├── geo.ts                      # distanceMetres(), getPosition()
     ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron()
-    └── i18n.ts + useLocale.ts      # EN/ES translations + locale cookie hook
+    ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
+    ├── i18n.ts + useLocale.ts      # EN/ES translations + locale cookie hook
 ```
 
 ---
@@ -169,7 +189,37 @@ Fully automatic based on datetime — no admin needed:
 - 5-minute in-memory cache to stay within free tier (100 req/day)
 - League ID: `1` (FIFA World Cup), Season: `2026`
 
-### Endpoints used
+### Team data route: `/api/team`
+- Dedicated endpoint for full team profiles (squad, coach, fixtures, local schedule)
+- **7-day Supabase cache** (`team_cache` table) — reduces API-Football calls dramatically
+- Handles both `?id=X` (numeric) and `?name=USA` (display name) lookups
+- Name resolution uses `src/lib/teamResolution.ts` (see Testing section)
+- Always appends `localSchedule` from Supabase for pre-tournament fixture display
+- **If wrong team is cached**: run `truncate table team_cache;` in Supabase to clear
+
+### Name resolution for `?name=X` lookups
+Resolution strategy (in order):
+1. Check `team_cache` by name (ilike)
+2. Fetch WC 2026 teams list (`GET /teams?league=1&season=2026`) — scoped, no club teams
+3. Fallback: search by aliased name (`usa` → `united states`), filter to senior national teams only
+4. Never return a team with no name overlap (prevents Israel-for-USA bugs)
+
+Known name aliases (Supabase → API-Football):
+- `USA` → `United States`
+- `South Korea` → `Korea Republic`
+- `Ivory Coast` → `Côte d'Ivoire`
+- `Türkiye` → `Turkey`
+- `Czechia` → `Czech Republic`
+
+**Important**: France's API-Football ID is 2. USA is a different ID. Never hardcode team IDs in client code — use the server-side resolution.
+
+### Pre-tournament behavior
+Before June 11, 2026:
+- Squad data (`/players/squads`) returns empty — squads not yet submitted. Shows "Squad not yet announced."
+- Fixtures (`/fixtures?league=1&season=2026`) may return empty. Falls back to local Supabase schedule.
+- WC teams list may be empty. Falls back to name search with national team filter.
+
+### Endpoints used by `/api/football`
 | Query param | API-Football endpoint | Returns |
 |-------------|----------------------|---------|
 | `endpoint=standings` | /standings | Group tables |
@@ -179,19 +229,6 @@ Fully automatic based on datetime — no admin needed:
 | `endpoint=teams&team=ID` | /teams?id=ID | Team info |
 | `endpoint=players/squads&team=ID` | /players/squads?team=ID | Squad |
 | `endpoint=coaches&team=ID` | /coachs?team=ID | Manager info |
-
-### Team page — name-to-ID resolution
-The team page supports both `?id=X` (numeric API-Football ID) and `?name=X` (team name).
-When `?name=X` is used, the `/api/team` route searches API-Football by name to resolve the
-numeric ID, then fetches and caches the full team data in the `team_cache` Supabase table.
-
-Team data is cached for **7 days** in `team_cache`. The first visitor to a team page triggers
-the API-Football fetch (5 parallel calls); all subsequent visitors within 7 days get the
-Supabase-cached response instantly.
-
-Do NOT hardcode API-Football team IDs in the client — use the server-side name search instead.
-The standings page already links to `/world-cup/team?id=${s.team.id}` using IDs from the
-standings API response, which is the preferred approach.
 
 ---
 
@@ -230,12 +267,40 @@ Print and laminate for tables:
 1. Nothing needed before kick-off — match activates automatically
 2. Patron code is automatic (`peddlers` + day number) — tell bar staff
 3. After full time → go to `/admin` → set result → leaderboard updates instantly
-4. Admin panel has 3 tabs: Results, Entrants, Stats
+4. Admin panel has 4 tabs: Results, Entrants, Stats, Feedback
 
 ### Admin panel features
 - **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
 - **Entrants tab**: filterable by date, shows name/phone/email/pick/result, CSV export button
 - **Stats tab**: total entries, unique players, emails collected, bar chart by day split by pub
+- **Feedback tab**: bug reports and feedback from patrons, unread count badge, mark-as-read per item
+
+---
+
+## Testing
+
+```bash
+npm test              # run all tests once
+npm run test:watch    # watch mode during development
+npm run test:coverage # coverage report
+```
+
+### Test files
+| File | What it covers |
+|------|---------------|
+| `src/lib/__tests__/teamResolution.test.ts` | Name aliases, youth team filter, WC list resolution, search resolution, cache validation |
+| `src/app/api/team/__tests__/resolution.test.ts` | Regression tests for USA/France/Israel bugs |
+| `src/app/api/feedback/__tests__/route.test.ts` | Feedback POST validation, Supabase insert |
+| `src/app/api/admin/__tests__/auth.test.ts` | Admin password auth, mark_feedback_read |
+
+### Run tests before pushing
+Always run `npm test` before `git push`. The build (`npm run build`) catches TypeScript errors; tests catch logic regressions.
+
+### Key regression tests
+- `resolveFromSearch('USA', israelResults)` → must return `null` (not Israel's ID)
+- `resolveFromSearch('USA', mixedResults)` → must return senior team ID (not U17)
+- `resolveFromWcList('USA', wcTeams)` → must return United States ID, not France (id 2)
+- `isBadCacheEntry('United States U17')` → must return `true`
 
 ---
 
@@ -257,7 +322,7 @@ All CSS variables:
 ```css
 --green: #00C87A          /* primary action color */
 --gold: #F5C518           /* prize/raffle highlights */
---amber: #FF9500          /* warnings, coming-up badges */
+--amber: #FF9500          /* pub brand color (Peddler's Daughter name), warnings */
 --red: #FF3B3B            /* errors, closed badges */
 --bg: #0a0a0a             /* page background (near black) */
 --surface: #111111        /* card background */
@@ -269,6 +334,8 @@ All CSS variables:
 --font-cond: 'Barlow Condensed'     /* labels, badges, nav */
 --font-body: 'Barlow'               /* body text, inputs */
 ```
+
+Color identity: **green = football/game**, **amber/orange = Peddler's Daughter pub brand**. Do not change green to orange globally — green is the pitch color and is correct for football UI.
 
 Key classes: `.card`, `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-gold`,
 `.badge`, `.badge-live`, `.badge-closed`, `.badge-pending`,
@@ -285,6 +352,7 @@ Animations: `.pop-in`, `.slide-up`, `.slide-up-delay`, `.slide-up-delay-2`
 ```bash
 npm run dev          # run locally at http://localhost:3000
 npm run build        # production build (run before pushing to catch TS errors)
+npm test             # run test suite (run before pushing to catch logic regressions)
 git add . && git commit -m "message" && git push   # deploy to Vercel
 ```
 
@@ -295,3 +363,10 @@ git add . && git commit -m "message" && git push   # deploy to Vercel
 - `.env.local` — never commit, never log
 - `supabase/master.sql` — source of truth for DB schema, update if schema changes
 - `public/logo.avif` — pub logo, don't resize or recompress
+
+## Deploying to a new Supabase project
+
+1. Create project at supabase.com
+2. Run `supabase/master.sql` in the SQL editor (Settings → SQL Editor)
+3. Set all environment variables in `.env.local` and Vercel dashboard
+4. Push to GitHub — Vercel auto-deploys

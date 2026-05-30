@@ -1,7 +1,7 @@
 -- =============================================================
 -- PEDDLER'S PREDICTOR — MASTER SQL
 -- Run this once on a fresh Supabase project (or local Postgres)
--- Last updated: May 2026
+-- Last updated: May 30 2026
 -- =============================================================
 
 -- =============================================================
