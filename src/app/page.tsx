@@ -304,7 +304,10 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     <div className="container">
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '28px 0 24px' }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 38, letterSpacing: 2, color: 'var(--amber)', lineHeight: 1, marginBottom: 4 }}>
+          The Peddler&apos;s Daughter
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
           {t.tournamentLine}
         </div>
         <h1 style={{ fontSize: 42, marginBottom: 8 }}>
