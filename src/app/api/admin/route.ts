@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { checkRateLimit, getIp } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getIp(req)
+
+    // Hard block IPs that have hit 10 failed attempts in 15 minutes
+    if (!checkRateLimit(`admin:${ip}`, 10, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many attempts — try again later' }, { status: 429 })
+    }
+
     const { password, action, payload } = await req.json()
 
     if (password !== process.env.ADMIN_PASSWORD) {

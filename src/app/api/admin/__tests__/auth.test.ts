@@ -13,6 +13,10 @@ jest.mock('@/lib/supabaseAdmin', () => ({
     }),
   },
 }))
+jest.mock('@/lib/rateLimit', () => ({
+  checkRateLimit: () => true,
+  getIp: () => 'test-ip',
+}))
 
 const CORRECT_PASSWORD = 'test-admin-password'
 const originalEnv = process.env

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { checkRateLimit, getIp } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
   try {
+    if (!checkRateLimit(`feedback:${getIp(req)}`, 5, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many submissions — try again later' }, { status: 429 })
+    }
+
     const { message, email, page } = await req.json()
 
     if (!message || typeof message !== 'string' || message.trim().length < 3) {

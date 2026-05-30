@@ -1,13 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getDailyCode } from '@/lib/matchSchedule'
+import { checkRateLimit, getIp } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
   try {
-    const { pub_id, match_id, name, phone, pick, code, email, is_demo } = await req.json()
+    // 5 submissions per IP per hour
+    if (!checkRateLimit(`entries:${getIp(req)}`, 5, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many submissions — try again later' }, { status: 429 })
+    }
+
+    const { pub_id, match_id, name, phone, pick, code, email, honeypot } = await req.json()
+
+    // Silently drop honeypot-filled submissions (bots fill hidden fields)
+    if (honeypot) {
+      return NextResponse.json({ success: true })
+    }
 
     if (!pub_id || !match_id || !name || !phone || !pick) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
+    }
+
+    const trimmedName = String(name).trim()
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      return NextResponse.json({ error: 'Name must be between 2 and 100 characters' }, { status: 400 })
     }
 
     const normalizedPhone = String(phone).replace(/\D/g, '')
@@ -18,19 +34,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Enter a valid 10-digit US phone number' }, { status: 400 })
     }
 
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
+    }
+
     if (!['home', 'draw', 'away'].includes(pick)) {
       return NextResponse.json({ error: 'Invalid pick' }, { status: 400 })
     }
 
-    // Verify pub exists
-    const { data: pub } = await supabaseAdmin
-      .from('pubs').select('id').eq('id', pub_id).single()
-    if (!pub) {
+    if (!['haverhill', 'nashua'].includes(pub_id)) {
       return NextResponse.json({ error: 'Unknown pub' }, { status: 400 })
     }
 
-    // Skip code check for demo entries
-    if (!is_demo) {
+    // Get the match and determine if it's a demo — don't trust is_demo from client
+    const { data: match } = await supabaseAdmin
+      .from('matches').select('*').eq('id', match_id).single()
+    if (!match) {
+      return NextResponse.json({ error: 'Match not found' }, { status: 400 })
+    }
+
+    const isDemo = match.stage === 'Demo Match'
+
+    if (!isDemo) {
       const todayCode = getDailyCode(new Date())
       const yesterday = new Date()
       yesterday.setDate(yesterday.getDate() - 1)
@@ -42,22 +67,11 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         )
       }
-    }
 
-    // Get the match
-    const { data: match } = await supabaseAdmin
-      .from('matches').select('*').eq('id', match_id).single()
-    if (!match) {
-      return NextResponse.json({ error: 'Match not found' }, { status: 400 })
-    }
+      if (new Date(match.entries_close_at) < new Date()) {
+        return NextResponse.json({ error: 'Entries are closed for this match' }, { status: 400 })
+      }
 
-    // For demo matches always allow; for real matches check close time
-    if (!is_demo && new Date(match.entries_close_at) < new Date()) {
-      return NextResponse.json({ error: 'Entries are closed for this match' }, { status: 400 })
-    }
-
-    // Prevent duplicates (allow re-entry on demo)
-    if (!is_demo) {
       const { data: existing } = await supabaseAdmin
         .from('entries').select('id').eq('phone', digits).eq('match_id', match_id).single()
       if (existing) {
@@ -65,16 +79,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Save entry
     const { error: insertError } = await supabaseAdmin
       .from('entries')
       .insert({
         pub_id,
         match_id,
-        name,
+        name: trimmedName,
         phone: digits,
         pick,
-        email: email || null,
+        email: email ? String(email).trim().slice(0, 200) : null,
         is_correct: null,
         raffle_entries: 0
       })

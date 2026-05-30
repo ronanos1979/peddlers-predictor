@@ -40,6 +40,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
   const [timeLeft, setTimeLeft] = useState('')
   const [shared, setShared] = useState(false)
   const [returningPatron, setReturningPatron] = useState<string | null>(null)
+  const [honeypot, setHoneypot] = useState('')
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
   const dailyCode = getDailyCode()
   const pubInfo = PUB_DATA[pubId]
@@ -110,7 +111,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
           name, phone: normalizePhone(phone), pick,
           email: email || null,
           code: dailyCode,
-          is_demo: isDemo
+          is_demo: isDemo,
+          honeypot,
         })
       })
       const data = await res.json()
@@ -324,6 +326,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
           </div>
 
           <div className="card">
+            {/* Honeypot — hidden from humans, bots fill it */}
+            <input
+              type="text" name="website" value={honeypot} onChange={e => setHoneypot(e.target.value)}
+              tabIndex={-1} aria-hidden="true" autoComplete="off"
+              style={{ position: 'absolute', left: '-9999px', top: '-9999px', opacity: 0, pointerEvents: 'none' }}
+            />
             <div className="field">
               <label>{t.yourName}</label>
               <input value={name} onChange={e => setName(e.target.value)}

@@ -5,6 +5,10 @@ jest.mock('@/lib/supabaseAdmin', () => ({
     from: () => ({ insert: mockInsert }),
   },
 }))
+jest.mock('@/lib/rateLimit', () => ({
+  checkRateLimit: () => true,
+  getIp: () => 'test-ip',
+}))
 
 import { NextRequest } from 'next/server'
 import { POST } from '../route'
