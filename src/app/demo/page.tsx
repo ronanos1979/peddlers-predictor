@@ -1,37 +1,31 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase, type Match, type Pub } from '@/lib/supabase'
+import { type Match } from '@/lib/supabase'
 import EntryForm from '@/components/EntryForm'
 import Link from 'next/link'
 
 export default function DemoPage({ searchParams }: { searchParams: { pub?: string } }) {
   const pubId = searchParams.pub || 'haverhill'
-  const [pub, setPub] = useState<Pub | null>(null)
   const [demoMatch, setDemoMatch] = useState<Match | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     async function load() {
-      const { data: pubData } = await supabase.from('pubs').select('*').eq('id', pubId).single()
-      if (pubData) setPub(pubData)
-
-      const { data: match } = await supabase
-        .from('matches')
-        .select('*')
-        .eq('stage', 'Demo Match')
-        .single()
-
-      if (match) {
-        // Make the demo match always open by overriding close time in memory
-        const alwaysOpen = {
-          ...match,
-          kickoff_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-          entries_close_at: new Date(Date.now() + 100 * 60 * 1000).toISOString(),
+      setError('')
+      try {
+        const res = await fetch('/api/demo-match', { cache: 'no-store' })
+        const match = await res.json()
+        if (!res.ok) {
+          setError(match.error || 'Could not load demo.')
+          return
         }
-        setDemoMatch(alwaysOpen)
+        setDemoMatch(match)
+      } catch {
+        setError('Could not load demo. Please try again.')
       }
     }
     load()
-  }, [pubId])
+  }, [])
 
   return (
     <div className="container">
@@ -45,7 +39,11 @@ export default function DemoPage({ searchParams }: { searchParams: { pub?: strin
       </div>
 
       {demoMatch ? (
-        <EntryForm pubId={pubId} match={demoMatch} pub={pub} isDemo={true} />
+        <EntryForm pubId={pubId} match={demoMatch} pub={null} isDemo={true} />
+      ) : error ? (
+        <div className="card" style={{ textAlign: 'center' }}>
+          <p className="muted">{error}</p>
+        </div>
       ) : (
         <div className="card" style={{ textAlign: 'center' }}>
           <p className="muted">Loading demo…</p>
