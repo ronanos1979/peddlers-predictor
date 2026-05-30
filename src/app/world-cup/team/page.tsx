@@ -68,6 +68,7 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
   const [coach, setCoach] = useState<Coach | null>(null)
   const [fixtures, setFixtures] = useState<Fixture[]>([])
   const [localMatches, setLocalMatches] = useState<LocalMatch[]>([])
+  const [localScheduleTeamName, setLocalScheduleTeamName] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'squad' | 'fixtures'>('squad')
   const [savedTeam, setSavedTeam] = useState<SavedTeam | null>(null)
@@ -179,6 +180,8 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
         setSquad(players)
         setCoach(nextCoach)
         setFixtures(allFixtures)
+        setLocalMatches(data.localSchedule || [])
+        setLocalScheduleTeamName(data.localTeamName || '')
         if (nextTeamInfo) {
           const nextSavedTeam = {
             id: String(nextTeamInfo.team.id),
@@ -229,6 +232,8 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
           setSquad(players)
           setCoach(data.coach || null)
           setFixtures(data.fixtures || [])
+          setLocalMatches(data.localSchedule || [])
+          setLocalScheduleTeamName(data.localTeamName || localTeamName)
           const nextSaved = {
             id: String(data.teamInfo.team.id),
             name: data.teamInfo.team.name,
@@ -490,13 +495,13 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
           {/* Fixtures / path to final */}
           {tab === 'fixtures' && (
             <>
-              {upcomingFixtures.length === 0 && <p className="muted" style={{ textAlign: 'center', padding: 24 }}>{t.noUpcomingMatches}</p>}
+              {/* API-Football fixtures (available once tournament starts) */}
               {upcomingFixtures.map(f => {
                 const isHome = f.teams.home.id === numericTeamId
                 const opponent = isHome ? f.teams.away : f.teams.home
                 const myGoals = isHome ? f.goals.home : f.goals.away
                 const theirGoals = isHome ? f.goals.away : f.goals.home
-                const done = f.fixture.status.short === 'FT'
+                const done = f.fixture.status.short === 'FT' || f.fixture.status.short === 'AET' || f.fixture.status.short === 'PEN'
                 const won = done && myGoals !== null && theirGoals !== null && myGoals > theirGoals
                 const drew = done && myGoals !== null && theirGoals !== null && myGoals === theirGoals
                 const lost = done && myGoals !== null && theirGoals !== null && myGoals < theirGoals
@@ -534,6 +539,42 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
                   </div>
                 )
               })}
+
+              {/* Local schedule fallback — shown when API-Football fixtures aren't available yet */}
+              {upcomingFixtures.length === 0 && upcomingLocalMatches.map(match => {
+                const isHome = match.home_team === localScheduleTeamName
+                const opponent = isHome ? match.away_team : match.home_team
+                const opponentFlag = isHome ? match.away_flag : match.home_flag
+                const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
+                const resultLabel = match.result ? resultMap[match.result] : null
+                return (
+                  <div key={match.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 14px', background: 'var(--surface)',
+                    border: `1px solid ${resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'}`,
+                    borderRadius: 8, marginBottom: 8
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 3 }}>
+                        {match.stage}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14 }}>
+                        {isHome ? 'vs' : '@'} {opponentFlag} {opponent}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
+                    </div>
+                    {resultLabel && (
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
+                        {resultLabel}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {upcomingFixtures.length === 0 && upcomingLocalMatches.length === 0 && (
+                <p className="muted" style={{ textAlign: 'center', padding: 24 }}>{t.noUpcomingMatches}</p>
+              )}
             </>
           )}
         </>

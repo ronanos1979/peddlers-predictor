@@ -7,13 +7,22 @@ const LEAGUE = '1'
 const SEASON = '2026'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-// Map from common/local names (used in Supabase schedule data) → API-Football official names
+// Map from common/local names (Supabase schedule) → API-Football official names
 const NAME_ALIASES: Record<string, string> = {
-  'usa':          'united states',
-  'south korea':  'korea republic',
-  'ivory coast':  "côte d'ivoire",
-  'türkiye':      'turkey',
-  'czechia':      'czech republic',
+  'usa':         'united states',
+  'south korea': 'korea republic',
+  'ivory coast': "côte d'ivoire",
+  'türkiye':     'turkey',
+  'czechia':     'czech republic',
+}
+
+// Reverse: API-Football official name → local Supabase schedule name
+const REVERSE_ALIASES: Record<string, string> = {
+  'united states': 'USA',
+  'korea republic': 'South Korea',
+  "côte d'ivoire": 'Ivory Coast',
+  'turkey':        'Türkiye',
+  'czech republic': 'Czechia',
 }
 
 type SquadPlayer = {
@@ -47,7 +56,6 @@ async function buildTeamData(teamId: number) {
   const teamInfo = teamData.response?.[0] || null
   const squad: SquadPlayer[] = [...(squadData.response?.[0]?.players || [])]
 
-  // Enrich squad with club info from player season statistics
   const profiles = new Map<number, PlayerProfile>()
   ;((playerData.response || []) as PlayerProfile[]).forEach(p => profiles.set(p.player.id, p))
   squad.forEach(player => {
@@ -72,8 +80,18 @@ async function storeCache(teamId: number, teamName: string, data: ReturnType<typ
   )
 }
 
-// Resolve a team name to its numeric API-Football ID using the WC 2026 teams list.
-// This is more reliable than global search (/teams?search=X) which returns club teams.
+// Fetch local Supabase schedule for the team — always fresh, not cached, so results stay current.
+async function fetchLocalSchedule(localTeamName: string) {
+  const { data } = await supabaseAdmin
+    .from('matches')
+    .select('id,home_team,away_team,home_flag,away_flag,kickoff_at,stage,result')
+    .neq('stage', 'Demo Match')
+    .or(`home_team.eq.${localTeamName},away_team.eq.${localTeamName}`)
+    .order('kickoff_at', { ascending: true })
+  return data || []
+}
+
+// Resolve name → API-Football team ID using the WC 2026 teams list (not global search).
 async function resolveNameToId(name: string): Promise<number | null> {
   const norm = name.toLowerCase().trim()
   const aliased = NAME_ALIASES[norm] || norm
@@ -81,22 +99,24 @@ async function resolveNameToId(name: string): Promise<number | null> {
   const wcTeamsData = await apiFetch('teams', { league: LEAGUE, season: SEASON })
   const wcTeams: Array<{ team: { id: number; name: string } }> = wcTeamsData.response || []
 
-  // 1. Exact match against alias-resolved name
   const exactAlias = wcTeams.find(t => t.team.name.toLowerCase() === aliased)
   if (exactAlias) return exactAlias.team.id
 
-  // 2. Exact match against original name
   const exactOrig = wcTeams.find(t => t.team.name.toLowerCase() === norm)
   if (exactOrig) return exactOrig.team.id
 
-  // 3. Substring: query contains API name or API name contains query
   const partial = wcTeams.find(t => {
     const api = t.team.name.toLowerCase()
     return api.includes(norm) || norm.includes(api)
   })
-  if (partial) return partial.team.id
+  return partial?.team.id ?? null
+}
 
-  return null
+// Determine the local Supabase schedule name from the API team name.
+function toLocalName(searchName: string | null, teamInfo: unknown): string {
+  if (searchName) return searchName
+  const apiName = (teamInfo as { team?: { name?: string } } | null)?.team?.name || ''
+  return REVERSE_ALIASES[apiName.toLowerCase()] || apiName
 }
 
 export async function GET(req: NextRequest) {
@@ -123,13 +143,17 @@ export async function GET(req: NextRequest) {
         .gt('cached_at', cutoff)
         .maybeSingle()
 
-      if (cached?.data) return NextResponse.json(cached.data)
+      const apiData = cached?.data ?? await (async () => {
+        const fresh = await buildTeamData(teamId)
+        if (fresh.teamInfo) {
+          await storeCache(teamId, (fresh.teamInfo as { team: { name: string } }).team.name, fresh)
+        }
+        return fresh
+      })()
 
-      const data = await buildTeamData(teamId)
-      if (data.teamInfo) {
-        await storeCache(teamId, (data.teamInfo as { team: { name: string } }).team.name, data)
-      }
-      return NextResponse.json(data)
+      const localTeamName = toLocalName(null, (apiData as { teamInfo: unknown }).teamInfo)
+      const localSchedule = await fetchLocalSchedule(localTeamName)
+      return NextResponse.json({ ...apiData, localSchedule, localTeamName })
     }
 
     // Name-based lookup — check cache by name first
@@ -140,15 +164,19 @@ export async function GET(req: NextRequest) {
       .gt('cached_at', cutoff)
       .maybeSingle()
 
-    if (cachedByName?.data) return NextResponse.json(cachedByName.data)
-
-    // Resolve name → numeric ID via WC 2026 teams list (not global search)
-    const resolvedId = await resolveNameToId(name!)
-    if (!resolvedId) {
-      return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [] })
+    if (cachedByName?.data) {
+      const localSchedule = await fetchLocalSchedule(name!)
+      return NextResponse.json({ ...cachedByName.data, localSchedule, localTeamName: name! })
     }
 
-    // Check cache again by resolved numeric ID (handles alias mismatches)
+    // Resolve name → ID via WC 2026 teams list
+    const resolvedId = await resolveNameToId(name!)
+    if (!resolvedId) {
+      const localSchedule = await fetchLocalSchedule(name!)
+      return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule, localTeamName: name! })
+    }
+
+    // Check cache by resolved numeric ID
     const { data: cachedById } = await supabaseAdmin
       .from('team_cache')
       .select('data')
@@ -156,14 +184,17 @@ export async function GET(req: NextRequest) {
       .gt('cached_at', cutoff)
       .maybeSingle()
 
-    if (cachedById?.data) return NextResponse.json(cachedById.data)
+    if (cachedById?.data) {
+      const localSchedule = await fetchLocalSchedule(name!)
+      return NextResponse.json({ ...cachedById.data, localSchedule, localTeamName: name! })
+    }
 
-    // Build full team data and cache it
     const data = await buildTeamData(resolvedId)
     if (data.teamInfo) {
       await storeCache(resolvedId, (data.teamInfo as { team: { name: string } }).team.name, data)
     }
-    return NextResponse.json(data)
+    const localSchedule = await fetchLocalSchedule(name!)
+    return NextResponse.json({ ...data, localSchedule, localTeamName: name! })
   } catch (err) {
     console.error('Team data error:', err)
     return NextResponse.json({ error: 'Failed to fetch team data' }, { status: 500 })
