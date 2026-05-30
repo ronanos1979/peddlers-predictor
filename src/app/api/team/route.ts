@@ -7,12 +7,23 @@ import {
   toLocalScheduleName,
   isBadCacheEntry,
 } from '@/lib/teamResolution'
+import {
+  FdRateLimitError,
+  resolveFdTeamId,
+  buildFdTeamData,
+  type FdTeamData,
+} from '@/lib/footballData'
 
-const API_KEY = process.env.API_FOOTBALL_KEY
-const BASE    = 'https://v3.football.api-sports.io'
+const AF_KEY = process.env.API_FOOTBALL_KEY
+const FD_KEY = process.env.FOOTBALL_DATA_API_KEY
+const AF_BASE = 'https://v3.football.api-sports.io'
 const LEAGUE  = '1'
 const SEASON  = '2026'
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+// Player/team name data changes rarely — 60-day cache is safe and reduces API calls.
+const CACHE_TTL_MS = 60 * 24 * 60 * 60 * 1000
+
+// ── API-Football (fallback) ───────────────────────────────────────────────────
 
 type SquadPlayer = {
   id: number; name: string; age: number; number: number
@@ -23,34 +34,33 @@ type PlayerProfile = {
   statistics?: Array<{ team?: { name?: string; logo?: string } }>
 }
 
-class ApiRateLimitError extends Error {
+class AfRateLimitError extends Error {
   constructor() {
-    super('API daily limit reached')
-    this.name = 'ApiRateLimitError'
-    // Required for instanceof to work when compiled to ES5
-    Object.setPrototypeOf(this, ApiRateLimitError.prototype)
+    super('API-Football daily limit reached')
+    this.name = 'AfRateLimitError'
+    Object.setPrototypeOf(this, AfRateLimitError.prototype)
   }
 }
 
-async function apiFetch(path: string, params: Record<string, string> = {}) {
-  const url = new URL(`${BASE}/${path}`)
+async function afFetch(path: string, params: Record<string, string> = {}) {
+  const url = new URL(`${AF_BASE}/${path}`)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
   const res = await fetch(url.toString(), {
-    headers: { 'x-apisports-key': API_KEY! },
+    headers: { 'x-apisports-key': AF_KEY! },
     cache: 'no-store',
   })
   const data = await res.json()
-  if (data?.errors?.requests) throw new ApiRateLimitError()
+  if (data?.errors?.requests) throw new AfRateLimitError()
   return data
 }
 
-async function buildTeamData(teamId: number) {
+async function buildAfTeamData(teamId: number) {
   const [teamData, squadData, playerData, coachData, fixturesData] = await Promise.all([
-    apiFetch('teams',          { id: String(teamId) }),
-    apiFetch('players/squads', { team: String(teamId) }),
-    apiFetch('players',        { team: String(teamId), league: LEAGUE, season: SEASON }),
-    apiFetch('coachs',         { team: String(teamId) }),
-    apiFetch('fixtures',       { team: String(teamId), league: LEAGUE, season: SEASON }),
+    afFetch('teams',          { id: String(teamId) }),
+    afFetch('players/squads', { team: String(teamId) }),
+    afFetch('players',        { team: String(teamId), league: LEAGUE, season: SEASON }),
+    afFetch('coachs',         { team: String(teamId) }),
+    afFetch('fixtures',       { team: String(teamId), league: LEAGUE, season: SEASON }),
   ])
 
   const teamInfo = teamData.response?.[0] || null
@@ -60,7 +70,6 @@ async function buildTeamData(teamId: number) {
   ;((playerData.response || []) as PlayerProfile[]).forEach(p => profiles.set(p.player.id, p))
 
   const nationalName = (teamInfo as { team?: { name?: string } } | null)?.team?.name
-  // Spread each player into a new object so we never mutate the source array.
   const squad: SquadPlayer[] = rawPlayers.map(player => {
     const club = profiles.get(player.id)?.statistics?.find(s => s.team?.name)?.team
     if (club?.name && club.name !== nationalName) {
@@ -69,25 +78,49 @@ async function buildTeamData(teamId: number) {
     return { ...player }
   })
 
-  const coach    = coachData.response?.[0] || null
+  const coach = coachData.response?.[0] || null
   const fixtures = [...((fixturesData.response || []) as Array<{ fixture: { date: string } }>)].sort(
     (a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime()
   )
   return { teamInfo, squad, coach, fixtures }
 }
 
-async function storeCache(
-  teamId: number,
-  teamName: string,
-  data: Awaited<ReturnType<typeof buildTeamData>>
-) {
+async function afResolveNameToId(name: string): Promise<number | null> {
+  const norm    = name.toLowerCase().trim()
+  const aliased = NAME_ALIASES[norm] || norm
+
+  const wcTeamsData = await afFetch('teams', { league: LEAGUE, season: SEASON })
+  const fromList = resolveFromWcList(name, wcTeamsData.response || [])
+  if (fromList) return fromList
+
+  if (aliased !== norm) {
+    const aliasData = await afFetch('teams', { search: aliased })
+    const fromAlias = resolveFromSearch(name, aliasData.response || [])
+    if (fromAlias) return fromAlias
+  }
+
+  const origData = await afFetch('teams', { search: norm })
+  return resolveFromSearch(name, origData.response || [])
+}
+
+// ── Supabase cache ────────────────────────────────────────────────────────────
+
+type CachedTeamData = FdTeamData | Awaited<ReturnType<typeof buildAfTeamData>>
+
+async function storeCache(teamId: number, teamName: string, data: CachedTeamData) {
   await supabaseAdmin.from('team_cache').upsert(
     { team_id: teamId, team_name: teamName, data, cached_at: new Date().toISOString() },
     { onConflict: 'team_id' }
   )
 }
 
-// Fetch local Supabase schedule — always fresh so results stay current.
+function validCacheData(cached: { data: unknown; team_name?: string } | null): unknown | null {
+  if (!cached?.data) return null
+  const name = (cached as { team_name?: string }).team_name || ''
+  if (isBadCacheEntry(name)) return null
+  return cached.data
+}
+
 async function fetchLocalSchedule(localTeamName: string) {
   if (!localTeamName) return []
   const { data } = await supabaseAdmin
@@ -99,42 +132,14 @@ async function fetchLocalSchedule(localTeamName: string) {
   return data || []
 }
 
-// Resolve a display name to a numeric API-Football team ID.
-async function resolveNameToId(name: string): Promise<number | null> {
-  const norm    = name.toLowerCase().trim()
-  const aliased = NAME_ALIASES[norm] || norm
-
-  // 1. WC 2026 teams list (most reliable when available — scoped to tournament)
-  const wcTeamsData = await apiFetch('teams', { league: LEAGUE, season: SEASON })
-  const fromList = resolveFromWcList(name, wcTeamsData.response || [])
-  if (fromList) return fromList
-
-  // 2. Search with aliased name (e.g. "united states" for "USA").
-  //    This catches cases where the API official name matches the alias.
-  if (aliased !== norm) {
-    const aliasData = await apiFetch('teams', { search: aliased })
-    const fromAlias = resolveFromSearch(name, aliasData.response || [])
-    if (fromAlias) return fromAlias
-  }
-
-  // 3. Search with the original display name (e.g. "USA").
-  //    Catches cases where API-Football stores the abbreviation rather than the full name.
-  //    This is the fix for USA: API-Football may register the team as "USA" not "United States".
-  const origData = await apiFetch('teams', { search: norm })
-  return resolveFromSearch(name, origData.response || [])
-}
-
-// Read a cache row and return null if the entry looks wrong (youth team cached by mistake).
-function validCacheData(cached: { data: unknown; team_name?: string } | null): unknown | null {
-  if (!cached?.data) return null
-  const name = (cached as { team_name?: string }).team_name || ''
-  if (isBadCacheEntry(name)) return null
-  return cached.data
-}
+// ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  if (!API_KEY) {
-    return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
+  const hasAf = !!AF_KEY
+  const hasFd = !!FD_KEY
+
+  if (!hasAf && !hasFd) {
+    return NextResponse.json({ error: 'No football API key configured' }, { status: 500 })
   }
 
   const id   = req.nextUrl.searchParams.get('id')
@@ -151,6 +156,7 @@ export async function GET(req: NextRequest) {
     if (id) {
       const teamId = parseInt(id)
 
+      // 1. Supabase cache hit
       const { data: cached } = await supabaseAdmin
         .from('team_cache')
         .select('data, team_name')
@@ -158,24 +164,48 @@ export async function GET(req: NextRequest) {
         .gt('cached_at', cutoff)
         .maybeSingle()
 
-      let apiData
-      const validData = validCacheData(cached)
-      if (validData) {
-        apiData = validData
-      } else {
-        apiData = await buildTeamData(teamId)
-        const ti = (apiData as { teamInfo: { team: { name: string } } | null }).teamInfo
-        if (ti) await storeCache(teamId, ti.team.name, apiData as Awaited<ReturnType<typeof buildTeamData>>)
+      if (validCacheData(cached)) {
+        const apiData = cached!.data
+        const localTeamName = toLocalScheduleName(null, (apiData as { teamInfo?: { team?: { name?: string } } }).teamInfo?.team?.name || '')
+        const localSchedule = await fetchLocalSchedule(localTeamName)
+        return NextResponse.json({ ...apiData, localSchedule, localTeamName })
       }
 
-      const localTeamName = toLocalScheduleName(null, (apiData as { teamInfo?: { team?: { name?: string } } }).teamInfo?.team?.name || '')
-      const localSchedule = await fetchLocalSchedule(localTeamName)
-      return NextResponse.json({ ...apiData, localSchedule, localTeamName })
+      // 2. Try FD first (primary)
+      if (hasFd) {
+        try {
+          const fdData = await buildFdTeamData(teamId)
+          if (fdData?.teamInfo) {
+            await storeCache(teamId, fdData.teamInfo.team.name, fdData)
+            const localTeamName = toLocalScheduleName(null, fdData.teamInfo.team.name)
+            const localSchedule = await fetchLocalSchedule(localTeamName)
+            return NextResponse.json({ ...fdData, localSchedule, localTeamName })
+          }
+        } catch (e) {
+          if (e instanceof FdRateLimitError) {
+            console.warn('FD rate limited for id lookup, trying AF')
+          } else {
+            console.error('FD team fetch error (id):', e)
+          }
+        }
+      }
+
+      // 3. AF fallback
+      if (hasAf) {
+        const afData = await buildAfTeamData(teamId)
+        const ti = (afData as { teamInfo: { team: { name: string } } | null }).teamInfo
+        if (ti) await storeCache(teamId, ti.team.name, afData)
+        const localTeamName = toLocalScheduleName(null, ti?.team?.name || '')
+        const localSchedule = await fetchLocalSchedule(localTeamName)
+        return NextResponse.json({ ...afData, localSchedule, localTeamName })
+      }
+
+      return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule: [], localTeamName: '' })
     }
 
     // ── Name-based ────────────────────────────────────────────────────────────
 
-    // 1. Cache hit by name (validate it's not a stale bad entry)
+    // 1. Supabase cache hit by name
     const { data: cachedByName } = await supabaseAdmin
       .from('team_cache')
       .select('data, team_name')
@@ -188,39 +218,76 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ...cachedByName!.data, localSchedule, localTeamName: name! })
     }
 
-    // 2. Resolve name → numeric ID
-    const resolvedId = await resolveNameToId(name!)
-    if (!resolvedId) {
-      const localSchedule = await fetchLocalSchedule(name!)
-      return NextResponse.json({
-        teamInfo: null, squad: [], coach: null, fixtures: [],
-        localSchedule, localTeamName: name!,
-      })
+    // 2. Try FD primary: resolve name → FD ID → team profile
+    if (hasFd) {
+      try {
+        const fdId = await resolveFdTeamId(name!)
+        if (fdId) {
+          // Check cache by resolved FD ID
+          const { data: cachedByFdId } = await supabaseAdmin
+            .from('team_cache')
+            .select('data, team_name')
+            .eq('team_id', fdId)
+            .gt('cached_at', cutoff)
+            .maybeSingle()
+
+          if (validCacheData(cachedByFdId)) {
+            const localSchedule = await fetchLocalSchedule(name!)
+            return NextResponse.json({ ...cachedByFdId!.data, localSchedule, localTeamName: name! })
+          }
+
+          const fdData = await buildFdTeamData(fdId)
+          if (fdData?.teamInfo) {
+            await storeCache(fdId, fdData.teamInfo.team.name, fdData)
+            const localSchedule = await fetchLocalSchedule(name!)
+            return NextResponse.json({ ...fdData, localSchedule, localTeamName: name! })
+          }
+        }
+      } catch (e) {
+        if (e instanceof FdRateLimitError) {
+          console.warn('FD rate limited for name lookup, trying AF')
+        } else {
+          console.error('FD team fetch error (name):', e)
+        }
+      }
     }
 
-    // 3. Cache hit by resolved ID (handles alias mismatches, validates entry)
-    const { data: cachedById } = await supabaseAdmin
-      .from('team_cache')
-      .select('data, team_name')
-      .eq('team_id', resolvedId)
-      .gt('cached_at', cutoff)
-      .maybeSingle()
+    // 3. AF fallback: resolve name → AF ID → team profile
+    if (hasAf) {
+      const afId = await afResolveNameToId(name!)
+      if (!afId) {
+        const localSchedule = await fetchLocalSchedule(name!)
+        return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule, localTeamName: name! })
+      }
 
-    if (validCacheData(cachedById)) {
+      // Cache check by AF ID
+      const { data: cachedByAfId } = await supabaseAdmin
+        .from('team_cache')
+        .select('data, team_name')
+        .eq('team_id', afId)
+        .gt('cached_at', cutoff)
+        .maybeSingle()
+
+      if (validCacheData(cachedByAfId)) {
+        const localSchedule = await fetchLocalSchedule(name!)
+        return NextResponse.json({ ...cachedByAfId!.data, localSchedule, localTeamName: name! })
+      }
+
+      const afData = await buildAfTeamData(afId)
+      const ti = (afData as { teamInfo: { team: { name: string } } | null }).teamInfo
+      if (ti) await storeCache(afId, ti.team.name, afData)
+
       const localSchedule = await fetchLocalSchedule(name!)
-      return NextResponse.json({ ...cachedById!.data, localSchedule, localTeamName: name! })
+      return NextResponse.json({ ...afData, localSchedule, localTeamName: name! })
     }
 
-    // 4. Fresh fetch and cache
-    const data = await buildTeamData(resolvedId)
-    const ti   = (data as { teamInfo: { team: { name: string } } | null }).teamInfo
-    if (ti) await storeCache(resolvedId, ti.team.name, data)
-
+    // Both APIs exhausted — return local schedule only
     const localSchedule = await fetchLocalSchedule(name!)
-    return NextResponse.json({ ...data, localSchedule, localTeamName: name! })
+    return NextResponse.json({ teamInfo: null, squad: [], coach: null, fixtures: [], localSchedule, localTeamName: name! })
 
   } catch (err) {
-    if (err instanceof ApiRateLimitError) {
+    const isRateLimit = err instanceof AfRateLimitError || err instanceof FdRateLimitError
+    if (isRateLimit) {
       const localSchedule = await fetchLocalSchedule(name || '').catch(() => [])
       return NextResponse.json({
         error: 'rate_limited',

@@ -1,89 +1,171 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  FdRateLimitError,
+  getFdStandings,
+  getFdFixtures,
+  getFdScorers,
+  getFdTeamsList,
+} from '@/lib/footballData'
 
-const API_KEY = process.env.API_FOOTBALL_KEY
-const BASE = 'https://v3.football.api-sports.io'
-const LEAGUE = '1'    // FIFA World Cup
-const SEASON = '2026'
+const AF_KEY  = process.env.API_FOOTBALL_KEY
+const FD_KEY  = process.env.FOOTBALL_DATA_API_KEY
+const AF_BASE = 'https://v3.football.api-sports.io'
+const LEAGUE  = '1'
+const SEASON  = '2026'
 
-// Simple in-memory cache
+// 5-minute in-memory cache (shared across both sources — caches the adapted response)
 const cache = new Map<string, { data: unknown; expires: number }>()
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000
 
-async function fetchFootball(endpoint: string, params: Record<string, string> = {}) {
-  const cacheKey = endpoint + JSON.stringify(params)
-  const cached = cache.get(cacheKey)
-  if (cached && Date.now() < cached.expires) return cached.data
+function getCached(key: string) {
+  const hit = cache.get(key)
+  return hit && Date.now() < hit.expires ? hit.data : null
+}
+function setCached(key: string, data: unknown) {
+  cache.set(key, { data, expires: Date.now() + CACHE_TTL })
+}
 
-  const url = new URL(`${BASE}/${endpoint}`)
+// ── API-Football (fallback) ───────────────────────────────────────────────────
+
+async function afFetch(endpoint: string, params: Record<string, string> = {}) {
+  if (!AF_KEY) throw new Error('API_FOOTBALL_KEY not configured')
+  const url = new URL(`${AF_BASE}/${endpoint}`)
   url.searchParams.set('league', LEAGUE)
   url.searchParams.set('season', SEASON)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-
-  const res = await fetch(url.toString(), {
-    headers: { 'x-apisports-key': API_KEY || '' }
-  })
+  const res = await fetch(url.toString(), { headers: { 'x-apisports-key': AF_KEY } })
   const data = await res.json()
-  cache.set(cacheKey, { data, expires: Date.now() + CACHE_TTL })
+  if (data?.errors?.requests) throw new Error('API-Football rate limit reached')
   return data
 }
 
-export async function GET(req: NextRequest) {
-  if (!API_KEY) {
-    return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
-  }
+// Returns true when an API-Football-style response has usable content
+function afHasData(data: unknown): boolean {
+  const d = data as { response?: unknown[] } | null
+  return Array.isArray(d?.response) && d!.response!.length > 0
+}
 
+// ── Route handler ─────────────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest) {
   const endpoint = req.nextUrl.searchParams.get('endpoint') || ''
-  const team = req.nextUrl.searchParams.get('team') || ''
-  const round = req.nextUrl.searchParams.get('round') || ''
-  const status = req.nextUrl.searchParams.get('status') || ''
+  const team     = req.nextUrl.searchParams.get('team') || ''
+  const status   = req.nextUrl.searchParams.get('status') || ''
+  const round    = req.nextUrl.searchParams.get('round') || ''
+
+  const cacheKey = `${endpoint}:${team}:${status}:${round}`
+  const cached = getCached(cacheKey)
+  if (cached) return NextResponse.json(cached)
 
   try {
-    const params: Record<string, string> = {}
-    if (team) params.team = team
-    if (round) params.round = round
-    if (status) params.status = status
-
     switch (endpoint) {
-      case 'standings':
-        return NextResponse.json(await fetchFootball('standings', params))
 
-      case 'fixtures':
-        return NextResponse.json(await fetchFootball('fixtures', params))
+      case 'standings': {
+        // FD primary
+        if (FD_KEY) {
+          try {
+            const data = await getFdStandings()
+            if (afHasData(data)) { setCached(cacheKey, data); return NextResponse.json(data) }
+          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD standings error:', e) }
+        }
+        // AF fallback
+        if (AF_KEY) {
+          const data = await afFetch('standings')
+          setCached(cacheKey, data)
+          return NextResponse.json(data)
+        }
+        return NextResponse.json({ response: [] })
+      }
 
-      case 'fixtures/rounds':
-        return NextResponse.json(await fetchFootball('fixtures/rounds', params))
+      case 'fixtures': {
+        const opts = { status: status || undefined, team: team || undefined }
+        // FD primary
+        if (FD_KEY) {
+          try {
+            const data = await getFdFixtures(opts)
+            if (afHasData(data)) { setCached(cacheKey, data); return NextResponse.json(data) }
+          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD fixtures error:', e) }
+        }
+        // AF fallback
+        if (AF_KEY) {
+          const params: Record<string, string> = {}
+          if (team)   params.team   = team
+          if (round)  params.round  = round
+          if (status) params.status = status
+          const data = await afFetch('fixtures', params)
+          setCached(cacheKey, data)
+          return NextResponse.json(data)
+        }
+        return NextResponse.json({ response: [] })
+      }
 
-      case 'players/topscorers':
-        return NextResponse.json(await fetchFootball('players/topscorers', params))
+      case 'players/topscorers': {
+        // FD primary
+        if (FD_KEY) {
+          try {
+            const data = await getFdScorers()
+            if (afHasData(data)) { setCached(cacheKey, data); return NextResponse.json(data) }
+          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD scorers error:', e) }
+        }
+        // AF fallback
+        if (AF_KEY) {
+          const data = await afFetch('players/topscorers')
+          setCached(cacheKey, data)
+          return NextResponse.json(data)
+        }
+        return NextResponse.json({ response: [] })
+      }
 
       case 'teams': {
-        if (!team) {
-          return NextResponse.json(await fetchFootball('teams', params))
+        // FD primary (used for WC team list in name resolution)
+        if (FD_KEY && !team) {
+          try {
+            const data = await getFdTeamsList()
+            if (afHasData(data)) { setCached(cacheKey, data); return NextResponse.json(data) }
+          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD teams error:', e) }
         }
-        // team info
-        const res = await fetch(`${BASE}/teams?id=${team}`, {
-          headers: { 'x-apisports-key': API_KEY }
-        })
-        const data = await res.json()
+        // AF fallback
+        if (AF_KEY) {
+          if (team) {
+            const res = await fetch(`${AF_BASE}/teams?id=${team}`, { headers: { 'x-apisports-key': AF_KEY } })
+            const data = await res.json()
+            setCached(cacheKey, data)
+            return NextResponse.json(data)
+          }
+          const data = await afFetch('teams')
+          setCached(cacheKey, data)
+          return NextResponse.json(data)
+        }
+        return NextResponse.json({ response: [] })
+      }
+
+      // These endpoints are AF-only (no FD equivalent needed)
+      case 'fixtures/rounds': {
+        if (!AF_KEY) return NextResponse.json({ response: [] })
+        const data = await afFetch('fixtures/rounds')
+        setCached(cacheKey, data)
         return NextResponse.json(data)
       }
 
       case 'players/squads': {
-        const res = await fetch(`${BASE}/players/squads?team=${team}`, {
-          headers: { 'x-apisports-key': API_KEY }
-        })
+        if (!AF_KEY) return NextResponse.json({ response: [] })
+        const res = await fetch(`${AF_BASE}/players/squads?team=${team}`, { headers: { 'x-apisports-key': AF_KEY } })
         const data = await res.json()
         return NextResponse.json(data)
       }
 
       case 'players': {
-        return NextResponse.json(await fetchFootball('players', params))
+        if (!AF_KEY) return NextResponse.json({ response: [] })
+        const params: Record<string, string> = {}
+        if (team) params.team = team
+        const data = await afFetch('players', params)
+        setCached(cacheKey, data)
+        return NextResponse.json(data)
       }
 
       case 'coaches': {
-        const res = await fetch(`${BASE}/coachs?team=${team}`, {
-          headers: { 'x-apisports-key': API_KEY }
-        })
+        if (!AF_KEY) return NextResponse.json({ response: [] })
+        const res = await fetch(`${AF_BASE}/coachs?team=${team}`, { headers: { 'x-apisports-key': AF_KEY } })
         const data = await res.json()
         return NextResponse.json(data)
       }
