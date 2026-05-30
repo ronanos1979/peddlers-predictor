@@ -44,6 +44,7 @@ export default function SiteFooter() {
           { href: '/locations', label: t.locations },
           { href: '/schedule', label: t.schedule },
           { href: '/world-cup/standings', label: t.standings },
+          { href: '/world-cup/bracket', label: t.bracket },
           { href: '/world-cup/results', label: t.results },
           { href: '/world-cup/scorers', label: t.scorers },
         ].map(({ href, label }) => (

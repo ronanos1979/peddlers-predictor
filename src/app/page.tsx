@@ -397,6 +397,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: t.leaderboard },
           { href: '/my-picks', icon: '👤', label: t.myPicks },
           { href: '/world-cup/standings', icon: '📊', label: t.standings },
+          { href: '/world-cup/bracket', icon: '🏆', label: t.bracket },
           { href: '/world-cup/team', icon: '⭐', label: t.myTeam },
           { href: '/world-cup/results', icon: '⚽', label: t.results },
           { href: '/world-cup/scorers', icon: '🥇', label: t.scorers },
