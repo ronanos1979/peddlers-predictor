@@ -33,6 +33,19 @@ const POSITION_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Attacker']
 const SAVED_TEAM_KEY = 'peddlers_home_team'
 const TEAM_CACHE_PREFIX = 'peddlers_team_cache_'
 
+// API-Football numeric team IDs for known World Cup 2026 teams
+const TEAM_NAME_TO_ID: Record<string, number> = {
+  'USA': 2,
+  'Ireland': 1529,
+  'England': 10,
+  'Brazil': 6,
+  'Argentina': 26,
+  'Germany': 25,
+  'Spain': 9,
+  'Portugal': 27,
+  'Mexico': 16,
+}
+
 function readSavedTeam(): SavedTeam | null {
   try {
     const raw = window.localStorage.getItem(SAVED_TEAM_KEY)
@@ -51,9 +64,11 @@ function isPlaceholderTeam(name: string) {
 }
 
 function savedTeamHref(team: SavedTeam) {
-  return team.id.startsWith('name:')
-    ? `/world-cup/team?name=${encodeURIComponent(team.name)}`
-    : `/world-cup/team?id=${team.id}`
+  if (!team.id.startsWith('name:')) return `/world-cup/team?id=${team.id}`
+  const numericId = TEAM_NAME_TO_ID[team.name]
+  return numericId !== undefined
+    ? `/world-cup/team?id=${numericId}`
+    : `/world-cup/team?name=${encodeURIComponent(team.name)}`
 }
 
 function isImageSrc(value?: string) {
@@ -62,8 +77,10 @@ function isImageSrc(value?: string) {
 
 export default function TeamPage({ searchParams }: { searchParams: { id?: string; name?: string } }) {
   const { t } = useLocale()
-  const teamId = searchParams.id
-  const teamName = searchParams.name
+  // Resolve ?name=USA → ?id=2 when we know the numeric API-Football ID
+  const numericIdFromName = searchParams.name ? TEAM_NAME_TO_ID[searchParams.name] : undefined
+  const teamId = searchParams.id || (numericIdFromName !== undefined ? String(numericIdFromName) : undefined)
+  const teamName = teamId ? undefined : searchParams.name
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null)
   const [squad, setSquad] = useState<Player[]>([])
   const [coach, setCoach] = useState<Coach | null>(null)
@@ -133,8 +150,8 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
           const byName = new Map<string, Standing>()
           ;((matches || []) as Match[]).forEach(match => {
             if (isPlaceholderTeam(match.home_team) || isPlaceholderTeam(match.away_team)) return
-            byName.set(match.home_team, { team: { id: null, name: match.home_team, logo: match.home_flag }, group: t.localSchedule })
-            byName.set(match.away_team, { team: { id: null, name: match.away_team, logo: match.away_flag }, group: t.localSchedule })
+            byName.set(match.home_team, { team: { id: TEAM_NAME_TO_ID[match.home_team] ?? null, name: match.home_team, logo: match.home_flag }, group: t.localSchedule })
+            byName.set(match.away_team, { team: { id: TEAM_NAME_TO_ID[match.away_team] ?? null, name: match.away_team, logo: match.away_flag }, group: t.localSchedule })
           })
           allTeams = Array.from(byName.values()).sort((a, b) => a.team.name.localeCompare(b.team.name))
         }
