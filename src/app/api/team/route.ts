@@ -122,8 +122,10 @@ async function resolveNameToId(name: string): Promise<number | null> {
   const results: Array<{ team: { id: number; name: string; national?: boolean } }> =
     searchData.response || []
 
-  const nationals = results.filter(t => t.team.national === true)
-  const pool = nationals.length > 0 ? nationals : results
+  // Filter to senior national teams — exclude youth (U17/U20/U23), women's, futsal, beach, etc.
+  const YOUTH_RE = /\b(U\d{2}|Under[\s-]?\d+|Women|Futsal|Beach|Blind|Paralympic|Olympic)\b/i
+  const nationals = results.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+  const pool = nationals.length > 0 ? nationals : results.filter(t => !YOUTH_RE.test(t.team.name))
 
   const exact = pool.find(
     t => t.team.name.toLowerCase() === aliased || t.team.name.toLowerCase() === norm
