@@ -22,6 +22,40 @@ const EMPTY_RIVALRY: Record<string, RivalryTotals> = {
   nashua: { entries: 0, tickets: 0, correct: 0, scored: 0 },
 }
 
+function fmtKickoff(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+}
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
+function MatchCountdown({ kickoffAt, t }: { kickoffAt: string; t: Translations }) {
+  const [time, setTime] = useState({ d: 0, h: 0, m: 0, s: 0, done: false })
+  useEffect(() => {
+    const target = new Date(kickoffAt)
+    const tick = () => {
+      const diff = target.getTime() - Date.now()
+      if (diff <= 0) { setTime(prev => ({ ...prev, done: true })); return }
+      setTime({ d: Math.floor(diff / 86400000), h: Math.floor((diff % 86400000) / 3600000), m: Math.floor((diff % 3600000) / 60000), s: Math.floor((diff % 60000) / 1000), done: false })
+    }
+    tick(); const iv = setInterval(tick, 1000); return () => clearInterval(iv)
+  }, [kickoffAt])
+  if (time.done) return null
+  const cells = time.d > 0
+    ? [{ val: time.d, label: t.days }, { val: time.h, label: t.hours }, { val: time.m, label: t.mins }]
+    : [{ val: time.h, label: t.hours }, { val: time.m, label: t.mins }, { val: time.s, label: t.secs }]
+  return (
+    <div className="countdown-grid" style={{ marginTop: 14, justifyContent: 'center' }}>
+      {cells.map(({ val, label }) => (
+        <div key={label} className="countdown-cell">
+          <div className="countdown-num">{String(val).padStart(2, '0')}</div>
+          <div className="countdown-label">{label}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Countdown({ t }: { t: Translations }) {
   const [time, setTime] = useState({ days: 0, hours: 0, mins: 0, secs: 0, started: false })
   useEffect(() => {
@@ -228,6 +262,8 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
   const pub: PubInfo | null = selectedPub ? PUB_DATA[selectedPub] : null
   const [match, setMatch] = useState<Match | null>(null)
   const [upcomingMatch, setUpcomingMatch] = useState<Match | null>(null)
+  const [closedMatches, setClosedMatches] = useState<Match[]>([])
+  const [nextMatch, setNextMatch] = useState<Match | null>(null)
   const [loading, setLoading] = useState(false)
   const [patronKey, setPatronKey] = useState(0)
   const [rivalry, setRivalry] = useState<Record<string, RivalryTotals>>(EMPTY_RIVALRY)
@@ -236,6 +272,8 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     setSelectedPub(id)
     setMatch(null)
     setUpcomingMatch(null)
+    setClosedMatches([])
+    setNextMatch(null)
     savePubPref(id)
     router.replace(`/?pub=${id}`, { scroll: false })
   }
@@ -262,9 +300,26 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       if (matches?.length) {
         const live = matches.find((m: Match) => new Date(m.kickoff_at) <= now && new Date(m.entries_close_at) >= now)
         const upcoming = matches.find((m: Match) => new Date(m.kickoff_at) > now)
-        if (live) setMatch(live)
-        else if (upcoming) setUpcomingMatch(upcoming)
+        if (live) { setMatch(live); setLoading(false); return }
+        if (upcoming) { setUpcomingMatch(upcoming); setLoading(false); return }
       }
+      // No live or upcoming match — fetch today's closed matches and the next future match
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      const [{ data: todayClosed }, { data: nextMatches }] = await Promise.all([
+        supabase.from('matches').select('*')
+          .gte('kickoff_at', todayStart.toISOString())
+          .lte('kickoff_at', now.toISOString())
+          .neq('stage', 'Demo Match')
+          .order('kickoff_at', { ascending: true }),
+        supabase.from('matches').select('*')
+          .gt('kickoff_at', now.toISOString())
+          .neq('stage', 'Demo Match')
+          .order('kickoff_at', { ascending: true })
+          .limit(3),
+      ])
+      setClosedMatches(todayClosed || [])
+      setNextMatch(nextMatches?.[0] || null)
       setLoading(false)
     }
     load()
@@ -300,13 +355,6 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     }
     loadRivalry()
   }, [])
-
-  function fmtKickoff(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
-  }
-  function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  }
 
   return (
     <div className="container">
@@ -390,11 +438,60 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       )}
 
       {selectedPub && !loading && !match && !upcomingMatch && (
-        <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.noMatchesNow}</p>
-          <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>{t.noMatchesSub}</p>
-          <Link href={`/demo?pub=${selectedPub}`} className="btn btn-primary" style={{ textDecoration: 'none' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 4 }}>
+          {closedMatches.length > 0 && (
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                {t.todaysMatches}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {closedMatches.map(m => (
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', gap: 8 }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 600, lineHeight: 1.3 }}>
+                        {m.home_flag} {m.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs</span> {m.away_team} {m.away_flag}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                        {m.stage} · {fmtKickoff(m.kickoff_at)}
+                      </div>
+                    </div>
+                    <span className="badge badge-closed" style={{ flexShrink: 0 }}>{t.closed}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {nextMatch && (
+            <div className="card" style={{ background: 'linear-gradient(135deg, #0d1f16, #111)', borderColor: 'rgba(0,200,122,0.2)', textAlign: 'center' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 10 }}>
+                {t.upNextMatch}
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+                {nextMatch.home_flag} {nextMatch.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 14 }}>vs</span> {nextMatch.away_team} {nextMatch.away_flag}
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                {nextMatch.stage}
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                {fmtDate(nextMatch.kickoff_at)} · {fmtKickoff(nextMatch.kickoff_at)}
+              </div>
+              <MatchCountdown kickoffAt={nextMatch.kickoff_at} t={t} />
+              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 10, marginBottom: 0 }}>
+                {t.predictionsOpen}
+              </p>
+            </div>
+          )}
+
+          {closedMatches.length === 0 && !nextMatch && (
+            <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
+              <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.noMatchesNow}</p>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>{t.noMatchesSub}</p>
+            </div>
+          )}
+
+          <Link href={`/demo?pub=${selectedPub}`} className="btn btn-primary" style={{ textDecoration: 'none', textAlign: 'center', display: 'block' }}>
             {t.tryDemo}
           </Link>
         </div>
