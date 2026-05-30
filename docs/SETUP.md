@@ -1,6 +1,6 @@
 # Setup Guide
 
-Complete guide to deploying The Peddler's Predictor from scratch.
+Complete guide to deploying Peddler's Predictor from scratch on a new Supabase + Vercel project.
 
 ---
 
@@ -9,8 +9,9 @@ Complete guide to deploying The Peddler's Predictor from scratch.
 - [Node.js 18+](https://nodejs.org) — `node --version` to check
 - [Git](https://git-scm.com)
 - A [GitHub](https://github.com) account
-- A [Supabase](https://supabase.com) account (free)
+- A [Supabase](https://supabase.com) account (free tier is fine)
 - A [Vercel](https://vercel.com) account (free, sign in with GitHub)
+- An [API-Football v3](https://www.api-football.com) key (free tier — 100 req/day)
 
 ---
 
@@ -20,8 +21,8 @@ Complete guide to deploying The Peddler's Predictor from scratch.
 1. Go to [supabase.com](https://supabase.com) → **Start for free**
 2. Sign in with GitHub
 3. Click **New project**
-   - Name: `peddlers-daughter`
-   - Region: `US East (N. Virginia)`
+   - Name: `peddlers-predictor`
+   - Region: `US East (N. Virginia)` — closest to Haverhill/Nashua
    - Save your database password somewhere safe
 4. Wait ~2 minutes for the project to spin up
 
@@ -34,123 +35,125 @@ Complete guide to deploying The Peddler's Predictor from scratch.
 
 ### Run the schema
 1. Go to **SQL Editor → New query**
-2. Paste the contents of `supabase/schema.sql`
+2. Paste the entire contents of `supabase/master.sql`
 3. Click **Run** — you should see `Success`
 
-### Load all match data
-1. Go to **SQL Editor → New query**
-2. Paste the contents of `supabase/seed_matches.sql`
-3. Click **Run** — this loads all 104 World Cup matches
+This creates all tables (pubs, matches, entries, scorer_picks, feedback, team_cache), enables RLS, sets policies, seeds pub data, and loads all 104 World Cup 2026 matches.
 
 ---
 
-## Step 2 — Local development
+## Step 2 — Environment Variables
 
-### Clone and install
-```bash
-git clone https://github.com/YOUR_USERNAME/peddlers-predictor.git
-cd peddlers-predictor
-npm install
-```
+Copy the example file and fill it in:
 
-### Environment variables
 ```bash
 cp .env.example .env.local
 ```
 
-Edit `.env.local` and fill in your values:
+Edit `.env.local`:
+
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
-ADMIN_PASSWORD=choose_something_strong
+ADMIN_PASSWORD=choose-a-strong-password
+API_FOOTBALL_KEY=your-api-football-key
 ```
 
-### Run locally
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000/?pub=haverhill](http://localhost:3000/?pub=haverhill)
+**Never commit `.env.local` — it is already in `.gitignore`.**
 
 ---
 
-## Step 3 — GitHub
+## Step 3 — Local Development
 
-### Push to GitHub
 ```bash
-cd peddlers-predictor
-git init
-git add .
-git commit -m "Initial commit"
-
-# Create a new repo at github.com first, then:
-git remote add origin https://github.com/YOUR_USERNAME/peddlers-predictor.git
-git branch -M main
-git push -u origin main
+npm install
+npm run dev
 ```
 
-> `.env.local` is in `.gitignore` — your keys will NOT be pushed to GitHub.
+Open http://localhost:3000
+
+To run tests:
+```bash
+npm test
+```
+
+To verify production build:
+```bash
+npm run build
+```
 
 ---
 
 ## Step 4 — Vercel (Hosting)
 
-### Deploy
-1. Go to [vercel.com](https://vercel.com) → sign in with GitHub
-2. Click **Add New Project**
-3. Find `peddlers-predictor` and click **Import**
-4. Before deploying, add environment variables (same as `.env.local`):
+### Connect repository
+1. Go to [vercel.com](https://vercel.com) → **Add New Project**
+2. Import your GitHub repository
+3. Framework preset: **Next.js** (auto-detected)
+4. Click **Deploy**
 
-| Name | Value |
-|------|-------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Your publishable key |
-| `SUPABASE_SECRET_KEY` | Your secret key |
-| `ADMIN_PASSWORD` | Your chosen admin password |
-
-5. Click **Deploy** — takes ~60 seconds
-6. Your app is live at `https://peddlers-predictor.vercel.app`
+### Set environment variables in Vercel
+1. Go to your Vercel project → **Settings → Environment Variables**
+2. Add each variable from `.env.local`:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SECRET_KEY`
+   - `ADMIN_PASSWORD`
+   - `API_FOOTBALL_KEY`
+3. Redeploy for the variables to take effect
 
 ### Auto-deploy
-Every time you push to the `main` branch on GitHub, Vercel automatically redeploys. No manual steps needed.
+Every push to `main` automatically deploys in ~60 seconds. Check status at your Vercel dashboard.
 
 ---
 
-## Step 5 — Generate QR codes
+## Step 5 — Verify
 
-Generate QR codes for these two URLs at [qr.io](https://qr.io) or [qr-code-generator.com](https://www.qr-code-generator.com):
+1. Visit `https://your-app.vercel.app/?pub=haverhill`
+   - You should see the home page with a countdown to June 11
+   - Select Haverhill location and try the demo prediction
 
-- **Haverhill**: `https://peddlers-predictor.vercel.app/?pub=haverhill`
-- **Nashua**: `https://peddlers-predictor.vercel.app/?pub=nashua`
+2. Visit `https://your-app.vercel.app/admin`
+   - Log in with your `ADMIN_PASSWORD`
+   - You should see the Results, Entrants, Stats, and Feedback tabs
 
-Print them on card stock and laminate — place on tables and at the bar.
-
----
-
-## Step 6 — Post-setup security
-
-After everything is working, regenerate your Supabase secret key:
-
-1. Supabase dashboard → **Settings → API Keys**
-2. Click the menu next to the secret key → **Regenerate**
-3. Copy the new key
-4. Update it in Vercel: **Project → Settings → Environment Variables**
-5. Vercel will auto-redeploy with the new key
+3. Visit `https://your-app.vercel.app/world-cup/standings`
+   - Pre-tournament: "Standings not available yet"
+   - During tournament: live group tables from API-Football
 
 ---
 
-## Updating pub coordinates
+## QR Codes for Table Cards
 
-The pub GPS coordinates in the database are approximate. To fine-tune them:
+Print and laminate cards for each pub table:
 
-1. Go to [maps.google.com](https://maps.google.com)
-2. Right-click on the exact pub location → **What's here?**
-3. Copy the lat/lng
-4. Go to Supabase → **Table Editor → pubs**
-5. Edit the row for each pub and update `lat`, `lng`, and `radius_m`
+| Pub | QR URL |
+|-----|--------|
+| Haverhill | `https://peddlers-predictor.vercel.app/?pub=haverhill` |
+| Nashua | `https://peddlers-predictor.vercel.app/?pub=nashua` |
 
-| Pub | Current lat | Current lng | Radius |
-|-----|------------|------------|--------|
-| Haverhill, MA | 42.7762 | -71.0773 | 300m |
-| Nashua, NH | 42.7654 | -71.4676 | 300m |
+Copy: **"Free to play. Win a TV. Scan to predict every match."**
+
+---
+
+## Deploying to a Second Supabase Project
+
+If you need a fresh database (e.g. staging environment):
+
+1. Create a new Supabase project
+2. Run `supabase/master.sql` in the SQL Editor
+3. Update `.env.local` with the new project's URL and keys
+4. Set the new keys in Vercel under a separate deployment
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Team page shows wrong team / U17 | Run `truncate table team_cache;` in Supabase SQL Editor |
+| API-Football returns empty data | Pre-tournament is expected — local schedule fallback shown |
+| Admin login fails | Check `ADMIN_PASSWORD` env var in Vercel matches what you type |
+| Entries not saving | Check Supabase RLS policies — run master.sql again if unsure |
+| Build fails on Vercel | Run `npm run build` locally first to catch TypeScript errors |

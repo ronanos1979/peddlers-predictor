@@ -27,6 +27,7 @@ type Stats = {
   pending: number
   raffle_entries: number
 }
+type ScorerPick = { player_name: string; player_team: string }
 
 export default function MyPicksPage({ searchParams }: { searchParams: { phone?: string } }) {
   const { t } = useLocale()
@@ -34,6 +35,7 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
   const [searched, setSearched] = useState(!!searchParams.phone)
   const [entries, setEntries] = useState<EntryWithMatch[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
+  const [scorerPick, setScorerPick] = useState<ScorerPick | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -49,6 +51,7 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
       if (!res.ok) { setError(data.error); setLoading(false); return }
       setEntries(data.entries)
       setStats(data.stats)
+      setScorerPick(data.scorerPick || null)
     } catch {
       setError(t.networkError)
     }
@@ -115,6 +118,33 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
               </div>
             ))}
           </div>
+
+          {/* Golden Boot pick */}
+          {scorerPick && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '14px 16px', borderRadius: 10, marginBottom: 16,
+              background: 'rgba(245,197,24,0.06)',
+              border: '1px solid rgba(245,197,24,0.35)',
+            }}>
+              <div style={{ fontSize: 32, flexShrink: 0 }}>🥇</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 3 }}>
+                  Golden Boot Pick
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: 'var(--gold)', lineHeight: 1.1 }}>
+                  {scorerPick.player_name}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {scorerPick.player_team}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)' }}>+10</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>if correct</div>
+              </div>
+            </div>
+          )}
 
           {entries.length === 0 ? (
             <div className="card" style={{ textAlign: 'center' }}>

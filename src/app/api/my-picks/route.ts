@@ -27,5 +27,11 @@ export async function GET(req: NextRequest) {
     raffle_entries: entries?.reduce((sum, e) => sum + (e.raffle_entries || 0), 0) || 0
   }
 
-  return NextResponse.json({ entries: entries || [], stats })
+  const { data: scorerPick } = await supabaseAdmin
+    .from('scorer_picks')
+    .select('player_name, player_team')
+    .eq('phone', phone)
+    .single()
+
+  return NextResponse.json({ entries: entries || [], stats, scorerPick: scorerPick || null })
 }
