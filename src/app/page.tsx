@@ -9,6 +9,18 @@ import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
 
+type RivalryTotals = {
+  entries: number
+  tickets: number
+  correct: number
+  scored: number
+}
+
+const EMPTY_RIVALRY: Record<string, RivalryTotals> = {
+  haverhill: { entries: 0, tickets: 0, correct: 0, scored: 0 },
+  nashua: { entries: 0, tickets: 0, correct: 0, scored: 0 },
+}
+
 function Countdown({ t }: { t: Translations }) {
   const [time, setTime] = useState({ days: 0, hours: 0, mins: 0, secs: 0, started: false })
   useEffect(() => {
@@ -103,6 +115,121 @@ function PatronWelcome({ onClear, t }: { onClear: () => void; t: Translations })
   )
 }
 
+function MatchNightHub({
+  pub,
+  selectedPub,
+  upcomingMatch,
+  t,
+}: {
+  pub: PubInfo
+  selectedPub: string
+  upcomingMatch: Match | null
+  t: Translations
+}) {
+  const [shared, setShared] = useState(false)
+
+  async function sharePubNight() {
+    const url = `https://peddlers-predictor.vercel.app/?pub=${selectedPub}`
+    const text = t.pubShareText
+      .replace('{city}', pub.city)
+      .replace('{url}', url)
+    try {
+      if (navigator.share) await navigator.share({ text, url })
+      else {
+        await navigator.clipboard.writeText(text)
+        setShared(true)
+        setTimeout(() => setShared(false), 2500)
+      }
+    } catch { /* ignore cancelled share */ }
+  }
+
+  return (
+    <div className="card" style={{ margin: '18px 0', background: 'linear-gradient(135deg, rgba(0,200,122,0.10), rgba(245,197,24,0.06))', borderColor: 'rgba(0,200,122,0.22)' }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
+        {t.matchNightHub}
+      </div>
+      <h2 style={{ fontSize: 28, marginBottom: 6 }}>
+        {t.watchAtPub.replace('{city}', pub.city)}
+      </h2>
+      <p className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
+        {upcomingMatch
+          ? t.nextMatchHook
+              .replace('{home}', upcomingMatch.home_team)
+              .replace('{away}', upcomingMatch.away_team)
+          : t.watchAtPubSub}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        <a href={pub.mapsUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ textDecoration: 'none', textAlign: 'center', paddingInline: 8 }}>
+          {t.getDirectionsShort}
+        </a>
+        <button className="btn btn-secondary" onClick={sharePubNight} style={{ paddingInline: 8 }}>
+          {shared ? t.copiedClipboard : t.inviteFriends}
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        {[
+          t.scanPlayWin,
+          t.peddlersCrowd,
+          t.askBartender,
+        ].map(item => (
+          <div key={item} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 8px', background: 'rgba(0,0,0,0.18)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, textAlign: 'center', color: 'var(--text-muted)' }}>
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PubRivalry({
+  rivalry,
+  selectedPub,
+  t,
+}: {
+  rivalry: Record<string, RivalryTotals>
+  selectedPub: string
+  t: Translations
+}) {
+  const pubs = ['haverhill', 'nashua']
+  const leader = pubs.reduce((best, id) => rivalry[id].tickets > rivalry[best].tickets ? id : best, pubs[0])
+  const isTie = rivalry.haverhill.tickets === rivalry.nashua.tickets
+
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
+            {t.pubVsPub}
+          </div>
+          <h2 style={{ fontSize: 24, margin: 0 }}>{t.peddlersRivalry}</h2>
+        </div>
+        <span className="badge badge-pending">{isTie ? t.tied : t.leading.replace('{city}', PUB_DATA[leader].city)}</span>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>{t.pubRivalrySub}</p>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {pubs.map(id => {
+          const totals = rivalry[id]
+          const accuracy = totals.scored ? Math.round((totals.correct / totals.scored) * 100) : 0
+          const active = id === selectedPub
+          return (
+            <div key={id} style={{ border: `1px solid ${active ? 'rgba(0,200,122,0.45)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', padding: '12px 14px', background: active ? 'rgba(0,200,122,0.07)' : 'rgba(255,255,255,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong style={{ fontFamily: 'var(--font-cond)', fontSize: 16 }}>{PUB_DATA[id].city}</strong>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: active ? 'var(--green)' : 'var(--gold)' }}>{totals.tickets}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                <span>{totals.entries} {t.players}</span>
+                <span>{totals.correct} {t.correct}</span>
+                <span>{accuracy}% {t.accuracy}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Home({ searchParams }: { searchParams: { pub?: string } }) {
   const { t } = useLocale()
   const router = useRouter()
@@ -113,6 +240,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
   const [upcomingMatch, setUpcomingMatch] = useState<Match | null>(null)
   const [loading, setLoading] = useState(false)
   const [patronKey, setPatronKey] = useState(0)
+  const [rivalry, setRivalry] = useState<Record<string, RivalryTotals>>(EMPTY_RIVALRY)
 
   function choosePub(id: string) {
     setSelectedPub(id)
@@ -144,6 +272,37 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
     load()
   }, [selectedPub])
 
+  useEffect(() => {
+    async function loadRivalry() {
+      const { data } = await supabase
+        .from('entries')
+        .select('pub_id, phone, raffle_entries, is_correct')
+
+      const next: Record<string, RivalryTotals> = {
+        haverhill: { entries: 0, tickets: 0, correct: 0, scored: 0 },
+        nashua: { entries: 0, tickets: 0, correct: 0, scored: 0 },
+      }
+      const uniquePhones: Record<string, Set<string>> = {
+        haverhill: new Set(),
+        nashua: new Set(),
+      }
+
+      data?.forEach(entry => {
+        if (!next[entry.pub_id]) return
+        if (entry.phone) uniquePhones[entry.pub_id].add(entry.phone)
+        next[entry.pub_id].tickets += entry.raffle_entries || 0
+        if (entry.is_correct !== null) next[entry.pub_id].scored += 1
+        if (entry.is_correct === true) next[entry.pub_id].correct += 1
+      })
+
+      next.haverhill.entries = uniquePhones.haverhill.size
+      next.nashua.entries = uniquePhones.nashua.size
+
+      setRivalry(next)
+    }
+    loadRivalry()
+  }, [])
+
   function fmtKickoff(iso: string) {
     return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
   }
@@ -156,7 +315,7 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '28px 0 24px' }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
-          FIFA World Cup 2026 · June 11 - July 19
+          {t.tournamentLine}
         </div>
         <h1 style={{ fontSize: 42, marginBottom: 8 }}>
           {t.heroTitle.split('\n')[0]}<br /><span style={{ color: 'var(--green)' }}>{t.heroTitle.split('\n')[1]}</span>
@@ -186,6 +345,13 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
           </button>
         </div>
       </div>
+
+      {selectedPub && pub && (
+        <>
+          <MatchNightHub pub={pub} selectedPub={selectedPub} upcomingMatch={upcomingMatch || match} t={t} />
+          <PubRivalry rivalry={rivalry} selectedPub={selectedPub} t={t} />
+        </>
+      )}
 
       {!selectedPub && (
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px', borderStyle: 'dashed', borderColor: 'var(--border2)' }}>

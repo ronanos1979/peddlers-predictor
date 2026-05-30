@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { type Match, type Pub } from '@/lib/supabase'
+import { supabase, type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
 import { getDailyCode } from '@/lib/matchSchedule'
 import { savePatron, loadPatron, firstName } from '@/lib/patron'
 import { useLocale } from '@/lib/useLocale'
+import { PUB_DATA } from '@/lib/pubData'
 import Link from 'next/link'
 
 type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean }
@@ -23,7 +24,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
   const [timeLeft, setTimeLeft] = useState('')
   const [shared, setShared] = useState(false)
   const [returningPatron, setReturningPatron] = useState<string | null>(null)
+  const [nextMatch, setNextMatch] = useState<Match | null>(null)
   const dailyCode = getDailyCode()
+  const pubInfo = PUB_DATA[pubId]
 
   // Load patron cookie on mount
   useEffect(() => {
@@ -65,13 +68,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         setGeoMessage(`📍 ${t.locationVerified} - ${pub.city}`)
       } else {
         setGeoStatus('fail')
-        setGeoMessage(`${t.locationFail} (${Math.round(dist)}m away)`)
+        setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist))))
       }
     } catch {
       setGeoStatus('ok')
       setGeoMessage(t.pubCodeRequired)
     }
-  }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationFail, t.pubCodeRequired])
+  }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationDistanceFail, t.pubCodeRequired])
 
   useEffect(() => { checkGeo() }, [checkGeo])
 
@@ -100,6 +103,20 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
       if (!isDemo) {
         savePatron({ name, phone, pub_id: pubId })
       }
+
+      if (!isDemo) {
+        const { data: upcoming } = await supabase
+          .from('matches')
+          .select('*')
+          .gt('kickoff_at', new Date().toISOString())
+          .neq('id', match.id)
+          .neq('stage', 'Demo Match')
+          .order('kickoff_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (upcoming) setNextMatch(upcoming)
+      }
+
       setSubmitted(true)
     } catch {
       setError(t.networkError)
@@ -114,9 +131,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
   }
 
   async function handleShare() {
-    const text = `I just predicted ${pickLabel(pick)} in ${match.home_flag} ${match.home_team} vs ${match.away_flag} ${match.away_team} at The Peddler's Daughter World Cup Predictor! ⚽🍺\nCan you beat me? peddlers-predictor.vercel.app`
+    const text = t.predictionShareText
+      .replace('{pick}', pickLabel(pick))
+      .replace('{home}', match.home_team)
+      .replace('{away}', match.away_team)
+      .replace('{url}', `https://peddlers-predictor.vercel.app/?pub=${pubId}`)
     try {
-      if (navigator.share) await navigator.share({ text })
+      if (navigator.share) await navigator.share({ text, url: `https://peddlers-predictor.vercel.app/?pub=${pubId}` })
       else {
         await navigator.clipboard.writeText(text)
         setShared(true)
@@ -163,6 +184,32 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                 {t.raffleEntriesIfCorrect}
               </div>
+            </div>
+          </div>
+        )}
+
+        {!isDemo && pubInfo && (
+          <div className="slide-up-delay card" style={{ marginBottom: 14, textAlign: 'left' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
+              {t.nextPubVisit}
+            </div>
+            <h2 style={{ fontSize: 24, marginBottom: 6 }}>
+              {t.comeWatchAt.replace('{city}', pubInfo.city)}
+            </h2>
+            <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+              {nextMatch
+                ? t.nextChanceToPlay
+                    .replace('{home}', nextMatch.home_team)
+                    .replace('{away}', nextMatch.away_team)
+                : t.bringFriendsBack}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <a href={pubInfo.mapsUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ textDecoration: 'none', textAlign: 'center', paddingInline: 8 }}>
+                {t.openMap}
+              </a>
+              <Link href={`/schedule?pub=${pubId}`} className="btn btn-secondary" style={{ textDecoration: 'none', textAlign: 'center', paddingInline: 8 }}>
+                {t.seeSchedule}
+              </Link>
             </div>
           </div>
         )}
@@ -273,7 +320,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
                 </span>
               </label>
               <input value={phone} onChange={e => setPhone(e.target.value)}
-                type="tel" placeholder="+1 (555) 000-0000" />
+                type="tel" placeholder={t.phonePlaceholder} />
             </div>
             <div className="field">
               <label>
