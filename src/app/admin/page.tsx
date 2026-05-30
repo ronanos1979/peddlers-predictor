@@ -29,6 +29,9 @@ export default function AdminPage() {
   const [selectedDate, setSelectedDate] = useState('')
   const [loadingEntrants, setLoadingEntrants] = useState(false)
   const [feedback, setFeedback] = useState<FeedbackRow[]>([])
+  const [selectedReminderIds, setSelectedReminderIds] = useState<Set<string>>(new Set())
+  const [reminderSending, setReminderSending] = useState(false)
+  const [reminderResult, setReminderResult] = useState<{ sent: number; total: number; errors?: string[] } | null>(null)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -110,6 +113,31 @@ export default function AdminPage() {
       flash(`✅ Result set! ${data.updated} entries updated.`, 'success')
       loadMatches(); loadStats(); loadEntrants()
     } else flash(data.error, 'error')
+  }
+
+  async function sendReminder() {
+    setReminderSending(true)
+    setReminderResult(null)
+    try {
+      const res = await fetch('/api/send-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, match_ids: Array.from(selectedReminderIds) }),
+      })
+      const data = await res.json()
+      setReminderResult(data)
+    } catch {
+      setReminderResult({ sent: 0, total: 0, errors: ['Network error — check your connection'] })
+    }
+    setReminderSending(false)
+  }
+
+  function toggleReminderId(id: string) {
+    setSelectedReminderIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   function flash(text: string, type: 'success' | 'error') {
@@ -290,6 +318,64 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+
+          {(() => {
+            const now = new Date()
+            const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+            const candidates = [
+              ...todaysMatches.filter(m => new Date(m.kickoff_at) > now),
+              ...upcomingMatches.filter(m => new Date(m.kickoff_at) <= in48h),
+            ]
+            return (
+              <div className="card">
+                <h2 style={{ marginBottom: 4 }}>Email Reminder</h2>
+                <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                  Send a match alert to email subscribers ({totals?.emails_collected ?? '—'} collected).
+                  Select which matches to include.
+                </p>
+                {candidates.length === 0 ? (
+                  <p className="muted" style={{ fontSize: 13 }}>No upcoming matches in the next 48 hours.</p>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 14 }}>
+                      {candidates.map(m => (
+                        <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+                          <input type="checkbox"
+                            checked={selectedReminderIds.has(m.id)}
+                            onChange={() => toggleReminderId(m.id)}
+                            style={{ width: 16, height: 16, accentColor: 'var(--green)', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>
+                              {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
+                            </div>
+                            <div className="muted" style={{ fontSize: 12 }}>
+                              {fmtDate(m.kickoff_at)} · {fmt(m.kickoff_at)} · {m.stage}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <button className="btn btn-primary"
+                      style={{ width: 'auto', padding: '10px 20px', fontSize: 14 }}
+                      disabled={selectedReminderIds.size === 0 || reminderSending}
+                      onClick={sendReminder}>
+                      {reminderSending
+                        ? 'Sending…'
+                        : `Send to ${totals?.emails_collected ?? 0} subscribers`}
+                    </button>
+                    {reminderResult && (
+                      <div style={{ marginTop: 10, fontSize: 13,
+                        color: reminderResult.errors?.length ? 'var(--amber)' : 'var(--green)' }}>
+                        {reminderResult.errors?.length
+                          ? `⚠️ Sent ${reminderResult.sent}/${reminderResult.total}. Errors: ${reminderResult.errors.join(', ')}`
+                          : `✅ Sent to ${reminderResult.sent} of ${reminderResult.total} subscribers`}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })()}
 
           <div className="card">
             <h2 style={{ marginBottom: 4 }}>QR Codes</h2>
