@@ -62,6 +62,16 @@ create table if not exists scorer_picks (
   unique(phone)
 );
 
+-- Team data cache (populated by /api/team, refreshed weekly)
+create table if not exists team_cache (
+  team_id    integer primary key,
+  team_name  text not null,
+  data       jsonb not null,
+  cached_at  timestamptz not null default now()
+);
+
+create index if not exists team_cache_name_idx on team_cache (team_name);
+
 -- =============================================================
 -- 2. ROW LEVEL SECURITY
 -- =============================================================
@@ -70,6 +80,7 @@ alter table pubs          enable row level security;
 alter table matches        enable row level security;
 alter table entries        enable row level security;
 alter table scorer_picks   enable row level security;
+alter table team_cache     enable row level security;
 
 -- Public read on pubs and matches
 create policy "Public read pubs"

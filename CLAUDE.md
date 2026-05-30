@@ -180,28 +180,18 @@ Fully automatic based on datetime — no admin needed:
 | `endpoint=players/squads&team=ID` | /players/squads?team=ID | Squad |
 | `endpoint=coaches&team=ID` | /coachs?team=ID | Manager info |
 
-### KNOWN BUG — Team page
-The team page at `/world-cup/team` uses `?name=USA` in the URL but API-Football
-requires a **numeric team ID**, not a name. The page and API route need to be updated
-to use `?id=2` (USA's API-Football team ID is 2).
+### Team page — name-to-ID resolution
+The team page supports both `?id=X` (numeric API-Football ID) and `?name=X` (team name).
+When `?name=X` is used, the `/api/team` route searches API-Football by name to resolve the
+numeric ID, then fetches and caches the full team data in the `team_cache` Supabase table.
 
-Key API-Football team IDs for reference:
-- USA: 2
-- Ireland: 1529  
-- England: 10
-- Brazil: 6
-- Argentina: 26
-- France: 2
-- Germany: 25
-- Spain: 9
-- Portugal: 27
-- Mexico: 16
+Team data is cached for **7 days** in `team_cache`. The first visitor to a team page triggers
+the API-Football fetch (5 parallel calls); all subsequent visitors within 7 days get the
+Supabase-cached response instantly.
 
-The fix requires:
-1. Update `/api/football/route.ts` to handle the `teams` endpoint with a numeric ID
-2. Update `/world-cup/team/page.tsx` to use `?id=X` instead of `?name=X`
-3. Update all links that point to the team page to use numeric IDs
-4. The standings page links to `/world-cup/team?id=${s.team.id}` — check if this is already correct
+Do NOT hardcode API-Football team IDs in the client — use the server-side name search instead.
+The standings page already links to `/world-cup/team?id=${s.team.id}` using IDs from the
+standings API response, which is the preferred approach.
 
 ---
 

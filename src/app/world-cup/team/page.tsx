@@ -6,7 +6,6 @@ import Link from 'next/link'
 
 type TeamInfo = { team: { id: number; name: string; country: string; logo: string; founded: number; national: boolean }; venue: { name: string; city: string; capacity: number } }
 type Player = { id: number; name: string; age: number; number: number; position: string; photo: string; club?: { name: string; logo?: string } }
-type PlayerProfile = { player: { id: number }; statistics?: Array<{ team?: { name?: string; logo?: string } }> }
 type Coach = { id: number; name: string; nationality: string; photo: string; career: Array<{ team: { name: string }; start: string; end: string | null }> }
 type Fixture = {
   fixture: { id: number; date: string; status: { short: string } }
@@ -33,19 +32,6 @@ const POSITION_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Attacker']
 const SAVED_TEAM_KEY = 'peddlers_home_team'
 const TEAM_CACHE_PREFIX = 'peddlers_team_cache_'
 
-// API-Football numeric team IDs for known World Cup 2026 teams
-const TEAM_NAME_TO_ID: Record<string, number> = {
-  'USA': 2,
-  'Ireland': 1529,
-  'England': 10,
-  'Brazil': 6,
-  'Argentina': 26,
-  'Germany': 25,
-  'Spain': 9,
-  'Portugal': 27,
-  'Mexico': 16,
-}
-
 function readSavedTeam(): SavedTeam | null {
   try {
     const raw = window.localStorage.getItem(SAVED_TEAM_KEY)
@@ -64,11 +50,9 @@ function isPlaceholderTeam(name: string) {
 }
 
 function savedTeamHref(team: SavedTeam) {
-  if (!team.id.startsWith('name:')) return `/world-cup/team?id=${team.id}`
-  const numericId = TEAM_NAME_TO_ID[team.name]
-  return numericId !== undefined
-    ? `/world-cup/team?id=${numericId}`
-    : `/world-cup/team?name=${encodeURIComponent(team.name)}`
+  return team.id.startsWith('name:')
+    ? `/world-cup/team?name=${encodeURIComponent(team.name)}`
+    : `/world-cup/team?id=${team.id}`
 }
 
 function isImageSrc(value?: string) {
@@ -77,10 +61,8 @@ function isImageSrc(value?: string) {
 
 export default function TeamPage({ searchParams }: { searchParams: { id?: string; name?: string } }) {
   const { t } = useLocale()
-  // Resolve ?name=USA → ?id=2 when we know the numeric API-Football ID
-  const numericIdFromName = searchParams.name ? TEAM_NAME_TO_ID[searchParams.name] : undefined
-  const teamId = searchParams.id || (numericIdFromName !== undefined ? String(numericIdFromName) : undefined)
-  const teamName = teamId ? undefined : searchParams.name
+  const teamId = searchParams.id
+  const teamName = searchParams.name
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null)
   const [squad, setSquad] = useState<Player[]>([])
   const [coach, setCoach] = useState<Coach | null>(null)
@@ -150,8 +132,8 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
           const byName = new Map<string, Standing>()
           ;((matches || []) as Match[]).forEach(match => {
             if (isPlaceholderTeam(match.home_team) || isPlaceholderTeam(match.away_team)) return
-            byName.set(match.home_team, { team: { id: TEAM_NAME_TO_ID[match.home_team] ?? null, name: match.home_team, logo: match.home_flag }, group: t.localSchedule })
-            byName.set(match.away_team, { team: { id: TEAM_NAME_TO_ID[match.away_team] ?? null, name: match.away_team, logo: match.away_flag }, group: t.localSchedule })
+            byName.set(match.home_team, { team: { id: null, name: match.home_team, logo: match.home_flag }, group: t.localSchedule })
+            byName.set(match.away_team, { team: { id: null, name: match.away_team, logo: match.away_flag }, group: t.localSchedule })
           })
           allTeams = Array.from(byName.values()).sort((a, b) => a.team.name.localeCompare(b.team.name))
         }
@@ -186,33 +168,16 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
       } catch { /* ignore bad local cache */ }
 
       try {
-        const [teamRes, squadRes, playerRes, coachRes, fixturesRes] = await Promise.all([
-          fetch(`/api/football?endpoint=teams&team=${teamId}`),
-          fetch(`/api/football?endpoint=players/squads&team=${teamId}`),
-          fetch(`/api/football?endpoint=players&team=${teamId}`),
-          fetch(`/api/football?endpoint=coaches&team=${teamId}`),
-          fetch(`/api/football?endpoint=fixtures&team=${teamId}`),
-        ])
-        const [teamData, squadData, playerData, coachData, fixturesData] = await Promise.all([
-          teamRes.json(), squadRes.json(), playerRes.json(), coachRes.json(), fixturesRes.json()
-        ])
-        const nextTeamInfo = teamData.response?.[0] || null
-        setTeamInfo(nextTeamInfo)
-        const profiles = new Map<number, PlayerProfile>()
-        ;((playerData.response || []) as PlayerProfile[]).forEach(profile => profiles.set(profile.player.id, profile))
-        const players: Player[] = squadData.response?.[0]?.players || []
-        players.forEach(player => {
-          const club = profiles.get(player.id)?.statistics?.find(stat => stat.team?.name)?.team
-          if (club?.name && club.name !== nextTeamInfo?.team.name) {
-            player.club = { name: club.name, logo: club.logo }
-          }
-        })
+        const res = await fetch(`/api/team?id=${teamId}`)
+        const data = await res.json()
+        const nextTeamInfo = data.teamInfo || null
+        const players: Player[] = data.squad || []
         players.sort((a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position))
+        const nextCoach = data.coach || null
+        const allFixtures: Fixture[] = data.fixtures || []
+        setTeamInfo(nextTeamInfo)
         setSquad(players)
-        const nextCoach = coachData.response?.[0] || null
         setCoach(nextCoach)
-        const allFixtures: Fixture[] = fixturesData.response || []
-        allFixtures.sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime())
         setFixtures(allFixtures)
         if (nextTeamInfo) {
           const nextSavedTeam = {
@@ -246,41 +211,60 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
   useEffect(() => {
     if (!teamName || teamId) return
     const localTeamName = teamName
-    async function loadLocalTeam() {
+    async function loadByName() {
       setLoading(true)
       setTeamInfo(null)
       setSquad([])
       setCoach(null)
       setFixtures([])
+
+      // Try API-Football via the team cache route first
+      try {
+        const res = await fetch(`/api/team?name=${encodeURIComponent(localTeamName)}`)
+        const data = await res.json()
+        if (data.teamInfo) {
+          const players: Player[] = data.squad || []
+          players.sort((a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position))
+          setTeamInfo(data.teamInfo)
+          setSquad(players)
+          setCoach(data.coach || null)
+          setFixtures(data.fixtures || [])
+          const nextSaved = {
+            id: String(data.teamInfo.team.id),
+            name: data.teamInfo.team.name,
+            logo: data.teamInfo.team.logo,
+            savedAt: new Date().toISOString(),
+          }
+          saveTeam(nextSaved)
+          setSavedTeam(nextSaved)
+          setLoading(false)
+          return
+        }
+      } catch { /* fall through to local schedule fallback */ }
+
+      // Local-only fallback: show matches from Supabase when API can't find the team
       const { data } = await supabase
         .from('matches')
         .select('*')
         .neq('stage', 'Demo Match')
         .order('kickoff_at', { ascending: true })
-      const matches = ((data || []) as Match[]).filter(match => match.home_team === localTeamName || match.away_team === localTeamName)
+      const matches = ((data || []) as Match[]).filter(
+        m => m.home_team === localTeamName || m.away_team === localTeamName
+      )
       setLocalMatches(matches)
       const first = matches[0]
-      const flag = first
-        ? first.home_team === localTeamName ? first.home_flag : first.away_flag
-        : ''
-      const nextSavedTeam = {
+      const flag = first ? (first.home_team === localTeamName ? first.home_flag : first.away_flag) : ''
+      const nextSaved = {
         id: `name:${localTeamName}`,
         name: localTeamName,
         logo: flag,
         savedAt: new Date().toISOString(),
       }
-      saveTeam(nextSavedTeam)
-      setSavedTeam(nextSavedTeam)
-      try {
-        window.localStorage.setItem(`${TEAM_CACHE_PREFIX}name:${localTeamName}`, JSON.stringify({
-          matches,
-          savedTeam: nextSavedTeam,
-          cachedAt: new Date().toISOString(),
-        }))
-      } catch { /* ignore storage errors */ }
+      saveTeam(nextSaved)
+      setSavedTeam(nextSaved)
       setLoading(false)
     }
-    loadLocalTeam()
+    loadByName()
   }, [teamId, teamName])
 
   if (!teamId && !teamName) {
@@ -356,7 +340,7 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
   const upcomingLocalMatches = localMatches.filter(m => new Date(m.kickoff_at) >= new Date())
   const numericTeamId = parseInt(teamId || '0')
 
-  if (teamName && !teamId) {
+  if (teamName && !teamId && !teamInfo) {
     const flag = savedTeam?.logo || ''
     return (
       <div className="container">
