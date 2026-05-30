@@ -24,3 +24,21 @@ insert into matches (
 
 -- 4. Create a function that keeps the demo match always open
 -- We'll handle this in the app instead of the DB
+
+-- Top scorer prediction table
+create table if not exists scorer_picks (
+  id uuid primary key default gen_random_uuid(),
+  pub_id text references pubs(id),
+  phone text not null,
+  name text not null,
+  player_name text not null,
+  player_team text not null,
+  player_id integer,
+  created_at timestamptz not null default now(),
+  is_correct boolean default null,
+  unique(phone)
+);
+
+alter table scorer_picks enable row level security;
+create policy "Public read scorer_picks" on scorer_picks for select using (true);
+create policy "Public insert scorer_picks" on scorer_picks for insert with check (true);
