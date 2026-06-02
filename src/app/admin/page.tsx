@@ -11,12 +11,14 @@ type EntryRow = {
 type DayStat = [string, { haverhill: number; nashua: number; total: number }]
 type Totals = { total_entries: number; unique_phones: number; emails_collected: number; correct: number; haverhill: number; nashua: number }
 type FeedbackRow = { id: string; message: string; email: string | null; page: string | null; created_at: string; read: boolean }
+type RaffleEntrant = { name: string; phone: string; pub_id: string; tickets: number }
+type RaffleWinner = RaffleEntrant & { place: number }
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback'>('results')
+  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback' | 'raffle'>('results')
   const [todaysMatches, setTodaysMatches] = useState<Match[]>([])
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
@@ -32,6 +34,12 @@ export default function AdminPage() {
   const [selectedReminderIds, setSelectedReminderIds] = useState<Set<string>>(new Set())
   const [reminderSending, setReminderSending] = useState(false)
   const [reminderResult, setReminderResult] = useState<{ sent: number; total: number; errors?: string[] } | null>(null)
+  const [rafflePool, setRafflePool] = useState<RaffleEntrant[]>([])
+  const [rafflePoolLoaded, setRafflePoolLoaded] = useState(false)
+  const [raffleFilter, setRaffleFilter] = useState<'all' | 'haverhill' | 'nashua'>('all')
+  const [winners, setWinners] = useState<RaffleWinner[] | null>(null)
+  const [drawPhase, setDrawPhase] = useState<'idle' | 'rolling' | 'done'>('idle')
+  const [rollingName, setRollingName] = useState('')
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -100,6 +108,10 @@ export default function AdminPage() {
     loadFeedback()
   }, [authed, loadMatches, loadStats, loadEntrants, loadFeedback])
 
+  useEffect(() => {
+    if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
+  }, [authed, tab]) // eslint-disable-line
+
   async function setResult(match: Match) {
     const result = results[match.id]
     if (!result) return
@@ -138,6 +150,64 @@ export default function AdminPage() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  async function loadRafflePool() {
+    setRafflePoolLoaded(false)
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=entrants`)
+    const data = await res.json()
+    const rows: EntryRow[] = data.entries || []
+    // Aggregate by phone: sum tickets, keep latest name + pub
+    const byPhone = new Map<string, RaffleEntrant>()
+    for (const e of rows) {
+      if (!byPhone.has(e.phone)) {
+        byPhone.set(e.phone, { name: e.name, phone: e.phone, pub_id: e.pub_id, tickets: 0 })
+      }
+      byPhone.get(e.phone)!.tickets += e.raffle_entries
+    }
+    const pool = Array.from(byPhone.values())
+      .filter(p => p.tickets > 0)
+      .sort((a, b) => b.tickets - a.tickets)
+    setRafflePool(pool)
+    setRafflePoolLoaded(true)
+  }
+
+  function weightedDraw(pool: RaffleEntrant[], count: number): RaffleWinner[] {
+    // Build flat ticket array — each person gets one entry per raffle ticket
+    const tickets: string[] = []
+    const byPhone = new Map<string, RaffleEntrant>()
+    for (const p of pool) {
+      byPhone.set(p.phone, p)
+      for (let i = 0; i < p.tickets; i++) tickets.push(p.phone)
+    }
+    const drawn: RaffleWinner[] = []
+    const used = new Set<string>()
+    let remaining = [...tickets]
+    for (let place = 1; place <= count; place++) {
+      const eligible = remaining.filter(ph => !used.has(ph))
+      if (eligible.length === 0) break
+      const winner = eligible[Math.floor(Math.random() * eligible.length)]
+      used.add(winner)
+      remaining = remaining.filter(ph => ph !== winner)
+      drawn.push({ ...byPhone.get(winner)!, place })
+    }
+    return drawn
+  }
+
+  async function runDraw() {
+    const filtered = raffleFilter === 'all'
+      ? rafflePool
+      : rafflePool.filter(p => p.pub_id === raffleFilter)
+    if (filtered.length === 0) return
+    setDrawPhase('rolling')
+    setWinners(null)
+    const names = filtered.map(p => p.name)
+    let i = 0
+    const iv = setInterval(() => { setRollingName(names[i++ % names.length]); }, 80)
+    await new Promise<void>(resolve => setTimeout(resolve, 2200))
+    clearInterval(iv)
+    setWinners(weightedDraw(filtered, 3))
+    setDrawPhase('done')
   }
 
   function flash(text: string, type: 'success' | 'error') {
@@ -238,7 +308,7 @@ export default function AdminPage() {
         const unread = feedback.filter(f => !f.read).length
         return (
           <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-            {(['results', 'entrants', 'stats', 'feedback'] as const).map(t => (
+            {(['results', 'entrants', 'stats', 'feedback', 'raffle'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
                 style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
                   background: tab === t ? 'var(--green)' : 'transparent',
@@ -549,6 +619,147 @@ export default function AdminPage() {
               )}
             </div>
           ))}
+        </>
+      )}
+
+      {/* RAFFLE TAB */}
+      {tab === 'raffle' && (
+        <>
+          <div className="card" style={{ background: 'linear-gradient(135deg, #1a1200, #111)', borderColor: 'rgba(245,197,24,0.3)', marginBottom: 16 }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 6 }}>
+              How it works
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+              Each correct prediction earns <strong style={{ color: 'var(--gold)' }}>3 raffle tickets</strong>. The draw is weighted — more correct picks = more tickets = better odds. Wrong picks earn 0 tickets. Draw 1st, 2nd, and 3rd place winners.
+            </p>
+          </div>
+
+          {/* Pub filter */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+            {(['all', 'haverhill', 'nashua'] as const).map(f => (
+              <button key={f} onClick={() => { setRaffleFilter(f); setWinners(null); setDrawPhase('idle') }}
+                style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
+                  border: `1px solid ${raffleFilter === f ? 'var(--gold)' : 'var(--border)'}`,
+                  background: raffleFilter === f ? 'rgba(245,197,24,0.12)' : 'transparent',
+                  color: raffleFilter === f ? 'var(--gold)' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                  letterSpacing: 0.5, textTransform: 'capitalize' }}>
+                {f === 'all' ? 'All pubs' : f === 'haverhill' ? 'Haverhill' : 'Nashua'}
+              </button>
+            ))}
+          </div>
+
+          {!rafflePoolLoaded ? (
+            <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading raffle pool…</p>
+          ) : (() => {
+            const filtered = raffleFilter === 'all'
+              ? rafflePool
+              : rafflePool.filter(p => p.pub_id === raffleFilter)
+            const totalTickets = filtered.reduce((s, p) => s + p.tickets, 0)
+
+            return (
+              <>
+                {/* Pool stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+                  {[
+                    { label: 'Eligible players', value: filtered.length },
+                    { label: 'Total tickets', value: totalTickets },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="card" style={{ textAlign: 'center', padding: '14px 8px', marginBottom: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 1 }}>{value}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {filtered.length === 0 ? (
+                  <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
+                    <p className="muted">No eligible entrants yet. Correct predictions needed.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Rolling animation */}
+                    {drawPhase === 'rolling' && (
+                      <div className="card" style={{ textAlign: 'center', padding: '32px 20px', background: 'linear-gradient(135deg, #0d1f16, #111)', borderColor: 'rgba(0,200,122,0.3)', marginBottom: 16 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 12 }}>
+                          🎲 Drawing…
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 2, color: 'var(--text)', minHeight: 40, transition: 'none' }}>
+                          {rollingName}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Winners */}
+                    {drawPhase === 'done' && winners && (
+                      <div style={{ marginBottom: 16 }}>
+                        {winners.map((w) => {
+                          const medals = ['🥇', '🥈', '🥉']
+                          const placeLabels = ['1st Place', '2nd Place', '3rd Place']
+                          const colors = ['var(--gold)', '#aaaaaa', '#cd7f32']
+                          return (
+                            <div key={w.place} className="card pop-in" style={{
+                              marginBottom: 10,
+                              borderColor: w.place === 1 ? 'var(--gold)' : w.place === 2 ? '#555' : '#4a3010',
+                              background: w.place === 1 ? 'linear-gradient(135deg, #1a1200, #111)' : 'var(--surface)',
+                              animationDelay: `${(w.place - 1) * 0.15}s`,
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <div style={{ fontSize: 36, flexShrink: 0 }}>{medals[w.place - 1]}</div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: colors[w.place - 1], marginBottom: 3 }}>
+                                    {placeLabels[w.place - 1]}
+                                  </div>
+                                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>{w.name}</div>
+                                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)' }}>
+                                    📞 {w.phone} · {w.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: colors[w.place - 1], letterSpacing: 1 }}>{w.tickets}</div>
+                                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>tickets</div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Draw / Re-draw button */}
+                    {drawPhase !== 'rolling' && (
+                      <button
+                        className={`btn ${drawPhase === 'done' ? 'btn-secondary' : 'btn-gold'}`}
+                        style={{ marginTop: drawPhase === 'done' ? 0 : 0 }}
+                        onClick={runDraw}>
+                        {drawPhase === 'done' ? '🔄 Re-draw' : `🎲 Draw Winners — ${filtered.length} players, ${totalTickets} tickets`}
+                      </button>
+                    )}
+
+                    {/* Top entrants preview */}
+                    {drawPhase === 'idle' && filtered.length > 0 && (
+                      <div className="card" style={{ marginTop: 16 }}>
+                        <h2 style={{ marginBottom: 8, fontSize: 14 }}>Top entrants by tickets</h2>
+                        {filtered.slice(0, 10).map((p, i) => (
+                          <div key={p.phone} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < Math.min(9, filtered.length - 1) ? '1px solid var(--border)' : 'none' }}>
+                            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-dim)', width: 24, flexShrink: 0 }}>{i + 1}</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14 }}>{p.name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{p.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}</div>
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold)', letterSpacing: 1 }}>{p.tickets}</div>
+                          </div>
+                        ))}
+                        {filtered.length > 10 && (
+                          <p className="muted" style={{ fontSize: 12, marginTop: 8, textAlign: 'center' }}>+ {filtered.length - 10} more players</p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )
+          })()}
         </>
       )}
     </div>
