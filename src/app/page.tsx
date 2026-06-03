@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
@@ -638,5 +639,24 @@ function HomeContent() {
 }
 
 export default function Home() {
-  return <Suspense><HomeContent /></Suspense>
+  const [splashDone, setSplashDone] = useState(false)
+
+  return (
+    <>
+      {!splashDone && (
+        <div className="splash-screen" onAnimationEnd={() => setSplashDone(true)}>
+          <Image
+            src="/logo.avif"
+            alt="The Peddler's Daughter"
+            width={280}
+            height={105}
+            priority
+            style={{ objectFit: 'contain' }}
+          />
+          <div className="splash-tagline">⚽ World Cup 2026 Predictor</div>
+        </div>
+      )}
+      <Suspense><HomeContent /></Suspense>
+    </>
+  )
 }
