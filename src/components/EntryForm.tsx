@@ -8,7 +8,7 @@ import { useLocale } from '@/lib/useLocale'
 import { PUB_DATA } from '@/lib/pubData'
 import Link from 'next/link'
 
-type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean }
+type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean; onComplete?: () => void }
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
@@ -26,7 +26,7 @@ function isValidPhone(raw: string): boolean {
   return normalizePhone(raw).length === 10
 }
 
-export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) {
+export default function EntryForm({ pubId, match, pub, isDemo = false, onComplete }: Props) {
   const { t } = useLocale()
   const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'fail'>('checking')
   const [geoMessage, setGeoMessage] = useState(t.checkingLocation)
@@ -55,11 +55,11 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
     }
   }, [])
 
-  // Countdown timer
+  // Countdown timer — counts down to kickoff (predictions close at kickoff)
   useEffect(() => {
     if (isDemo) { setTimeLeft(''); return }
     const tick = () => {
-      const diff = new Date(match.entries_close_at).getTime() - Date.now()
+      const diff = new Date(match.kickoff_at).getTime() - Date.now()
       if (diff <= 0) { setTimeLeft(t.entriesClosed); return }
       const m = Math.floor(diff / 60000)
       const s = Math.floor((diff % 60000) / 1000)
@@ -95,7 +95,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
 
   useEffect(() => { checkGeo() }, [checkGeo])
 
-  const isClosed = !isDemo && new Date(match.entries_close_at) < new Date()
+  const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
   const canSubmit = name && phone && phoneValid && pick && geoStatus !== 'fail' && !isClosed && !submitting
 
@@ -216,14 +216,14 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
                   {t.checkBackResult}
                 </div>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)' }}>
-                  Full time ~{new Date(new Date(match.entries_close_at).getTime()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+                  Kickoff: {new Date(match.kickoff_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {!isDemo && pubInfo && (
+        {!isDemo && pubInfo && !onComplete && (
           <div className="slide-up-delay card" style={{ marginBottom: 14, textAlign: 'left' }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
               {t.nextPubVisit}
@@ -250,6 +250,11 @@ export default function EntryForm({ pubId, match, pub, isDemo = false }: Props) 
         )}
 
         <div className="slide-up-delay-2" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {onComplete && (
+            <button className="btn btn-primary" onClick={onComplete}>
+              ← Back to Matches
+            </button>
+          )}
           {!isDemo && (
             <button className="share-btn" onClick={handleShare}>
               {shared ? t.copiedClipboard : t.sharePrediction}

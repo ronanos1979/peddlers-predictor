@@ -7,6 +7,7 @@ import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
 import ShareCard from '@/components/ShareCard'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
+import { getPredictableWindowEnd } from '@/lib/matchSchedule'
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
@@ -368,20 +369,18 @@ function HomeContent() {
   const pubId = (pubParam && PUB_DATA[pubParam]) ? pubParam : ''
   const [selectedPub, setSelectedPub] = useState(pubId)
   const pub: PubInfo | null = selectedPub ? PUB_DATA[selectedPub] : null
-  const [match, setMatch] = useState<Match | null>(null)
-  const [upcomingMatch, setUpcomingMatch] = useState<Match | null>(null)
-  const [closedMatches, setClosedMatches] = useState<Match[]>([])
-  const [nextMatch, setNextMatch] = useState<Match | null>(null)
+  const [predictableMatches, setPredictableMatches] = useState<Match[]>([])
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [patronKey, setPatronKey] = useState(0)
   const [rivalry, setRivalry] = useState<Record<string, RivalryTotals>>(EMPTY_RIVALRY)
 
   function choosePub(id: string) {
     setSelectedPub(id)
-    setMatch(null)
-    setUpcomingMatch(null)
-    setClosedMatches([])
-    setNextMatch(null)
+    setPredictableMatches([])
+    setSelectedMatch(null)
+    setCompletedIds(new Set())
     savePubPref(id)
     router.replace(`/?pub=${id}`, { scroll: false })
   }
@@ -396,38 +395,34 @@ function HomeContent() {
   useEffect(() => {
     if (!selectedPub) return
     setLoading(true)
+    setSelectedMatch(null)
     async function load() {
       const now = new Date()
-      const windowStart = new Date(now.getTime() - 110 * 60 * 1000)
-      const windowEnd = new Date(now.getTime() + 3 * 60 * 60 * 1000)
+      const windowEnd = getPredictableWindowEnd(now)
       const { data: matches } = await supabase.from('matches').select('*')
-        .gte('kickoff_at', windowStart.toISOString())
-        .lte('kickoff_at', windowEnd.toISOString())
+        .gte('kickoff_at', now.toISOString())
+        .lt('kickoff_at', windowEnd.toISOString())
         .neq('stage', 'Demo Match')
         .order('kickoff_at', { ascending: true })
-      if (matches?.length) {
-        const live = matches.find((m: Match) => new Date(m.kickoff_at) <= now && new Date(m.entries_close_at) >= now)
-        const upcoming = matches.find((m: Match) => new Date(m.kickoff_at) > now)
-        if (live) { setMatch(live); setLoading(false); return }
-        if (upcoming) { setUpcomingMatch(upcoming); setLoading(false); return }
+      setPredictableMatches(matches || [])
+
+      // Pre-load which matches the returning patron has already entered
+      const patron = loadPatron()
+      if (patron?.phone && matches?.length) {
+        const raw = patron.phone.replace(/\D/g, '')
+        const phone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+        if (phone.length === 10) {
+          const { data: existing } = await supabase
+            .from('entries')
+            .select('match_id')
+            .eq('phone', phone)
+            .in('match_id', matches.map((m: Match) => m.id))
+          if (existing?.length) {
+            setCompletedIds(new Set(existing.map((e: { match_id: string }) => e.match_id)))
+          }
+        }
       }
-      // No live or upcoming match — fetch today's closed matches and the next future match
-      const todayStart = new Date(now)
-      todayStart.setHours(0, 0, 0, 0)
-      const [{ data: todayClosed }, { data: nextMatches }] = await Promise.all([
-        supabase.from('matches').select('*')
-          .gte('kickoff_at', todayStart.toISOString())
-          .lte('kickoff_at', now.toISOString())
-          .neq('stage', 'Demo Match')
-          .order('kickoff_at', { ascending: true }),
-        supabase.from('matches').select('*')
-          .gt('kickoff_at', now.toISOString())
-          .neq('stage', 'Demo Match')
-          .order('kickoff_at', { ascending: true })
-          .limit(3),
-      ])
-      setClosedMatches(todayClosed || [])
-      setNextMatch(nextMatches?.[0] || null)
+
       setLoading(false)
     }
     load()
@@ -510,7 +505,7 @@ function HomeContent() {
 
       {selectedPub && pub && (
         <>
-          <MatchNightHub pub={pub} selectedPub={selectedPub} upcomingMatch={upcomingMatch || match} t={t} />
+          <MatchNightHub pub={pub} selectedPub={selectedPub} upcomingMatch={predictableMatches[0] ?? null} t={t} />
           <PubRivalry rivalry={rivalry} selectedPub={selectedPub} t={t} />
         </>
       )}
@@ -527,88 +522,106 @@ function HomeContent() {
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
       )}
 
-      {selectedPub && !loading && match && pub && (
-        <EntryForm pubId={selectedPub} match={match} pub={{
-          id: pub.id, name: pub.name, city: `${pub.city}, ${pub.state}`,
-          lat: pub.lat, lng: pub.lng, radius_m: pub.radius_m, daily_code: ''
-        }} />
-      )}
+      {selectedPub && !loading && pub && (() => {
+        const pubObj = { id: pub.id, name: pub.name, city: `${pub.city}, ${pub.state}`, lat: pub.lat, lng: pub.lng, radius_m: pub.radius_m, daily_code: '' }
 
-      {selectedPub && !loading && !match && upcomingMatch && (
-        <div className="match-hero">
-          <span className="badge badge-pending" style={{ marginBottom: 12, display: 'inline-flex' }}>{t.comingUp}</span>
-          <div className="match-teams-display">
-            <div>{upcomingMatch.home_flag} {upcomingMatch.home_team}</div>
-            <div className="vs-divider" style={{ fontSize: 14, margin: '4px 0' }}>vs</div>
-            <div>{upcomingMatch.away_flag} {upcomingMatch.away_team}</div>
-          </div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>{upcomingMatch.stage}</div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>
-            {fmtDate(upcomingMatch.kickoff_at)} · {fmtKickoff(upcomingMatch.kickoff_at)}
-          </div>
-          <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>{t.predictionsOpen}</p>
-        </div>
-      )}
+        if (selectedMatch) {
+          return (
+            <div>
+              <button
+                onClick={() => setSelectedMatch(null)}
+                style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-muted)', cursor: 'pointer', padding: '8px 0 12px 0', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                ← Back to Matches
+              </button>
+              <EntryForm
+                pubId={selectedPub}
+                match={selectedMatch}
+                pub={pubObj}
+                onComplete={() => {
+                  setCompletedIds(prev => new Set(Array.from(prev).concat(selectedMatch.id)))
+                  setSelectedMatch(null)
+                }}
+              />
+            </div>
+          )
+        }
 
-      {selectedPub && !loading && !match && !upcomingMatch && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 4 }}>
-          {closedMatches.length > 0 && (
-            <div className="card" style={{ padding: '16px 18px' }}>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-                {t.todaysMatches}
+        if (predictableMatches.length === 0) {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 4 }}>
+              <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
+                <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.noMatchesNow}</p>
+                <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>{t.noMatchesSub}</p>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {closedMatches.map(m => (
-                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', gap: 8 }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 600, lineHeight: 1.3 }}>
-                        {m.home_flag} {m.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs</span> {m.away_team} {m.away_flag}
+              <Link href={`/demo?pub=${selectedPub}`} className="btn btn-primary" style={{ textDecoration: 'none', textAlign: 'center', display: 'block' }}>
+                {t.tryDemo}
+              </Link>
+            </div>
+          )
+        }
+
+        // Group matches by local date
+        const days: { label: string; matches: Match[] }[] = []
+        for (const m of predictableMatches) {
+          const label = new Date(m.kickoff_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+          const existing = days.find(d => d.label === label)
+          if (existing) existing.matches.push(m)
+          else days.push({ label, matches: [m] })
+        }
+
+        return (
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 14 }}>
+              ⚽ Make Your Predictions
+            </div>
+            {days.map(({ label, matches }) => (
+              <div key={label} style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                  {label}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {matches.map(m => {
+                    const done = completedIds.has(m.id)
+                    return (
+                      <div key={m.id} style={{
+                        background: done ? 'rgba(0,200,122,0.06)' : 'var(--surface)',
+                        border: `1px solid ${done ? 'rgba(0,200,122,0.3)' : 'var(--border)'}`,
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17, lineHeight: 1.3 }}>
+                            {m.home_flag} {m.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}>vs</span> {m.away_flag} {m.away_team}
+                          </div>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                            {m.stage} · {fmtKickoff(m.kickoff_at)}
+                          </div>
+                        </div>
+                        {done ? (
+                          <span className="badge" style={{ background: 'rgba(0,200,122,0.15)', color: 'var(--green)', flexShrink: 0, border: '1px solid rgba(0,200,122,0.3)' }}>✓ Picked</span>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedMatch(m)}
+                            className="btn btn-primary"
+                            style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}
+                          >
+                            Pick →
+                          </button>
+                        )}
                       </div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                        {m.stage} · {fmtKickoff(m.kickoff_at)}
-                      </div>
-                    </div>
-                    <span className="badge badge-closed" style={{ flexShrink: 0 }}>{t.closed}</span>
-                  </div>
-                ))}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-
-          {nextMatch && (
-            <div className="card" style={{ background: 'linear-gradient(135deg, #0d1f16, #111)', borderColor: 'rgba(0,200,122,0.2)', textAlign: 'center' }}>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 10 }}>
-                {t.upNextMatch}
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
-                {nextMatch.home_flag} {nextMatch.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 14 }}>vs</span> {nextMatch.away_team} {nextMatch.away_flag}
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                {nextMatch.stage}
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                {fmtDate(nextMatch.kickoff_at)} · {fmtKickoff(nextMatch.kickoff_at)}
-              </div>
-              <MatchCountdown kickoffAt={nextMatch.kickoff_at} t={t} />
-              <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 10, marginBottom: 0 }}>
-                {t.predictionsOpen}
-              </p>
-            </div>
-          )}
-
-          {closedMatches.length === 0 && !nextMatch && (
-            <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
-              <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.noMatchesNow}</p>
-              <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>{t.noMatchesSub}</p>
-            </div>
-          )}
-
-          <Link href={`/demo?pub=${selectedPub}`} className="btn btn-primary" style={{ textDecoration: 'none', textAlign: 'center', display: 'block' }}>
-            {t.tryDemo}
-          </Link>
-        </div>
-      )}
+            ))}
+          </div>
+        )
+      })()}
 
       {/* My Team widget — only renders if a team is saved in localStorage */}
       <MyTeamWidget t={t} />

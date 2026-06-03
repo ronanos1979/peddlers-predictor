@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      if (new Date(match.entries_close_at) < new Date()) {
+      if (new Date(match.kickoff_at) <= new Date()) {
         return NextResponse.json({ error: 'Entries are closed for this match' }, { status: 400 })
       }
 
