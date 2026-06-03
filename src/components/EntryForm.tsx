@@ -4,6 +4,7 @@ import { supabase, type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
 import { getDailyCode } from '@/lib/matchSchedule'
 import { savePatron, loadPatron, firstName } from '@/lib/patron'
+import Flag from '@/components/Flag'
 import { useLocale } from '@/lib/useLocale'
 import { PUB_DATA } from '@/lib/pubData'
 import Link from 'next/link'
@@ -193,7 +194,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             {t.yourPredictionLabel}
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 6 }}>
-            {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}
+            <Flag emoji={match.home_flag} size={22} style={{ marginRight: 6 }} />{match.home_team} vs <Flag emoji={match.away_flag} size={22} style={{ marginRight: 6 }} />{match.away_team}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 20, color: 'var(--green)', marginBottom: 4 }}>
             {pickLabel(pick)}
@@ -365,9 +366,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           {isClosed ? t.entriesClosed : t.entriesOpen}
         </span>
         <div className="match-teams-display">
-          <div>{match.home_flag} {match.home_team}</div>
+          <div><Flag emoji={match.home_flag} size={24} style={{ marginRight: 8 }} />{match.home_team}</div>
           <div className="vs-divider" style={{ fontSize: 14, margin: '4px 0' }}>vs</div>
-          <div>{match.away_flag} {match.away_team}</div>
+          <div><Flag emoji={match.away_flag} size={24} style={{ marginRight: 8 }} />{match.away_team}</div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-dim)', marginTop: 6 }}>
           {match.stage}
@@ -449,7 +450,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{match.home_flag} {match.home_team}</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}><Flag emoji={match.home_flag} size={16} style={{ marginRight: 4 }} />{match.home_team}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <button type="button" onClick={() => setHomeScorePred(h => Math.max(0, (h ?? 0) - 1))}
                         style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>−</button>
@@ -462,7 +463,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                   </div>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-muted)', paddingTop: 20 }}>–</div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{match.away_flag} {match.away_team}</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}><Flag emoji={match.away_flag} size={16} style={{ marginRight: 4 }} />{match.away_team}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <button type="button" onClick={() => setAwayScorePred(a => Math.max(0, (a ?? 0) - 1))}
                         style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>−</button>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
 import Link from 'next/link'
+import Flag from '@/components/Flag'
 
 type PickTally = { home: number; draw: number; away: number }
 type StatsMap = Record<string, PickTally>
@@ -177,9 +178,9 @@ export default function OverallPicksPage() {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
                     <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, lineHeight: 1.3 }}>
-                      {m.home_flag} {m.home_team}
+                      <Flag emoji={m.home_flag} size={18} style={{ marginRight: 5 }} />{m.home_team}
                       <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}> vs </span>
-                      {m.away_flag} {m.away_team}
+                      <Flag emoji={m.away_flag} size={18} style={{ marginRight: 5 }} />{m.away_team}
                     </div>
                     {m.result ? (
                       <div style={{ flexShrink: 0, textAlign: 'right' }}>

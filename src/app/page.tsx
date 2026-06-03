@@ -6,6 +6,7 @@ import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
 import ShareCard from '@/components/ShareCard'
+import Flag from '@/components/Flag'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
 import { getPredictableWindowEnd } from '@/lib/matchSchedule'
 import { useLocale } from '@/lib/useLocale'
@@ -617,7 +618,7 @@ function HomeContent() {
                       }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17, lineHeight: 1.3 }}>
-                            {m.home_flag} {m.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}>vs</span> {m.away_flag} {m.away_team}
+                            <Flag emoji={m.home_flag} size={18} style={{ marginRight: 5 }} />{m.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}>vs</span> <Flag emoji={m.away_flag} size={18} style={{ marginRight: 5 }} />{m.away_team}
                           </div>
                           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
                             {m.stage} · {fmtKickoff(m.kickoff_at)}

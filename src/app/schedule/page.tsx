@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
+import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 type GroupedMatches = Record<string, Match[]>
@@ -160,11 +161,11 @@ function ScheduleContent() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>
                     <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                      {m.home_flag} {m.home_team}
+                      <Flag emoji={m.home_flag} size={20} style={{ marginRight: 5 }} /> {m.home_team}
                     </Link>
                     {' '}vs{' '}
                     <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                      {m.away_flag} {m.away_team}
+                      <Flag emoji={m.away_flag} size={20} style={{ marginRight: 5 }} /> {m.away_team}
                     </Link>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
