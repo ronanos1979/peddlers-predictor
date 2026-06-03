@@ -562,9 +562,6 @@ function HomeContent() {
           )
         }
 
-        // Only show matches the patron hasn't picked yet
-        const unpickedMatches = predictableMatches.filter(m => !completedIds.has(m.id))
-
         if (predictableMatches.length === 0) {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 4 }}>
@@ -580,27 +577,9 @@ function HomeContent() {
           )
         }
 
-        if (unpickedMatches.length === 0) {
-          return (
-            <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>🎉</div>
-              <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>All picks in!</p>
-              <p className="muted" style={{ fontSize: 13, marginBottom: 14 }}>You&apos;ve predicted all {predictableMatches.length} available matches. New predictions open as each matchday approaches.</p>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                <Link href="/my-picks" className="btn btn-secondary" style={{ textDecoration: 'none', width: 'auto', padding: '8px 16px', fontSize: 13 }}>
-                  👤 My Picks
-                </Link>
-                <Link href="/overall-picks" className="btn btn-secondary" style={{ textDecoration: 'none', width: 'auto', padding: '8px 16px', fontSize: 13 }}>
-                  📊 Overall Picks
-                </Link>
-              </div>
-            </div>
-          )
-        }
-
-        // Group unpicked matches by local date
+        // Group all matches in window by local date (picked + unpicked)
         const days: { label: string; matches: Match[] }[] = []
-        for (const m of unpickedMatches) {
+        for (const m of predictableMatches) {
           const label = new Date(m.kickoff_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
           const existing = days.find(d => d.label === label)
           if (existing) existing.matches.push(m)
@@ -619,6 +598,7 @@ function HomeContent() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {matches.map(m => {
+                    const done = completedIds.has(m.id)
                     const s = pickStats[m.id]
                     const total = s ? s.home + s.draw + s.away : 0
                     const hp = total ? Math.round(s.home / total * 100) : 0
@@ -626,13 +606,14 @@ function HomeContent() {
                     const ap = total ? 100 - hp - dp : 0
                     return (
                       <div key={m.id} style={{
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
+                        background: done ? 'rgba(255,255,255,0.02)' : 'var(--surface)',
+                        border: `1px solid ${done ? 'rgba(255,255,255,0.06)' : 'var(--border)'}`,
                         borderRadius: 10,
                         padding: '14px 16px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 12,
+                        opacity: done ? 0.55 : 1,
                       }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17, lineHeight: 1.3 }}>
@@ -643,22 +624,33 @@ function HomeContent() {
                           </div>
                           {total > 0 && (
                             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ color: 'var(--green)' }}>{hp}% home</span>
+                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}% home</span>
                               <span>·</span>
                               <span>{dp}% draw</span>
                               <span>·</span>
-                              <span style={{ color: 'var(--amber)' }}>{ap}% away</span>
-                              <span style={{ color: 'var(--border)', marginLeft: 2 }}>({total})</span>
+                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}% away</span>
+                              <span style={{ marginLeft: 2 }}>({total})</span>
                             </div>
                           )}
                         </div>
-                        <button
-                          onClick={() => setSelectedMatch(m)}
-                          className="btn btn-primary"
-                          style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}
-                        >
-                          Pick →
-                        </button>
+                        {done ? (
+                          <span style={{
+                            flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11,
+                            fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)',
+                            background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)',
+                            borderRadius: 6, padding: '4px 10px',
+                          }}>
+                            ✓ Picked
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedMatch(m)}
+                            className="btn btn-primary"
+                            style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}
+                          >
+                            Pick →
+                          </button>
+                        )}
                       </div>
                     )
                   })}

@@ -27,6 +27,8 @@ export type Match = {
   result: 'home' | 'draw' | 'away' | null
   is_active: boolean
   venue: string | null
+  home_score: number | null
+  away_score: number | null
 }
 
 export type Entry = {
@@ -40,4 +42,6 @@ export type Entry = {
   is_correct: boolean | null
   raffle_entries: number
   created_at: string
+  home_score_pred: number | null
+  away_score_pred: number | null
 }

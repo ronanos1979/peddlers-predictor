@@ -9,9 +9,10 @@ export async function GET(req: NextRequest) {
     .from('entries')
     .select(`
       id, pick, is_correct, raffle_entries, created_at, pub_id,
+      home_score_pred, away_score_pred,
       matches (
         home_team, away_team, home_flag, away_flag,
-        kickoff_at, stage, result
+        kickoff_at, stage, result, home_score, away_score
       )
     `)
     .eq('phone', phone)

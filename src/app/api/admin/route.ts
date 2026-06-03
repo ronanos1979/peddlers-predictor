@@ -24,28 +24,42 @@ export async function POST(req: NextRequest) {
 
     // Set match result and score all entries
     if (action === 'set_result') {
-      const { match_id, result } = payload
+      const { match_id, result, home_score, away_score } = payload
 
       if (!['home', 'draw', 'away'].includes(result)) {
         return NextResponse.json({ error: 'Invalid result' }, { status: 400 })
       }
 
+      const homeScore = home_score != null ? parseInt(String(home_score), 10) : null
+      const awayScore = away_score != null ? parseInt(String(away_score), 10) : null
+
       await supabaseAdmin
         .from('matches')
-        .update({ result })
+        .update({
+          result,
+          home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
+          away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+        })
         .eq('id', match_id)
 
       const { data: entries } = await supabaseAdmin
         .from('entries')
-        .select('id, pick')
+        .select('id, pick, home_score_pred, away_score_pred')
         .eq('match_id', match_id)
 
       if (entries) {
         for (const entry of entries) {
-          const correct = entry.pick === result
+          const is_correct = entry.pick === result
+          let raffle_entries = 0
+          if (is_correct) {
+            const scoreCorrect =
+              homeScore != null && awayScore != null &&
+              entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
+            raffle_entries = scoreCorrect ? 3 : 1
+          }
           await supabaseAdmin
             .from('entries')
-            .update({ is_correct: correct, raffle_entries: correct ? 3 : 0 })
+            .update({ is_correct, raffle_entries })
             .eq('id', entry.id)
         }
       }

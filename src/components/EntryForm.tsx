@@ -34,6 +34,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [pick, setPick] = useState<'home' | 'draw' | 'away' | null>(null)
+  const [homeScorePred, setHomeScorePred] = useState<number | null>(null)
+  const [awayScorePred, setAwayScorePred] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -113,6 +115,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           code: dailyCode,
           is_demo: isDemo,
           honeypot,
+          home_score_pred: homeScorePred,
+          away_score_pred: awayScorePred,
         })
       })
       const data = await res.json()
@@ -199,8 +203,18 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
         {!isDemo && (
           <div className="slide-up-delay" style={{ marginBottom: 14 }}>
             <div className="card" style={{ background: 'linear-gradient(135deg, #1a1200, #111)', border: '1px solid rgba(245,197,24,0.25)', padding: '14px 16px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--gold)', letterSpacing: 2 }}>+3</div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 6 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+1</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>correct result</div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 20, color: 'var(--text-muted)', alignSelf: 'center' }}>+</div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+2</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>exact score</div>
+                </div>
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
                 {t.raffleEntriesIfCorrect}
               </div>
             </div>
@@ -426,6 +440,47 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 </button>
               ))}
             </div>
+
+            {pick && (
+              <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 10 }}>
+                  🎯 Predict the score <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 10 }}>— optional, +2 bonus if exact</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{match.home_flag} {match.home_team}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button type="button" onClick={() => setHomeScorePred(h => Math.max(0, (h ?? 0) - 1))}
+                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>−</button>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, minWidth: 32, textAlign: 'center', color: 'var(--text)' }}>
+                        {homeScorePred ?? '—'}
+                      </div>
+                      <button type="button" onClick={() => setHomeScorePred(h => Math.min(20, (h ?? -1) + 1))}
+                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>+</button>
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-muted)', paddingTop: 20 }}>–</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{match.away_flag} {match.away_team}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button type="button" onClick={() => setAwayScorePred(a => Math.max(0, (a ?? 0) - 1))}
+                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>−</button>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, minWidth: 32, textAlign: 'center', color: 'var(--text)' }}>
+                        {awayScorePred ?? '—'}
+                      </div>
+                      <button type="button" onClick={() => setAwayScorePred(a => Math.min(20, (a ?? -1) + 1))}
+                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>+</button>
+                    </div>
+                  </div>
+                </div>
+                {(homeScorePred !== null || awayScorePred !== null) && (
+                  <button type="button" onClick={() => { setHomeScorePred(null); setAwayScorePred(null) }}
+                    style={{ display: 'block', margin: '10px auto 0', background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, cursor: 'pointer' }}>
+                    Clear score prediction
+                  </button>
+                )}
+              </div>
+            )}
 
             {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}
             <button className="btn btn-primary" disabled={!canSubmit} onClick={handleSubmit}>

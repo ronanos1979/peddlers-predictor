@@ -20,6 +20,8 @@ type EntryWithMatch = {
   raffle_entries: number
   created_at: string
   pub_id: string
+  home_score_pred: number | null
+  away_score_pred: number | null
   matches: {
     home_team: string
     away_team: string
@@ -28,6 +30,8 @@ type EntryWithMatch = {
     kickoff_at: string
     stage: string
     result: string | null
+    home_score: number | null
+    away_score: number | null
   }
 }
 
@@ -228,16 +232,27 @@ function MyPicksContent() {
                   <div style={{
                     marginTop: 10, padding: '8px 12px',
                     background: 'var(--gray-bg)', borderRadius: 8,
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    flexWrap: 'wrap', gap: 6
                   }}>
                     <div>
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.yourPick}: </span>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(e.pick, m)}</span>
+                      {e.home_score_pred != null && e.away_score_pred != null && (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
+                          ({e.home_score_pred}–{e.away_score_pred})
+                        </span>
+                      )}
                     </div>
                     {m.result && (
                       <div>
                         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.result}: </span>
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(m.result, m)}</span>
+                        {m.home_score != null && m.away_score != null && (
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
+                            ({m.home_score}–{m.away_score})
+                          </span>
+                        )}
                       </div>
                     )}
                     {e.raffle_entries > 0 && (

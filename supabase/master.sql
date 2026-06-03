@@ -1,7 +1,7 @@
 -- =============================================================
 -- PEDDLER'S PREDICTOR — MASTER SQL
 -- Run this once on a fresh Supabase project (or local Postgres)
--- Last updated: May 30 2026
+-- Last updated: June 3 2026
 -- =============================================================
 
 -- =============================================================
@@ -31,21 +31,25 @@ create table if not exists matches (
   stage            text not null default 'Group Stage',
   result           text check (result in ('home','draw','away')) default null,
   is_active        boolean not null default false,
-  venue            text default null  -- e.g. 'MetLife Stadium, East Rutherford, NJ'
+  venue            text default null,  -- e.g. 'MetLife Stadium, East Rutherford, NJ'
+  home_score       integer default null,
+  away_score       integer default null
 );
 
 -- Entries
 create table if not exists entries (
-  id             uuid primary key default gen_random_uuid(),
-  pub_id         text references pubs(id),
-  match_id       uuid references matches(id),
-  name           text not null,
-  phone          text not null,
-  email          text default null,
-  pick           text not null check (pick in ('home','draw','away')),
-  is_correct     boolean default null,
-  raffle_entries integer not null default 0,
-  created_at     timestamptz not null default now(),
+  id               uuid primary key default gen_random_uuid(),
+  pub_id           text references pubs(id),
+  match_id         uuid references matches(id),
+  name             text not null,
+  phone            text not null,
+  email            text default null,
+  pick             text not null check (pick in ('home','draw','away')),
+  is_correct       boolean default null,
+  raffle_entries   integer not null default 0,
+  created_at       timestamptz not null default now(),
+  home_score_pred  integer default null,
+  away_score_pred  integer default null,
   unique(phone, match_id)
 );
 

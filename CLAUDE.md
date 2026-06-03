@@ -9,7 +9,7 @@ A World Cup 2026 prediction game web app for **The Peddler's Daughter** Irish pu
 
 | Layer | Tech |
 |-------|------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 15 (App Router) |
 | Language | TypeScript |
 | Database | Supabase (hosted Postgres) |
 | Hosting | Vercel (auto-deploys from GitHub on push to main) |
@@ -64,12 +64,14 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - `kickoff_at`, `entries_close_at` (timestamptz, UTC)
 - `stage` (Group A–L, Round of 32, Round of 16, Quarter Final, Semi Final, Third Place, Final, Demo Match)
 - `result` (home/draw/away or null), `is_active` (boolean)
+- `home_score`, `away_score` (integer, null until result set by admin)
 - All 104 World Cup 2026 matches pre-loaded. entries_close_at = kickoff + 105 minutes.
 
 **entries**
 - `id`, `pub_id`, `match_id`, `name`, `phone`, `email` (nullable)
 - `pick` (home/draw/away), `is_correct` (boolean, null until result set)
-- `raffle_entries` (0 or 3), `created_at`
+- `raffle_entries` (0, 1, or 3), `created_at`
+- `home_score_pred`, `away_score_pred` (integer, nullable — patron's optional score guess)
 - Unique constraint: (phone, match_id) — one entry per person per match
 
 **scorer_picks**
@@ -106,6 +108,7 @@ src/
 │   ├── schedule/page.tsx           # All 104 matches grouped by date
 │   ├── demo/page.tsx               # USA vs Ireland demo match (always open)
 │   ├── my-picks/page.tsx           # Patron looks up their picks by phone number
+│   ├── overall-picks/page.tsx      # Community picks — all 104 matches with pick bars and results
 │   ├── rules/page.tsx              # Full rules and instructions
 │   ├── locations/page.tsx          # Pub addresses, maps, social links
 │   ├── admin/page.tsx              # Admin panel — set results, view entrants, stats, feedback
@@ -141,7 +144,7 @@ src/
     ├── goldenBootContenders.ts     # Pre-seeded top-10 Golden Boot picks (shown pre-tournament)
     ├── rateLimit.ts                # In-memory rate limiter (checkRateLimit, getIp)
     ├── pubData.ts                  # Pub info constants (address, phone, social links, coords)
-    ├── matchSchedule.ts            # getDailyCode(), isMatchLive(), selectActiveMatch()
+    ├── matchSchedule.ts            # getDailyCode(), isMatchLive(), selectActiveMatch(), getPredictableWindowEnd()
     ├── geo.ts                      # distanceMetres(), getPosition()
     ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron()
     ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
@@ -159,17 +162,23 @@ Auto-generated — no admin action needed. Format: `peddlers` + day of month.
 - Yesterday's code also accepted (for late-night matches crossing midnight)
 - Code validated server-side in `/api/entries/route.ts` via `getDailyCode()`
 
-### Match activation
+### Match activation and prediction window
 Fully automatic based on datetime — no admin needed:
-- Match activates at `kickoff_at`
-- Entries close at `entries_close_at` (kickoff + 105 minutes)
-- Home page queries matches within ±110min window, picks the live or next upcoming one
+- **Entries close at `kickoff_at`** — predictions lock the moment the match starts
+- `entries_close_at` (kickoff + 105 min) is stored in DB but only used for display/legacy purposes
+- Home page shows all matches in the predictable window grouped by day
+- Before June 15 UTC: all matches kicking off before June 15 00:00 UTC are shown (group stage days 1–4)
+- From June 15 onwards: rolling 3-day window — today through today+2 (UTC)
+- `getPredictableWindowEnd(now)` in `src/lib/matchSchedule.ts` computes the upper bound
+- Already-picked matches stay visible at 55% opacity with a "✓ Picked" badge
 - Demo match (stage = 'Demo Match') is excluded from real match queries
 
 ### Scoring
-- Correct prediction → `is_correct = true`, `raffle_entries = 3`
+- Correct result only → `is_correct = true`, `raffle_entries = 1`
+- Correct result + exact score → `is_correct = true`, `raffle_entries = 3`
 - Wrong prediction → `is_correct = false`, `raffle_entries = 0`
-- Set via admin panel after each match → `/api/admin` with action `set_result`
+- Score prediction (`home_score_pred` / `away_score_pred`) is optional — patron enters via +/− steppers in the form
+- Set via admin panel after each match → `/api/admin` with action `set_result` (includes `home_score` and `away_score`)
 - Leaderboard ranks by total `raffle_entries` descending
 - **Golden Boot bonus**: 10 extra raffle entries if patron's Golden Boot pick is correct — set manually by admin after the Final
 
@@ -298,9 +307,12 @@ Print and laminate for tables:
 
 ### Admin panel features
 - **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
+  - Each match row has a result dropdown + optional score inputs (home − away) before confirming
+  - Scores saved to `matches.home_score` / `matches.away_score` and used to award +2 bonus points
 - **Entrants tab**: filterable by date, shows name/phone/email/pick/result, CSV export button
 - **Stats tab**: total entries, unique players, emails collected, bar chart by day split by pub
 - **Feedback tab**: bug reports and feedback from patrons, unread count badge, mark-as-read per item
+- **Raffle tab**: weighted draw — 1 ticket per correct result, 3 tickets if exact score also correct
 
 ---
 
@@ -312,7 +324,7 @@ npm run test:watch    # watch mode during development
 npm run test:coverage # coverage report
 ```
 
-### Test files (82 tests total)
+### Test files (106 tests total)
 | File | What it covers |
 |------|---------------|
 | `src/lib/__tests__/teamResolution.test.ts` | Name aliases, youth team filter, WC list resolution, search resolution, cache validation |

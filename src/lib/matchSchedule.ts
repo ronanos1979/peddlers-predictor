@@ -14,14 +14,14 @@ export function isMatchLive(kickoffAt: string): boolean {
 }
 
 // Returns the upper bound of matches users can currently predict on:
-// - Before June 15 UTC: no upper limit (all upcoming matches are open)
+// - Before June 15 UTC: matches through end of June 14 (kickoff < June 15 00:00 UTC)
 // - From June 15 onwards: end of day 3 days from today (today + 3 more = 4-day window)
 export function getPredictableWindowEnd(now: Date = new Date()): Date {
   const june15 = new Date('2026-06-15T00:00:00Z')
   if (now < june15) {
-    return new Date('2099-01-01T00:00:00Z')
+    return june15  // matches with kickoff before June 15 00:00 UTC
   }
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 4))
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 3))
 }
 
 // Returns the best match to show right now:

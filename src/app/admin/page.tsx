@@ -23,6 +23,7 @@ export default function AdminPage() {
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
   const [results, setResults] = useState<Record<string, 'home' | 'draw' | 'away'>>({})
+  const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({})
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState<'success' | 'error'>('success')
   const [stats, setStats] = useState<DayStat[]>([])
@@ -115,10 +116,20 @@ export default function AdminPage() {
   async function setResult(match: Match) {
     const result = results[match.id]
     if (!result) return
+    const matchScores = scores[match.id]
+    const homeScore = matchScores?.home !== '' && matchScores?.home != null ? parseInt(matchScores.home, 10) : null
+    const awayScore = matchScores?.away !== '' && matchScores?.away != null ? parseInt(matchScores.away, 10) : null
     const res = await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, action: 'set_result', payload: { match_id: match.id, result } })
+      body: JSON.stringify({
+        password, action: 'set_result',
+        payload: {
+          match_id: match.id, result,
+          home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
+          away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+        }
+      })
     })
     const data = await res.json()
     if (data.success) {
@@ -237,6 +248,7 @@ export default function AdminPage() {
   function MatchResultRow({ m }: { m: Match }) {
     const hasResult = !!m.result
     const isOpen = new Date(m.entries_close_at) > new Date()
+    const matchScores = scores[m.id] || { home: '', away: '' }
     return (
       <div className="admin-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 160 }}>
@@ -250,23 +262,44 @@ export default function AdminPage() {
           {hasResult && (
             <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 2 }}>
               ✓ {m.result === 'home' ? `${m.home_team} win` : m.result === 'away' ? `${m.away_team} win` : 'Draw'}
+              {m.home_score != null && m.away_score != null && (
+                <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>
+                  ({m.home_score}–{m.away_score})
+                </span>
+              )}
             </div>
           )}
         </div>
         {!hasResult && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <select value={results[m.id] || ''}
-              onChange={e => setResults(prev => ({ ...prev, [m.id]: e.target.value as 'home' | 'draw' | 'away' }))}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13 }}>
-              <option value="">Result…</option>
-              <option value="home">{m.home_flag} {m.home_team} win</option>
-              <option value="draw">Draw</option>
-              <option value="away">{m.away_flag} {m.away_team} win</option>
-            </select>
-            <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13 }}
-              disabled={!results[m.id]} onClick={() => setResult(m)}>
-              Confirm
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <select value={results[m.id] || ''}
+                onChange={e => setResults(prev => ({ ...prev, [m.id]: e.target.value as 'home' | 'draw' | 'away' }))}
+                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13 }}>
+                <option value="">Result…</option>
+                <option value="home">{m.home_flag} {m.home_team} win</option>
+                <option value="draw">Draw</option>
+                <option value="away">{m.away_flag} {m.away_team} win</option>
+              </select>
+              <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13 }}
+                disabled={!results[m.id]} onClick={() => setResult(m)}>
+                Confirm
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Score (optional):</span>
+              <input
+                type="number" min="0" max="20" value={matchScores.home}
+                onChange={e => setScores(prev => ({ ...prev, [m.id]: { ...matchScores, home: e.target.value } }))}
+                placeholder="0" style={{ width: 44, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13, textAlign: 'center' }}
+              />
+              <span style={{ color: 'var(--text-muted)' }}>–</span>
+              <input
+                type="number" min="0" max="20" value={matchScores.away}
+                onChange={e => setScores(prev => ({ ...prev, [m.id]: { ...matchScores, away: e.target.value } }))}
+                placeholder="0" style={{ width: 44, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13, textAlign: 'center' }}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -630,7 +663,7 @@ export default function AdminPage() {
               How it works
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-              Each correct prediction earns <strong style={{ color: 'var(--gold)' }}>3 raffle tickets</strong>. The draw is weighted — more correct picks = more tickets = better odds. Wrong picks earn 0 tickets. Draw 1st, 2nd, and 3rd place winners.
+              Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Wrong = 0 tickets. The draw is weighted — more tickets = better odds. Draw 1st, 2nd, and 3rd place winners.
             </p>
           </div>
 
