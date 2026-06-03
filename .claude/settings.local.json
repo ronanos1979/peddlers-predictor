@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm audit *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('next:', p.dependencies.next\\); console.log\\('react:', p.dependencies.react\\)\")",
+      "Bash(npm show *)",
+      "Bash(npm install *)",
+      "Bash(npm ls *)",
+      "Bash(npm test *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

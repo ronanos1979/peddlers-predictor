@@ -1,13 +1,15 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { type Match } from '@/lib/supabase'
 import EntryForm from '@/components/EntryForm'
 import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
-export default function DemoPage({ searchParams }: { searchParams: { pub?: string } }) {
+function DemoContent() {
   const { t } = useLocale()
-  const pubId = searchParams.pub || 'haverhill'
+  const searchParams = useSearchParams()
+  const pubId = searchParams.get('pub') || 'haverhill'
   const [demoMatch, setDemoMatch] = useState<Match | null>(null)
   const [error, setError] = useState('')
 
@@ -57,4 +59,8 @@ export default function DemoPage({ searchParams }: { searchParams: { pub?: strin
       </Link>
     </div>
   )
+}
+
+export default function DemoPage() {
+  return <Suspense><DemoContent /></Suspense>
 }

@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
@@ -9,6 +9,7 @@ import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
+
 
 type RivalryTotals = {
   entries: number
@@ -358,10 +359,12 @@ function PubRivalry({
   )
 }
 
-export default function Home({ searchParams }: { searchParams: { pub?: string } }) {
+function HomeContent() {
   const { t } = useLocale()
   const router = useRouter()
-  const pubId = (searchParams.pub && PUB_DATA[searchParams.pub]) ? searchParams.pub : ''
+  const searchParams = useSearchParams()
+  const pubParam = searchParams.get('pub')
+  const pubId = (pubParam && PUB_DATA[pubParam]) ? pubParam : ''
   const [selectedPub, setSelectedPub] = useState(pubId)
   const pub: PubInfo | null = selectedPub ? PUB_DATA[selectedPub] : null
   const [match, setMatch] = useState<Match | null>(null)
@@ -632,4 +635,8 @@ export default function Home({ searchParams }: { searchParams: { pub?: string } 
       <ShareCard />
     </div>
   )
+}
+
+export default function Home() {
+  return <Suspense><HomeContent /></Suspense>
 }

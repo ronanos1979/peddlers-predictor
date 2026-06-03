@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { supabase, type Match } from '@/lib/supabase'
 import Link from 'next/link'
@@ -59,10 +60,11 @@ function isImageSrc(value?: string) {
   return !!value && /^https?:\/\//.test(value)
 }
 
-export default function TeamPage({ searchParams }: { searchParams: { id?: string; name?: string } }) {
+function TeamContent() {
   const { t } = useLocale()
-  const teamId = searchParams.id
-  const teamName = searchParams.name
+  const searchParams = useSearchParams()
+  const teamId = searchParams.get('id') ?? undefined
+  const teamName = searchParams.get('name') ?? undefined
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null)
   const [squad, setSquad] = useState<Player[]>([])
   const [coach, setCoach] = useState<Coach | null>(null)
@@ -610,4 +612,8 @@ export default function TeamPage({ searchParams }: { searchParams: { id?: string
       </div>
     </div>
   )
+}
+
+export default function TeamPage() {
+  return <Suspense><TeamContent /></Suspense>
 }

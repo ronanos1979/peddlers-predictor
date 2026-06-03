@@ -1,178 +1,176 @@
-# 🍺 Peddler's Predictor — World Cup 2026
+# Local Windows 11 Setup
 
-A live match prediction game for **The Peddler's Daughter** pubs in Haverhill, MA and Nashua, NH. Patrons scan a QR code at the bar, predict World Cup match results, and compete on a live leaderboard for a TV giveaway at the end of the tournament (July 19, 2026).
+These instructions run the app locally on Windows 11, use a local Supabase database, and still make external calls to the football APIs.
 
----
+## Prerequisites
 
-## Live URLs
-
-| Purpose | URL |
-|---------|-----|
-| Haverhill entry | `https://peddlers-predictor.vercel.app/?pub=haverhill` |
-| Nashua entry | `https://peddlers-predictor.vercel.app/?pub=nashua` |
-| Admin panel | `https://peddlers-predictor.vercel.app/admin` |
-| Leaderboard | `https://peddlers-predictor.vercel.app/leaderboard` |
-| Bracket | `https://peddlers-predictor.vercel.app/world-cup/bracket` |
-| Standings | `https://peddlers-predictor.vercel.app/world-cup/standings` |
-| Feedback | `https://peddlers-predictor.vercel.app/feedback` |
-
----
-
-## Quick Start (Local Development)
-
-### Prerequisites
-- Node.js 18+ (`node --version` to check)
-- A Supabase project (see [docs/SETUP.md](docs/SETUP.md))
-- An API-Football v3 key (api-football.com, free tier — 100 req/day)
+- Windows 11 with PowerShell
 - Git
+- Node.js 20 LTS or newer
+- Docker Desktop with WSL 2 enabled and Docker running
+- An API-Football key from `api-football.com`
+- Optional: a football-data.org API key. When `FOOTBALL_DATA_API_KEY` is set, the app uses football-data.org first for supported endpoints and falls back to API-Football.
 
-### Install and run
+Supabase local development is run through the Supabase CLI, which uses Docker containers. Current Supabase CLI docs: https://supabase.com/docs/guides/local-development/cli/getting-started
 
-```bash
+## First-Time Setup
+
+Open PowerShell.
+
+```powershell
 git clone https://github.com/ronanosullivan/peddlers-predictor.git
 cd peddlers-predictor
 npm install
-cp .env.example .env.local
-# Fill in .env.local with your keys (see docs/SETUP.md)
+```
+
+Start Docker Desktop before running Supabase.
+
+If `supabase\config.toml` does not exist yet, initialize the local Supabase config:
+
+```powershell
+npx supabase init
+```
+
+Start the local Supabase stack:
+
+```powershell
+npx supabase start
+```
+
+The first start can take several minutes because Docker images are downloaded. When it finishes, copy these values from the terminal output:
+
+- `Project URL`
+- `Publishable` key
+- `Secret` key
+- `Studio` URL
+
+Create the local environment file:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Edit `.env.local` so it uses the local Supabase stack and real external football API keys:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key from npx supabase start>
+SUPABASE_SECRET_KEY=<secret key from npx supabase start>
+ADMIN_PASSWORD=<local admin password>
+
+API_FOOTBALL_KEY=<your api-football.com key>
+FOOTBALL_DATA_API_KEY=<optional football-data.org key>
+```
+
+Do not use hosted Supabase values in `.env.local` if you want the app to use the local database.
+
+## Create the Local Database Schema
+
+Open Supabase Studio from the `Studio` URL printed by `npx supabase start`. It is usually:
+
+```text
+http://127.0.0.1:54323
+```
+
+In Studio:
+
+1. Open `SQL Editor`.
+2. Open `supabase\master.sql` from this repo.
+3. Paste the full SQL into the SQL editor.
+4. Run it once.
+
+This creates the local tables, policies, pubs, demo match, World Cup match schedule, and leaderboard view.
+
+## Run the App
+
+Keep Docker Desktop and local Supabase running, then start Next.js:
+
+```powershell
 npm run dev
 ```
 
-Open http://localhost:3000
+Open:
 
-### Run tests
-
-```bash
-npm test               # run all 82 tests
-npm run test:watch     # watch mode during development
-npm run test:coverage  # coverage report
+```text
+http://localhost:3000
 ```
 
-**Always run `npm test && npm run build` before pushing.**
+Useful local URLs:
 
----
-
-## Project Structure
-
-```
-peddlers-predictor/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx                         # Home — prediction entry, leaderboard, nav
-│   │   ├── layout.tsx                       # Root layout — header, footer
-│   │   ├── globals.css                      # All styles (dark theme, no Tailwind)
-│   │   ├── feedback/page.tsx                # Bug report / feedback form
-│   │   ├── leaderboard/page.tsx             # Live leaderboard
-│   │   ├── schedule/page.tsx                # All 104 matches
-│   │   ├── my-picks/page.tsx                # Patron lookup by phone
-│   │   ├── demo/page.tsx                    # Demo prediction (no location check)
-│   │   ├── rules/page.tsx                   # Game rules
-│   │   ├── locations/page.tsx               # Pub info, maps, socials
-│   │   ├── admin/page.tsx                   # Admin panel (results, entrants, stats, feedback)
-│   │   ├── world-cup/
-│   │   │   ├── standings/page.tsx           # Group standings
-│   │   │   ├── results/page.tsx             # Match results
-│   │   │   ├── scorers/page.tsx             # Top scorers / Golden Boot race
-│   │   │   ├── bracket/page.tsx             # Knockout bracket
-│   │   │   ├── team/page.tsx                # Team profile (squad, coach, fixtures)
-│   │   │   └── top-scorer-pick/page.tsx     # Golden Boot prediction
-│   │   └── api/
-│   │       ├── entries/route.ts             # POST: submit match prediction
-│   │       ├── matches/route.ts             # GET: current active match
-│   │       ├── admin/route.ts               # POST: set results, mark feedback read
-│   │       ├── admin-data/route.ts          # GET: stats, entrants, feedback (auth)
-│   │       ├── feedback/route.ts            # POST: submit bug report/feedback
-│   │       ├── my-picks/route.ts            # GET: patron picks by phone
-│   │       ├── football/route.ts            # GET: API-Football proxy (5min cache)
-│   │       └── team/route.ts                # GET: team data (7-day Supabase cache)
-│   ├── components/
-│   │   ├── EntryForm.tsx                    # Match prediction form
-│   │   ├── LangSwitcher.tsx                 # EN/ES toggle
-│   │   ├── ShareCard.tsx                    # Social share card
-│   │   └── SiteFooter.tsx                   # Footer with Facebook + nav links
-│   └── lib/
-│       ├── supabase.ts                      # Browser Supabase client
-│       ├── supabaseAdmin.ts                 # Server Supabase client (secret key)
-│       ├── teamResolution.ts                # Team name→ID resolution (tested)
-│       ├── goldenBootContenders.ts          # Pre-seeded top 10 Golden Boot picks
-│       ├── pubData.ts                       # Pub addresses, phones, social URLs
-│       ├── matchSchedule.ts                 # Daily patron code, match activation logic
-│       ├── patron.ts                        # Cookie: save/load/clear patron
-│       ├── geo.ts                           # GPS distance calculation
-│       ├── i18n.ts                          # EN/ES translations
-│       └── useLocale.ts                     # Locale hook (reads peddlers_lang cookie)
-├── supabase/
-│   └── master.sql                           # Complete DB schema — run once on new project
-├── docs/
-│   ├── SETUP.md                             # Full deployment guide
-│   ├── DESIGN.md                            # Architecture and design decisions
-│   ├── OPERATIONS.md                        # Day-to-day admin during the tournament
-│   └── RAFFLE.md                            # TV raffle guide (July 19, 2026)
-├── .env.example                             # Environment variable template
-└── jest.config.ts                           # Jest configuration
+```text
+http://localhost:3000/?pub=haverhill
+http://localhost:3000/?pub=nashua
+http://localhost:3000/admin
+http://localhost:3000/leaderboard
+http://localhost:3000/world-cup/standings
 ```
 
----
+The app database reads and writes go to local Supabase. Football data endpoints still call the external APIs configured in `.env.local`.
 
-## Tech Stack
+## Stop and Restart
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 14 (App Router) |
-| Language | TypeScript |
-| Database | Supabase (hosted Postgres) |
-| Hosting | Vercel (auto-deploys from `main`) |
-| Styling | Custom CSS — no Tailwind, no Bootstrap |
-| Football data | API-Football v3 |
-| Testing | Jest + ts-jest |
+Stop the Next.js dev server with `Ctrl+C`.
 
----
+Stop Supabase without deleting local data:
 
-## Tests
+```powershell
+npx supabase stop
+```
 
-82 tests across 6 suites — run with `npm test`.
+Start Supabase again later:
 
-| Suite | What it covers |
-|-------|---------------|
-| `teamResolution.test.ts` | Name aliases, youth filter, WC list resolution, Israel/France/U17 regressions |
-| `resolution.test.ts` | Regression: USA ≠ France (id 2), USA ≠ Israel, USA ≠ U17 |
-| `goldenBootContenders.test.ts` | Contender list — 10 players, required fields, no duplicates, WC nations |
-| `feedback/route.test.ts` | POST validation, Supabase insert, truncation |
-| `admin/auth.test.ts` | Password auth, mark_feedback_read |
-| `my-picks/route.test.ts` | Entries + stats response, scorerPick included/null |
+```powershell
+npx supabase start
+```
 
----
+Then restart the app:
 
-## Security
+```powershell
+npm run dev
+```
 
-- `.env.local` is in `.gitignore` — keys never go to GitHub
-- `SUPABASE_SECRET_KEY` is server-side only (API routes), never in the browser
-- Row Level Security enabled on all Supabase tables
-- Admin panel is password-protected (`ADMIN_PASSWORD` env var)
-- Feedback readable only via service key (no public RLS read policy)
-- Entry validation: patron code + optional geolocation
-- One entry per phone number per match (unique constraint)
+## Update the Local Code
 
----
+From the repo folder:
 
-## Tournament Dates
+```powershell
+git pull
+npm install
+```
 
-| Stage | Dates |
-|-------|-------|
-| Group stage | June 11 – June 27, 2026 |
-| Round of 32 | June 28 – July 4, 2026 |
-| Round of 16 | July 4 – July 8, 2026 |
-| Quarter Finals | July 10 – July 12, 2026 |
-| Semi Finals | July 14 – July 15, 2026 |
-| Final | **July 19, 2026** — MetLife Stadium, NJ |
+If dependencies changed, restart the Next.js dev server:
 
----
+```powershell
+npm run dev
+```
 
-## Documentation
+If Supabase SQL changed and you want to refresh your local database, open Studio and run `supabase\master.sql` again.
 
-| Document | Purpose |
-|----------|---------|
-| [docs/SETUP.md](docs/SETUP.md) | Full deployment guide — Supabase, Vercel, env vars |
-| [docs/DESIGN.md](docs/DESIGN.md) | Architecture, API-Football integration, caching strategy |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | How to run the app day-to-day during the tournament |
-| [docs/RAFFLE.md](docs/RAFFLE.md) | How to run the TV raffle on July 19 |
-| [CLAUDE.md](CLAUDE.md) | Developer context for AI-assisted coding |
+Important: `supabase\master.sql` deletes non-demo rows from `matches` before re-inserting the match schedule. Back up any local match edits first if you need to keep them.
+
+## Reset the Local Supabase Database
+
+Use this when you want a clean local database.
+
+```powershell
+npx supabase stop --no-backup
+npx supabase start
+```
+
+Then run `supabase\master.sql` again in Supabase Studio.
+
+## Verify
+
+Run tests:
+
+```powershell
+npm test
+```
+
+Build locally:
+
+```powershell
+npm run build
+```
+
+Use both before pushing changes.

@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
@@ -14,9 +15,10 @@ type LiveScorer = {
 
 const TOP_CONTENDERS = GOLDEN_BOOT_CONTENDERS
 
-export default function TopScorerPickPage({ searchParams }: { searchParams: { pub?: string } }) {
+function TopScorerPickContent() {
   const { t } = useLocale()
-  const pubId = searchParams.pub || 'haverhill'
+  const searchParams = useSearchParams()
+  const pubId = searchParams.get('pub') || 'haverhill'
 
   const [search, setSearch]           = useState('')
   const [customTeam, setCustomTeam]   = useState('')
@@ -323,4 +325,8 @@ function PlayerCard({
       {isSelected && <div style={{ color: 'var(--gold)', fontSize: 20, flexShrink: 0 }}>✓</div>}
     </div>
   )
+}
+
+export default function TopScorerPickPage() {
+  return <Suspense><TopScorerPickContent /></Suspense>
 }

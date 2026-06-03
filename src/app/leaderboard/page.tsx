@@ -1,17 +1,20 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase, type Entry, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
+
 
 type LeaderEntry = {
   name: string; pub_id: string; total_pts: number
   correct: number; total: number; last_pick: string; last_correct: boolean | null
 }
 
-export default function Leaderboard({ searchParams }: { searchParams: { pub?: string } }) {
+function LeaderboardContent() {
   const { t } = useLocale()
-  const pubId = searchParams.pub
+  const searchParams = useSearchParams()
+  const pubId = searchParams.get('pub')
   const [entries, setEntries] = useState<LeaderEntry[]>([])
   const [match, setMatch] = useState<Match | null>(null)
   const [filter, setFilter] = useState<'all' | 'this_pub'>('all')
@@ -124,4 +127,8 @@ export default function Leaderboard({ searchParams }: { searchParams: { pub?: st
       </Link>
     </div>
   )
+}
+
+export default function Leaderboard() {
+  return <Suspense><LeaderboardContent /></Suspense>
 }

@@ -1,14 +1,16 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type GroupedMatches = Record<string, Match[]>
 
-export default function SchedulePage({ searchParams }: { searchParams: { pub?: string } }) {
+function ScheduleContent() {
   const { t } = useLocale()
-  const pubId = searchParams.pub || 'haverhill'
+  const searchParams = useSearchParams()
+  const pubId = searchParams.get('pub') || 'haverhill'
   const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -206,4 +208,8 @@ export default function SchedulePage({ searchParams }: { searchParams: { pub?: s
       </div>
     </div>
   )
+}
+
+export default function SchedulePage() {
+  return <Suspense><ScheduleContent /></Suspense>
 }

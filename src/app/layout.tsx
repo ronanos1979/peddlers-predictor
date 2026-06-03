@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import LangSwitcher from '@/components/LangSwitcher'
@@ -8,6 +8,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: "Peddler's Predictor — World Cup 2026",
   description: "Predict World Cup results at The Peddler's Daughter and win a TV!",
+}
+
+export const viewport: Viewport = {
   themeColor: '#0a0a0a',
 }
 

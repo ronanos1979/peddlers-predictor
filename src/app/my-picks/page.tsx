@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
@@ -38,10 +39,12 @@ type Stats = {
 }
 type ScorerPick = { player_name: string; player_team: string }
 
-export default function MyPicksPage({ searchParams }: { searchParams: { phone?: string } }) {
+function MyPicksContent() {
   const { t } = useLocale()
-  const [phone, setPhone] = useState(searchParams.phone || '')
-  const [searched, setSearched] = useState(!!searchParams.phone)
+  const searchParams = useSearchParams()
+  const phoneParam = searchParams.get('phone')
+  const [phone, setPhone] = useState(phoneParam || '')
+  const [searched, setSearched] = useState(!!phoneParam)
   const [entries, setEntries] = useState<EntryWithMatch[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [scorerPick, setScorerPick] = useState<ScorerPick | null>(null)
@@ -70,7 +73,7 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
 
   // Auto-lookup: from URL param first, then patron cookie
   useEffect(() => {
-    if (searchParams.phone) { lookup(searchParams.phone); return }
+    if (phoneParam) { lookup(phoneParam); return }
     const patron = loadPatron()
     if (patron?.phone) {
       setPhone(patron.phone)
@@ -256,4 +259,8 @@ export default function MyPicksPage({ searchParams }: { searchParams: { phone?: 
       </Link>
     </div>
   )
+}
+
+export default function MyPicksPage() {
+  return <Suspense><MyPicksContent /></Suspense>
 }
