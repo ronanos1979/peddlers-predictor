@@ -53,6 +53,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
     if (patron) {
       setName(patron.name)
       setPhone(patron.phone)
+      if (patron.email) setEmail(patron.email)
       setReturningPatron(firstName(patron.name))
     }
   }, [])
@@ -124,7 +125,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
 
       // Save patron cookie on successful entry
       if (!isDemo) {
-        savePatron({ name, phone, pub_id: pubId })
+        savePatron({ name, phone, pub_id: pubId, email: email || undefined })
       }
 
       if (!isDemo) {
