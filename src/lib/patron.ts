@@ -8,6 +8,7 @@ export type PatronCookie = {
   name: string
   phone: string
   pub_id?: string
+  email?: string
 }
 
 export function savePatron(data: PatronCookie) {
