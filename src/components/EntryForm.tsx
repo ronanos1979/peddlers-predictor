@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
-import { getDailyCode } from '@/lib/matchSchedule'
+import { getDailyCode, isValidOverrideCode } from '@/lib/matchSchedule'
 import { savePatron, loadPatron, firstName } from '@/lib/patron'
 import Flag from '@/components/Flag'
 import { useLocale } from '@/lib/useLocale'
@@ -29,7 +29,9 @@ function isValidPhone(raw: string): boolean {
 
 export default function EntryForm({ pubId, match, pub, isDemo = false, onComplete }: Props) {
   const { t } = useLocale()
-  const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'fail'>('checking')
+  const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'fail' | 'geo_blocked'>('checking')
+  const [overrideCode, setOverrideCode] = useState('')
+  const [overrideError, setOverrideError] = useState('')
   const [geoMessage, setGeoMessage] = useState(t.checkingLocation)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -92,8 +94,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
         setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist))))
       }
     } catch {
-      setGeoStatus('ok')
-      setGeoMessage(t.pubCodeRequired)
+      setGeoStatus('geo_blocked')
+      setGeoMessage(t.geoUnavailable)
     }
   }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationDistanceFail, t.pubCodeRequired])
 
@@ -101,7 +103,17 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
 
   const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
-  const canSubmit = name && phone && phoneValid && pick && geoStatus !== 'fail' && !isClosed && !submitting
+  const canSubmit = name && phone && phoneValid && pick && geoStatus === 'ok' && !isClosed && !submitting
+
+  function handleOverrideCode() {
+    if (isValidOverrideCode(overrideCode)) {
+      setGeoStatus('ok')
+      setGeoMessage(`📍 ${t.locationVerified}`)
+      setOverrideError('')
+    } else {
+      setOverrideError(t.invalidAccessCode)
+    }
+  }
 
   async function handleSubmit() {
     setError('')
@@ -384,6 +396,35 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             <div className={`geo-dot ${geoStatus}`} />
             <span>{geoMessage}</span>
           </div>
+
+          {geoStatus === 'geo_blocked' && (
+            <div className="card" style={{ marginBottom: 12 }}>
+              <div className="field" style={{ marginBottom: overrideError ? 6 : 0 }}>
+                <label>{t.accessCode}</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={overrideCode}
+                    onChange={e => { setOverrideCode(e.target.value); setOverrideError('') }}
+                    placeholder={t.accessCodePlaceholder}
+                    onKeyDown={e => e.key === 'Enter' && handleOverrideCode()}
+                    style={{ flex: 1 }}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleOverrideCode}
+                    style={{ flexShrink: 0, paddingInline: 16 }}
+                  >
+                    {t.verifyCode}
+                  </button>
+                </div>
+              </div>
+              {overrideError && (
+                <p className="error" style={{ marginBottom: 0 }}>{overrideError}</p>
+              )}
+            </div>
+          )}
 
           <div className="card">
             {/* Honeypot — hidden from humans, bots fill it */}

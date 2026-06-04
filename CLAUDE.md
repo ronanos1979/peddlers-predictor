@@ -29,10 +29,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://eksoaxfzxbhudnfcktjm.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
 ADMIN_PASSWORD=...
-FOOTBALL_DATA_API_KEY=...   # football-data.org — primary football data source
-API_FOOTBALL_KEY=...         # API-Football — fallback + player photos source
-RESEND_API_KEY=...           # Resend — email reminders (optional)
-RESEND_FROM_EMAIL=...        # From address for reminder emails (optional, has default)
+FOOTBALL_DATA_API_KEY=...        # football-data.org — primary football data source
+API_FOOTBALL_KEY=...              # API-Football — fallback + player photos source
+RESEND_API_KEY=...               # Resend — email reminders (optional)
+RESEND_FROM_EMAIL=...            # From address for reminder emails (optional, has default)
+NEXT_PUBLIC_DAILY_CODE_PREFIX=...  # Prefix for daily patron codes — NEXT_PUBLIC_ required for client use
 ```
 
 Same variables must be set in Vercel dashboard (Settings → Environment Variables).
@@ -193,7 +194,11 @@ Fully automatic based on datetime — no admin needed:
 
 ### Geolocation
 - Browser GPS check against pub lat/lng + radius_m (300m)
-- Best-effort — if GPS denied or fails, falls back to code-only verification
+- If GPS is denied or unavailable: form shows an access code input — patron must enter a valid code to proceed
+  - Validated client-side via `isValidOverrideCode()` in `src/lib/matchSchedule.ts` (case-insensitive, accepts today's or yesterday's code)
+  - On success: `geoStatus` advances to `'ok'` and the form unlocks
+  - The code prefix is controlled by `NEXT_PUBLIC_DAILY_CODE_PREFIX` env var — must be set in `.env.local` and Vercel
+- `geoStatus` type: `'checking' | 'ok' | 'fail' | 'geo_blocked'` — submit is only enabled when status is `'ok'`
 - Demo page skips geo check entirely
 
 ### Cookie persistence

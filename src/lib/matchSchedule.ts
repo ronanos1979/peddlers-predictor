@@ -1,8 +1,19 @@
-// Returns the daily patron code based on current date
-// Format: peddlers + day-of-month, e.g. peddlers27 on June 27th
+// Returns the daily patron code based on current date.
+// Prefix comes from NEXT_PUBLIC_DAILY_CODE_PREFIX env var (falls back to 'peddlers').
 export function getDailyCode(date: Date = new Date()): string {
+  const prefix = (process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX || 'peddlers').toLowerCase()
   const day = date.getDate()
-  return `peddlers${day}`
+  return `${prefix}${day}`
+}
+
+// Returns true if the supplied code matches today's (or yesterday's) daily code,
+// case-insensitively. Used to validate the geo-override access code entered by patrons.
+export function isValidOverrideCode(code: string, date: Date = new Date()): boolean {
+  const normalised = code.trim().toLowerCase()
+  if (!normalised) return false
+  const yesterday = new Date(date)
+  yesterday.setDate(yesterday.getDate() - 1)
+  return normalised === getDailyCode(date) || normalised === getDailyCode(yesterday)
 }
 
 // Returns true if the current time is between a match's kickoff and 90 mins after

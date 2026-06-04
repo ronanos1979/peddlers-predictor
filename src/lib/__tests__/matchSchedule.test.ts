@@ -1,4 +1,4 @@
-import { getDailyCode, isMatchLive, getPredictableWindowEnd } from '../matchSchedule'
+import { getDailyCode, isMatchLive, getPredictableWindowEnd, isValidOverrideCode } from '../matchSchedule'
 
 // ─── Rule: Timing — rolling 4-day window ────────────────────────────────────
 describe('getPredictableWindowEnd — rolling 4-day window', () => {
@@ -90,9 +90,67 @@ describe('isMatchLive — predictions close at kick-off', () => {
 
 // ─── Daily code format ───────────────────────────────────────────────────────
 describe('getDailyCode', () => {
-  it('returns peddlers + day-of-month', () => {
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX
+  })
+
+  it('falls back to "peddlers" prefix when env var is unset', () => {
+    delete process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX
     expect(getDailyCode(new Date('2026-06-11T12:00:00Z'))).toBe('peddlers11')
     expect(getDailyCode(new Date('2026-07-19T12:00:00Z'))).toBe('peddlers19')
     expect(getDailyCode(new Date('2026-06-27T12:00:00Z'))).toBe('peddlers27')
+  })
+
+  it('uses env var prefix when set', () => {
+    process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX = 'testpub'
+    expect(getDailyCode(new Date('2026-06-03T12:00:00Z'))).toBe('testpub3')
+  })
+
+  it('normalises env var prefix to lowercase', () => {
+    process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX = 'PEDDLERS'
+    expect(getDailyCode(new Date('2026-06-11T12:00:00Z'))).toBe('peddlers11')
+  })
+})
+
+// ─── Override code validation ────────────────────────────────────────────────
+describe('isValidOverrideCode', () => {
+  const TODAY = new Date('2026-06-03T18:00:00')
+
+  beforeEach(() => {
+    delete process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX
+  })
+
+  it('accepts exact lowercase match for today', () => {
+    expect(isValidOverrideCode('peddlers3', TODAY)).toBe(true)
+  })
+
+  it('accepts mixed-case match (case-insensitive)', () => {
+    expect(isValidOverrideCode('Peddlers3', TODAY)).toBe(true)
+    expect(isValidOverrideCode('PEDDLERS3', TODAY)).toBe(true)
+  })
+
+  it('accepts yesterday\'s code (cross-midnight grace)', () => {
+    expect(isValidOverrideCode('peddlers2', TODAY)).toBe(true)
+  })
+
+  it('rejects a wrong day', () => {
+    expect(isValidOverrideCode('peddlers4', TODAY)).toBe(false)
+    expect(isValidOverrideCode('peddlers1', TODAY)).toBe(false)
+  })
+
+  it('rejects an empty string', () => {
+    expect(isValidOverrideCode('', TODAY)).toBe(false)
+    expect(isValidOverrideCode('   ', TODAY)).toBe(false)
+  })
+
+  it('rejects a completely wrong value', () => {
+    expect(isValidOverrideCode('notacode', TODAY)).toBe(false)
+    expect(isValidOverrideCode('1234', TODAY)).toBe(false)
+  })
+
+  it('uses env var prefix when set', () => {
+    process.env.NEXT_PUBLIC_DAILY_CODE_PREFIX = 'Peddlers'
+    expect(isValidOverrideCode('peddlers3', TODAY)).toBe(true)
+    expect(isValidOverrideCode('otherpub3', TODAY)).toBe(false)
   })
 })
