@@ -1,0 +1,276 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { resolveFdTeamId, buildFdTeamData } from '@/lib/footballData'
+import { NAME_ALIASES, YOUTH_RE } from '@/lib/teamResolution'
+
+const AF_KEY       = process.env.API_FOOTBALL_KEY
+const AF_BASE      = 'https://v3.football.api-sports.io'
+const ADMIN_PW     = process.env.ADMIN_PASSWORD
+
+// Matches placeholder team names in knockout rounds
+const PLACEHOLDER_RE = /TBD|Winner|Runner|Place|R32 |QF[0-9]|SF[0-9]|Group [A-L] /
+
+function auth(pw: string | null): boolean {
+  return !!ADMIN_PW && pw === ADMIN_PW
+}
+
+async function afFetch(path: string, params: Record<string, string> = {}) {
+  if (!AF_KEY) throw new Error('NO_AF_KEY')
+  const url = new URL(`${AF_BASE}/${path}`)
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+  const res = await fetch(url.toString(), {
+    headers: { 'x-apisports-key': AF_KEY },
+    cache: 'no-store',
+  })
+  const data = await res.json()
+  if (data?.errors?.requests) throw new Error('AF_RATE_LIMIT')
+  return data
+}
+
+// ── GET — list all 48 teams with cache status ─────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  const pw = req.nextUrl.searchParams.get('password')
+  if (!auth(pw)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: matches } = await supabaseAdmin
+    .from('matches')
+    .select('home_team,home_flag,away_team,away_flag')
+    .neq('stage', 'Demo Match')
+
+  const teamMap = new Map<string, string>()
+  for (const m of (matches || [])) {
+    if (m.home_team && !PLACEHOLDER_RE.test(m.home_team)) teamMap.set(m.home_team, m.home_flag)
+    if (m.away_team && !PLACEHOLDER_RE.test(m.away_team)) teamMap.set(m.away_team, m.away_flag)
+  }
+  const teamNames = Array.from(teamMap.keys()).sort()
+
+  const { data: cacheRows } = await supabaseAdmin
+    .from('team_cache')
+    .select('team_name,fd_loaded,coach_name,coach_nationality,cached_at')
+
+  const cacheByName = new Map<string, { fd_loaded: boolean; coach_name: string | null; coach_nationality: string | null; cached_at: string }>()
+  for (const row of (cacheRows || [])) {
+    cacheByName.set(row.team_name.toLowerCase(), {
+      fd_loaded:        row.fd_loaded,
+      coach_name:       row.coach_name,
+      coach_nationality: row.coach_nationality,
+      cached_at:        row.cached_at,
+    })
+  }
+
+  const { data: playerRows } = await supabaseAdmin
+    .from('player_cache')
+    .select('team_name,photo_enriched,club_enriched')
+
+  const playerStats = new Map<string, { total: number; photos: number; clubs: number }>()
+  for (const p of (playerRows || [])) {
+    const key = p.team_name.toLowerCase()
+    if (!playerStats.has(key)) playerStats.set(key, { total: 0, photos: 0, clubs: 0 })
+    const s = playerStats.get(key)!
+    s.total++
+    if (p.photo_enriched) s.photos++
+    if (p.club_enriched)  s.clubs++
+  }
+
+  const teams = teamNames.map(name => {
+    const c  = cacheByName.get(name.toLowerCase())
+    const ps = playerStats.get(name.toLowerCase()) || { total: 0, photos: 0, clubs: 0 }
+    return {
+      name,
+      flag:              teamMap.get(name) || '',
+      fd_loaded:         c?.fd_loaded         || false,
+      coach_name:        c?.coach_name        || null,
+      coach_nationality: c?.coach_nationality || null,
+      cached_at:         c?.cached_at         || null,
+      player_count:      ps.total,
+      photo_count:       ps.photos,
+      club_count:        ps.clubs,
+    }
+  })
+
+  return NextResponse.json({ teams })
+}
+
+// ── POST — load_fd | enrich_af ────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  const body = await req.json() as { password?: string; action?: string; team_name?: string }
+
+  if (!auth(body.password || null)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!body.team_name) return NextResponse.json({ error: 'team_name required' }, { status: 400 })
+
+  if (body.action === 'load_fd')    return handleLoadFd(body.team_name)
+  if (body.action === 'enrich_af') return handleEnrichAf(body.team_name)
+  return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+}
+
+// ── load_fd: fetch from football-data.org, populate team_cache + player_cache ─
+
+async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
+  let fdId: number | null
+  try {
+    fdId = await resolveFdTeamId(scheduleName)
+  } catch (e) {
+    return NextResponse.json({ error: `FD resolve failed: ${(e as Error).message}` }, { status: 502 })
+  }
+  if (!fdId) {
+    return NextResponse.json({ error: `Cannot resolve "${scheduleName}" to a football-data.org team ID` }, { status: 404 })
+  }
+
+  let fdData
+  try {
+    fdData = await buildFdTeamData(fdId)
+  } catch (e) {
+    return NextResponse.json({ error: `FD fetch failed: ${(e as Error).message}` }, { status: 502 })
+  }
+  if (!fdData?.teamInfo) {
+    return NextResponse.json({ error: 'FD returned no team data' }, { status: 502 })
+  }
+
+  // Upsert team_cache — schedule name as team_name for direct ilike lookups
+  // Squad is NOT stored in the data blob — it lives in player_cache
+  await supabaseAdmin.from('team_cache').upsert({
+    team_id:           fdId,
+    team_name:         scheduleName,
+    data:              { teamInfo: fdData.teamInfo, coach: fdData.coach, fixtures: fdData.fixtures },
+    fd_loaded:         true,
+    coach_name:        fdData.coach?.name        || null,
+    coach_nationality: fdData.coach?.nationality || null,
+    cached_at:         new Date().toISOString(),
+  }, { onConflict: 'team_id' })
+
+  // Upsert each player — only structural fields; photo/club columns not in payload
+  // so ON CONFLICT DO UPDATE preserves any existing enrichment data
+  if (fdData.squad.length > 0) {
+    const now = new Date().toISOString()
+    const rows = fdData.squad.map(p => ({
+      fd_id:     p.id,
+      team_name: scheduleName,
+      name:      p.name,
+      age:       p.age,
+      number:    p.number,
+      position:  p.position,
+      cached_at: now,
+    }))
+    for (let i = 0; i < rows.length; i += 50) {
+      await supabaseAdmin.from('player_cache').upsert(rows.slice(i, i + 50), { onConflict: 'fd_id' })
+    }
+  }
+
+  return NextResponse.json({
+    success:      true,
+    fd_id:        fdId,
+    player_count: fdData.squad.length,
+    coach:        fdData.coach?.name || null,
+  })
+}
+
+// ── enrich_af: add photos + clubs from API-Football, respects 100/day limit ──
+
+async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
+  if (!AF_KEY) return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
+
+  const { data: players, error } = await supabaseAdmin
+    .from('player_cache')
+    .select('fd_id,name,age,number,position,photo,photo_enriched,club_enriched,af_id')
+    .ilike('team_name', scheduleName)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!players?.length) {
+    return NextResponse.json({ error: 'No players found — load FD data first' }, { status: 404 })
+  }
+
+  let photosAdded  = 0
+  let afRateLimited = false
+
+  // ── Step 1: Photo enrichment — 2 AF calls total ────────────────────────────
+  const needsPhotos = players.some(p => !p.photo_enriched)
+  if (needsPhotos) {
+    try {
+      const norm    = scheduleName.toLowerCase().trim()
+      const aliased = NAME_ALIASES[norm] || norm
+
+      const searchData = await afFetch('teams', { search: aliased })
+      const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
+      const seniors = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+      const afTeam = seniors.find(t => {
+        const n = t.team.name.toLowerCase()
+        return n === aliased || n === norm
+      }) || seniors[0]
+
+      if (afTeam) {
+        const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
+        const afPlayers = (squadData.response?.[0]?.players || []) as Array<{ id: number; name: string; photo: string }>
+
+        if (afPlayers.length > 0) {
+          const afByName = new Map<string, { id: number; photo: string }>()
+          afPlayers.forEach(p => { if (p.name) afByName.set(p.name.toLowerCase(), { id: p.id, photo: p.photo || '' }) })
+
+          const now = new Date().toISOString()
+          const upserts = players.map(player => {
+            const af       = afByName.get(player.name.toLowerCase())
+            const newPhoto = af?.photo && !player.photo ? af.photo : player.photo || ''
+            if (newPhoto && !player.photo) photosAdded++
+            return {
+              fd_id:          player.fd_id,
+              team_name:      scheduleName,
+              name:           player.name,
+              photo:          newPhoto,
+              photo_enriched: true,
+              af_id:          af?.id || player.af_id || null,
+              cached_at:      now,
+            }
+          })
+          await supabaseAdmin.from('player_cache').upsert(upserts, { onConflict: 'fd_id' })
+        }
+      }
+    } catch (e) {
+      if ((e as Error).message === 'AF_RATE_LIMIT') afRateLimited = true
+      else console.error('AF photo enrichment error:', e)
+    }
+  }
+
+  // ── Step 2: Club enrichment — 1 AF call per player with af_id ─────────────
+  let clubsAdded = 0
+  if (!afRateLimited) {
+    const { data: unenriched } = await supabaseAdmin
+      .from('player_cache')
+      .select('fd_id,af_id')
+      .ilike('team_name', scheduleName)
+      .eq('club_enriched', false)
+      .not('af_id', 'is', null)
+
+    const natLower = scheduleName.toLowerCase()
+
+    for (const player of (unenriched || [])) {
+      if (!player.af_id) continue
+      try {
+        const data  = await afFetch('players', { id: String(player.af_id), season: '2024' })
+        const stats = (data.response?.[0]?.statistics || []) as Array<{ team?: { name: string; logo?: string } }>
+        const club  = stats.find(s => s.team?.name && s.team.name.toLowerCase() !== natLower)
+        await supabaseAdmin
+          .from('player_cache')
+          .update({
+            club_name:    club?.team?.name  || null,
+            club_logo:    club?.team?.logo  || null,
+            club_enriched: true,
+          })
+          .eq('fd_id', player.fd_id)
+        if (club?.team?.name) clubsAdded++
+      } catch (e) {
+        if ((e as Error).message === 'AF_RATE_LIMIT') {
+          afRateLimited = true
+          break
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({
+    success:      true,
+    photos_added: photosAdded,
+    clubs_added:  clubsAdded,
+    rate_limited: afRateLimited,
+  })
+}

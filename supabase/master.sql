@@ -77,15 +77,39 @@ create table if not exists feedback (
   created_at timestamptz not null default now()
 );
 
--- Team data cache (populated by /api/team, refreshed weekly)
+-- Team data cache (populated by admin via /api/admin-teams load_fd action)
+-- team_name stores the schedule name (e.g. "USA") for direct ilike lookups
+-- Squad lives in player_cache, not the data blob
 create table if not exists team_cache (
-  team_id    integer primary key,
-  team_name  text not null,
-  data       jsonb not null,
-  cached_at  timestamptz not null default now()
+  team_id            integer      primary key,
+  team_name          text         not null,
+  data               jsonb        not null,
+  cached_at          timestamptz  not null default now(),
+  fd_loaded          boolean      not null default false,
+  coach_name         text,
+  coach_nationality  text
 );
 
 create index if not exists team_cache_name_idx on team_cache (team_name);
+
+-- Player cache: one row per player, structured, incremental AF enrichment
+create table if not exists player_cache (
+  fd_id          integer      primary key,
+  team_name      text         not null,   -- schedule name, e.g. "USA"
+  name           text         not null,
+  age            integer,
+  number         integer,
+  position       text,
+  photo          text         not null default '',
+  photo_enriched boolean      not null default false,
+  club_name      text,
+  club_logo      text,
+  club_enriched  boolean      not null default false,
+  af_id          integer,
+  cached_at      timestamptz  not null default now()
+);
+
+create index if not exists player_cache_team_name_idx on player_cache (team_name);
 
 -- =============================================================
 -- 2. ROW LEVEL SECURITY
@@ -96,6 +120,7 @@ alter table matches        enable row level security;
 alter table entries        enable row level security;
 alter table scorer_picks   enable row level security;
 alter table team_cache     enable row level security;
+alter table player_cache   enable row level security;
 alter table feedback       enable row level security;
 
 -- Public read on pubs and matches
@@ -125,6 +150,10 @@ create policy "Public insert scorer_picks"
 -- Feedback: anyone can submit, only service key (admin) can read
 create policy "Public insert feedback"
   on feedback for insert with check (true);
+
+-- player_cache: public read (team pages read via /api/team → supabaseAdmin, but allow direct reads too)
+create policy "Public read player_cache"
+  on player_cache for select using (true);
 
 -- =============================================================
 -- 3. PUB DATA

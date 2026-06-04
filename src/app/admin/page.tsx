@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
 import { getDailyCode } from '@/lib/matchSchedule'
+import Flag from '@/components/Flag'
 
 type EntryRow = {
   name: string; phone: string; email: string | null; pick: string
@@ -13,12 +14,16 @@ type Totals = { total_entries: number; unique_phones: number; emails_collected: 
 type FeedbackRow = { id: string; message: string; email: string | null; page: string | null; created_at: string; read: boolean }
 type RaffleEntrant = { name: string; phone: string; pub_id: string; tickets: number }
 type RaffleWinner = RaffleEntrant & { place: number }
+type TeamStatus = {
+  name: string; flag: string; fd_loaded: boolean; coach_name: string | null
+  player_count: number; photo_count: number; club_count: number; cached_at: string | null
+}
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback' | 'raffle'>('results')
+  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback' | 'raffle' | 'teams'>('results')
   const [todaysMatches, setTodaysMatches] = useState<Match[]>([])
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
@@ -41,6 +46,11 @@ export default function AdminPage() {
   const [winners, setWinners] = useState<RaffleWinner[] | null>(null)
   const [drawPhase, setDrawPhase] = useState<'idle' | 'rolling' | 'done'>('idle')
   const [rollingName, setRollingName] = useState('')
+  const [teams, setTeams] = useState<TeamStatus[]>([])
+  const [teamsLoading, setTeamsLoading] = useState(false)
+  const [teamAction, setTeamAction] = useState<string | null>(null)
+  const [loadAllFdRunning, setLoadAllFdRunning] = useState(false)
+  const [loadAllFdProgress, setLoadAllFdProgress] = useState('')
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -101,6 +111,14 @@ export default function AdminPage() {
     setFeedback(data.feedback || [])
   }, [password])
 
+  const loadTeams = useCallback(async () => {
+    setTeamsLoading(true)
+    const res  = await fetch(`/api/admin-teams?password=${encodeURIComponent(password)}`)
+    const data = await res.json()
+    setTeams(data.teams || [])
+    setTeamsLoading(false)
+  }, [password])
+
   useEffect(() => {
     if (!authed) return
     loadMatches()
@@ -112,6 +130,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
   }, [authed, tab]) // eslint-disable-line
+
+  useEffect(() => {
+    if (authed && tab === 'teams') loadTeams()
+  }, [authed, tab, loadTeams])
 
   async function setResult(match: Match) {
     const result = results[match.id]
@@ -219,6 +241,82 @@ export default function AdminPage() {
     clearInterval(iv)
     setWinners(weightedDraw(filtered, 3))
     setDrawPhase('done')
+  }
+
+  async function loadTeamFd(teamName: string) {
+    setTeamAction(teamName + ':fd')
+    try {
+      const res  = await fetch('/api/admin-teams', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'load_fd', team_name: teamName }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTeams(prev => prev.map(t => t.name === teamName
+          ? { ...t, fd_loaded: true, player_count: data.player_count, coach_name: data.coach }
+          : t))
+        flash(`✅ ${teamName}: ${data.player_count} players loaded from FD`, 'success')
+      } else {
+        flash(`❌ ${teamName}: ${data.error}`, 'error')
+      }
+    } catch { flash(`❌ ${teamName}: network error`, 'error') }
+    setTeamAction(null)
+  }
+
+  async function loadTeamAf(teamName: string) {
+    setTeamAction(teamName + ':af')
+    try {
+      const res  = await fetch('/api/admin-teams', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'enrich_af', team_name: teamName }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        if (!data.rate_limited) {
+          loadTeams()
+        } else {
+          setTeams(prev => prev.map(t => t.name === teamName ? {
+            ...t,
+            photo_count: t.photo_count + (data.photos_added || 0),
+            club_count:  t.club_count  + (data.clubs_added  || 0),
+          } : t))
+        }
+        flash(
+          data.rate_limited
+            ? `⚠️ ${teamName}: rate limited — ${data.photos_added} photos, ${data.clubs_added} clubs saved`
+            : `✅ ${teamName}: ${data.photos_added} photos, ${data.clubs_added} clubs`,
+          data.rate_limited ? 'error' : 'success'
+        )
+      } else {
+        flash(`❌ ${teamName}: ${data.error}`, 'error')
+      }
+    } catch { flash(`❌ ${teamName}: network error`, 'error') }
+    setTeamAction(null)
+  }
+
+  async function loadAllFd() {
+    const unloaded = teams.filter(t => !t.fd_loaded)
+    if (!unloaded.length) return
+    setLoadAllFdRunning(true)
+    for (let i = 0; i < unloaded.length; i++) {
+      setLoadAllFdProgress(`${i + 1}/${unloaded.length}`)
+      const team = unloaded[i]
+      try {
+        const res  = await fetch('/api/admin-teams', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, action: 'load_fd', team_name: team.name }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          setTeams(prev => prev.map(t => t.name === team.name
+            ? { ...t, fd_loaded: true, player_count: data.player_count, coach_name: data.coach }
+            : t))
+        }
+      } catch { /* continue on network error */ }
+      if (i < unloaded.length - 1) await new Promise(r => setTimeout(r, 7000))
+    }
+    setLoadAllFdRunning(false)
+    setLoadAllFdProgress('')
   }
 
   function flash(text: string, type: 'success' | 'error') {
@@ -341,7 +439,7 @@ export default function AdminPage() {
         const unread = feedback.filter(f => !f.read).length
         return (
           <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-            {(['results', 'entrants', 'stats', 'feedback', 'raffle'] as const).map(t => (
+            {(['results', 'entrants', 'stats', 'feedback', 'raffle', 'teams'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
                 style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
                   background: tab === t ? 'var(--green)' : 'transparent',
@@ -793,6 +891,119 @@ export default function AdminPage() {
               </>
             )
           })()}
+        </>
+      )}
+
+      {/* TEAMS TAB */}
+      {tab === 'teams' && (
+        <>
+          {teamsLoading ? (
+            <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading teams…</p>
+          ) : (
+            <>
+              <div className="card" style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 3 }}>
+                      {teams.filter(t => t.fd_loaded).length}/{teams.length} teams loaded from FD
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {teams.reduce((s, t) => s + t.player_count, 0)} players ·{' '}
+                      {teams.reduce((s, t) => s + t.photo_count, 0)} photos ·{' '}
+                      {teams.reduce((s, t) => s + t.club_count, 0)} clubs
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      FD: 10 req/min — ~2 calls per team. Load all takes ~10 min.
+                      AF: 100 req/day — ~28 calls per team (photos + clubs).
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {loadAllFdRunning && (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {loadAllFdProgress}…
+                      </span>
+                    )}
+                    <button className="btn btn-secondary"
+                      style={{ width: 'auto', padding: '7px 12px', fontSize: 12 }}
+                      onClick={loadTeams} disabled={teamsLoading}>
+                      Refresh
+                    </button>
+                    <button className="btn btn-primary"
+                      style={{ width: 'auto', padding: '7px 12px', fontSize: 12 }}
+                      disabled={loadAllFdRunning || !!teamAction || teams.every(t => t.fd_loaded)}
+                      onClick={loadAllFd}>
+                      {loadAllFdRunning
+                        ? `Loading ${loadAllFdProgress}…`
+                        : `Load all from FD (${teams.filter(t => !t.fd_loaded).length} left)`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {teams.map(team => {
+                  const isFdLoading = teamAction === team.name + ':fd'
+                  const isAfLoading = teamAction === team.name + ':af'
+                  const isAnyBusy  = !!teamAction || loadAllFdRunning
+                  const fullyDone  = team.player_count > 0
+                    && team.photo_count === team.player_count
+                    && team.club_count  === team.player_count
+                  return (
+                    <div key={team.name} style={{
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: '8px 12px',
+                      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                    }}>
+                      <Flag emoji={team.flag} size={22} style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 90 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{team.name}</div>
+                        {team.coach_name && (
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{team.coach_name}</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                          background: team.fd_loaded ? 'rgba(0,200,122,0.12)' : 'var(--surface2)',
+                          color: team.fd_loaded ? 'var(--green)' : 'var(--text-muted)',
+                          border: `1px solid ${team.fd_loaded ? 'var(--green)' : 'var(--border)'}`,
+                        }}>
+                          {team.fd_loaded ? '✓ FD' : '— FD'}
+                        </span>
+                        {team.player_count > 0 && (
+                          <>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {team.player_count}p
+                            </span>
+                            <span style={{ fontSize: 11, color: team.photo_count === team.player_count ? 'var(--green)' : 'var(--amber)' }}>
+                              {team.photo_count}/{team.player_count} photos
+                            </span>
+                            <span style={{ fontSize: 11, color: team.club_count === team.player_count ? 'var(--green)' : 'var(--text-muted)' }}>
+                              {team.club_count}/{team.player_count} clubs
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                        <button className="btn btn-secondary"
+                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
+                          disabled={isAnyBusy}
+                          onClick={() => loadTeamFd(team.name)}>
+                          {isFdLoading ? '…' : 'Load FD'}
+                        </button>
+                        <button className="btn btn-secondary"
+                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
+                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0 || fullyDone}
+                          onClick={() => loadTeamAf(team.name)}>
+                          {isAfLoading ? '…' : 'Enrich AF'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

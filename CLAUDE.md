@@ -79,10 +79,18 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - Unique: one per phone number
 
 **team_cache**
-- `team_id` (integer PK), `team_name` (text), `data` (jsonb), `cached_at` (timestamptz)
-- Populated by `/api/team` — caches squad, coach, fixtures for **60 days**
-- Index on `team_name` for name-based lookups
-- **Important**: if this table has bad data (wrong team cached), run `truncate table team_cache;` in Supabase SQL editor to force a fresh fetch
+- `team_id` (integer PK — FD team ID), `team_name` (text — schedule name e.g. "USA"), `data` (jsonb — teamInfo, coach, fixtures only, NOT squad), `cached_at` (timestamptz)
+- `fd_loaded` (boolean), `coach_name` (text), `coach_nationality` (text) — denormalized for admin display
+- Populated by admin via `/api/admin-teams` (`load_fd` action) — NOT auto-populated by page views
+- `team_name` stores the schedule name (e.g. "USA") to match `matches` table; enables direct ilike lookups
+- **If data is stale**: `truncate table team_cache; truncate table player_cache;` then reload via admin → Teams tab
+
+**player_cache**
+- `fd_id` (integer PK — FD player ID), `team_name` (text — schedule name), `name`, `age`, `number`, `position`
+- `photo` (text, default ''), `photo_enriched` (boolean) — populated by AF `players/squads` in `enrich_af`
+- `club_name`, `club_logo`, `club_enriched` (boolean) — populated by AF `players?id=X&season=2024`
+- `af_id` (integer) — AF player ID, set during photo enrichment, used for club lookups
+- Upsert with `onConflict: 'fd_id'` preserves enrichment columns not in payload (safe re-load)
 
 **feedback**
 - `id` (uuid PK), `message` (text), `email` (text nullable), `page` (text nullable)
@@ -127,6 +135,7 @@ src/
 │       ├── demo-match/route.ts     # GET — fetch/create the demo match (always-open window)
 │       ├── admin/route.ts          # POST — set result, ping, mark_feedback_read (auth)
 │       ├── admin-data/route.ts     # GET — stats, entrants, feedback, CSV export (auth)
+│       ├── admin-teams/route.ts    # GET — 48-team cache status; POST — load_fd, enrich_af (auth)
 │       ├── feedback/route.ts       # POST — public feedback/bug report submission
 │       ├── my-picks/route.ts       # GET — patron's picks by phone
 │       ├── football/route.ts       # GET — football data proxy (FD primary, AF fallback, 5min cache)
@@ -217,18 +226,34 @@ The app uses **football-data.org (FD) as primary** and **API-Football (AF) as fa
 - For `standings`, `fixtures`, `players/topscorers`, `teams` (list) — tries FD first, falls back to AF
 - For `players/squads`, `coaches`, `players` — AF only (FD free tier doesn't cover these)
 
-### Team data route: `/api/team`
-- Dedicated endpoint for full team profiles (squad, coach, fixtures, local schedule)
-- **60-day Supabase cache** (`team_cache` table) — squad/name data changes rarely
-- Handles both `?id=X` (numeric) and `?name=USA` (display name) lookups
-- Name resolution uses `src/lib/teamResolution.ts` (see Testing section)
-- FD primary for team profile; AF used for player photos (FD free tier has no photos)
-- Always appends `localSchedule` from Supabase for pre-tournament fixture display
-- **If wrong team is cached**: run `truncate table team_cache;` in Supabase to clear
+### Team data route: `/api/team` (cache-only)
+- Reads squad from `player_cache`, teamInfo/coach/fixtures from `team_cache.data`, local schedule from `matches`
+- **Never calls external APIs** — all data pre-loaded by admin via `/api/admin-teams`
+- Handles both `?id=X` (FD team ID) and `?name=USA` (schedule name) lookups
+- Returns empty squad/coach if team not yet loaded by admin — frontend shows "Squad not yet announced"
+- Always appends `localSchedule` from Supabase matches table
 
-### Name resolution for `?name=X` lookups
+### Admin team loading route: `/api/admin-teams`
+- **GET** (password required): lists all 48 teams from matches table with `fd_loaded`, player/photo/club counts
+- **POST `load_fd`** (password required): fetches team from football-data.org, upserts `team_cache` + `player_cache`; preserves existing enrichment data on re-load
+- **POST `enrich_af`** (password required): enriches players with AF photos (2 AF calls) + clubs (1 per player); stops on rate limit, saves partial results; safe to retry
+
+### FD → player_cache load flow
+1. Admin clicks "Load FD" for a team (or "Load all from FD" — sequential, 7s between calls)
+2. `resolveFdTeamId(scheduleName)` resolves e.g. "USA" → FD ID 841 via WC teams list
+3. `buildFdTeamData(fdId)` fetches team profile + squad (no photos) from FD (2 calls)
+4. `team_cache` upserted: schedule name, teamInfo, coach, fixtures, `fd_loaded=true`
+5. `player_cache` upserted per player: fd_id, name, age, number, position — photo/club columns untouched
+
+### AF enrichment flow (after FD load)
+1. Admin clicks "Enrich AF" for a team (AF 100/day limit: ~3-4 full teams per day)
+2. Photo enrichment: AF team search + squad (2 calls) → match players by name → update photo + af_id + photo_enriched
+3. Club enrichment: 1 AF call per player with af_id → update club_name, club_logo, club_enriched
+4. Stops on rate limit, saves what was collected — retry tomorrow picks up from where it stopped
+
+### Name resolution (legacy — used by /api/football for standings etc.)
 Resolution strategy (in order):
-1. Check `team_cache` by name (ilike)
+1. Check `team_cache` by name (ilike) — schedule name is stored directly
 2. Fetch WC 2026 teams list — scoped, no club teams
 3. Fallback: search by aliased name (`usa` → `united states`), filter to senior national teams only
 4. Never return a team with no name overlap (prevents Israel-for-USA bugs)
