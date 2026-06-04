@@ -618,7 +618,13 @@ function HomeContent() {
                       }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 17, lineHeight: 1.3 }}>
-                            <Flag emoji={m.home_flag} size={18} style={{ marginRight: 5 }} />{m.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}>vs</span> <Flag emoji={m.away_flag} size={18} style={{ marginRight: 5 }} />{m.away_team}
+                            <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                              <Flag emoji={m.home_flag} size={18} style={{ marginRight: 5 }} />{m.home_team}
+                            </Link>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}> vs </span>
+                            <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                              <Flag emoji={m.away_flag} size={18} style={{ marginRight: 5 }} />{m.away_team}
+                            </Link>
                           </div>
                           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
                             {m.stage} · {fmtKickoff(m.kickoff_at)}
