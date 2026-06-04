@@ -14,11 +14,13 @@ export function isMatchLive(kickoffAt: string): boolean {
 }
 
 // Returns the upper bound of matches users can currently predict on.
-// Rolling 4-day window: today through today+3 (UTC midnight exclusive).
-// e.g. June 12 → June 16, June 13 → June 17.
-// On June 11 (tournament open) this naturally covers June 11–14 (all group stage day 1–4).
+// Rolling 4-day window: today+4 (UTC midnight), with a floor of June 15 so that
+// before the tournament starts, all opening-week matches (June 11–14) are always visible.
+// e.g. June 3 (pre-tournament) → June 15, June 12 → June 16, June 13 → June 17.
 export function getPredictableWindowEnd(now: Date = new Date()): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 4))
+  const rolling = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 4))
+  const june15  = new Date('2026-06-15T00:00:00Z')
+  return rolling > june15 ? rolling : june15
 }
 
 // Returns the best match to show right now:

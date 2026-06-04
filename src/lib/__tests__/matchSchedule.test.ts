@@ -6,8 +6,14 @@ describe('getPredictableWindowEnd — rolling 4-day window', () => {
     return new Date(Date.UTC(y, m - 1, d))
   }
 
+  it('pre-tournament (June 3) covers through June 14 via June 15 floor', () => {
+    // June 3 + 4 = June 7, but floor is June 15, so opening week is always visible
+    const end = getPredictableWindowEnd(utc(2026, 6, 3))
+    expect(end.toISOString()).toBe('2026-06-15T00:00:00.000Z')
+  })
+
   it('June 11 (tournament open day) covers through June 14', () => {
-    // On tournament day 1, window end = June 15 00:00 UTC, so kickoff < June 15 = Jun 11–14
+    // June 11 + 4 = June 15 — exactly the floor, so Jun 11–14 visible
     const end = getPredictableWindowEnd(utc(2026, 6, 11))
     expect(end.toISOString()).toBe('2026-06-15T00:00:00.000Z')
   })
