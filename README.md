@@ -58,8 +58,13 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key from npx supabase start>
 SUPABASE_SECRET_KEY=<secret key from npx supabase start>
 ADMIN_PASSWORD=<local admin password>
 
-API_FOOTBALL_KEY=<your api-football.com key>
-FOOTBALL_DATA_API_KEY=<optional football-data.org key>
+FOOTBALL_DATA_API_KEY=<football-data.org key — primary source, 10 req/min, no daily cap>
+API_FOOTBALL_KEY=<api-football.com key — fallback + player photos, 100 req/day>
+
+# Optional
+NEXT_PUBLIC_DAILY_CODE_PREFIX=peddlers   # prefix for daily patron access codes (default: peddlers)
+RESEND_API_KEY=<Resend API key — for match-day email reminders>
+RESEND_FROM_EMAIL=<from address for reminder emails>
 ```
 
 Do not use hosted Supabase values in `.env.local` if you want the app to use the local database.

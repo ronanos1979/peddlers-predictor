@@ -134,7 +134,7 @@ src/
 │       ├── entries/route.ts        # POST — validate and save match prediction
 │       ├── matches/route.ts        # GET — active match
 │       ├── demo-match/route.ts     # GET — fetch/create the demo match (always-open window)
-│       ├── admin/route.ts          # POST — set result, ping, mark_feedback_read (auth)
+│       ├── admin/route.ts          # POST — set_result, sync_results, ping, mark_feedback_read (auth)
 │       ├── admin-data/route.ts     # GET — stats, entrants, feedback, CSV export (auth)
 │       ├── admin-teams/route.ts    # GET — 48-team cache status; POST — load_fd, enrich_af (auth)
 │       ├── feedback/route.ts       # POST — public feedback/bug report submission
@@ -143,7 +143,8 @@ src/
 │       ├── team/route.ts           # GET — team data with 60-day Supabase cache
 │       └── send-reminder/route.ts  # POST — email reminder to all patrons via Resend (admin auth)
 ├── components/
-│   ├── EntryForm.tsx               # Match prediction form — used by home + demo pages
+│   ├── EntryForm.tsx               # Match prediction form — geo check, access-code override, score steppers
+│   ├── Flag.tsx                    # Renders flag emoji via flagcdn.com PNG (fixes Windows text fallback)
 │   ├── LangSwitcher.tsx            # EN/ES toggle buttons in header
 │   ├── ShareCard.tsx               # "Love the app?" share card with Web Share API
 │   └── SiteFooter.tsx              # Footer — Facebook links, nav links, feedback link
@@ -154,7 +155,7 @@ src/
     ├── goldenBootContenders.ts     # Pre-seeded top-10 Golden Boot picks (shown pre-tournament)
     ├── rateLimit.ts                # In-memory rate limiter (checkRateLimit, getIp)
     ├── pubData.ts                  # Pub info constants (address, phone, social links, coords)
-    ├── matchSchedule.ts            # getDailyCode(), isMatchLive(), selectActiveMatch(), getPredictableWindowEnd()
+    ├── matchSchedule.ts            # getDailyCode(), isValidOverrideCode(), isMatchLive(), selectActiveMatch(), getPredictableWindowEnd()
     ├── geo.ts                      # distanceMetres(), getPosition()
     ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron()
     ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
@@ -166,11 +167,12 @@ src/
 ## Key Business Logic
 
 ### Daily patron code
-Auto-generated — no admin action needed. Format: `peddlers` + day of month.
-- June 11 → `peddlers11`
-- June 27 → `peddlers27`
+Auto-generated — no admin action needed. Format: `{prefix}` + day of month (UTC).
+- Prefix is set by `NEXT_PUBLIC_DAILY_CODE_PREFIX` env var (lowercase, defaults to `peddlers`)
+- June 11 → `peddlers11`, June 27 → `peddlers27`
 - Yesterday's code also accepted (for late-night matches crossing midnight)
 - Code validated server-side in `/api/entries/route.ts` via `getDailyCode()`
+- Code validated client-side via `isValidOverrideCode()` when patron's GPS is unavailable
 
 ### Match activation and prediction window
 Fully automatic based on datetime — no admin needed:
@@ -188,7 +190,7 @@ Fully automatic based on datetime — no admin needed:
 - Correct result + exact score → `is_correct = true`, `raffle_entries = 3`
 - Wrong prediction → `is_correct = false`, `raffle_entries = 0`
 - Score prediction (`home_score_pred` / `away_score_pred`) is optional — patron enters via +/− steppers in the form
-- Set via admin panel after each match → `/api/admin` with action `set_result` (includes `home_score` and `away_score`)
+- Set via admin panel after each match — either manually via `set_result` action or automatically via `sync_results` (fetches from football-data.org)
 - Leaderboard ranks by total `raffle_entries` descending
 - **Golden Boot bonus**: 10 extra raffle entries if patron's Golden Boot pick is correct — set manually by admin after the Final
 
@@ -291,7 +293,7 @@ Before June 11, 2026:
 | `endpoint=fixtures&status=FT` | FD | AF | Completed matches |
 | `endpoint=fixtures&team=ID` | FD | AF | Team's matches |
 | `endpoint=players/topscorers` | FD | AF | Golden Boot |
-| `endpoint=teams` (list) | FD | AF | WC team list |
+| `endpoint=teams` (list) | FD only | — | WC team list (AF IDs incompatible with team_cache) |
 | `endpoint=teams&team=ID` | AF only | — | Single team info |
 | `endpoint=players/squads&team=ID` | AF only | — | Squad |
 | `endpoint=coaches&team=ID` | AF only | — | Manager info |
@@ -316,7 +318,7 @@ Before June 11, 2026:
 
 ### Both pubs
 - Website: https://www.thepeddlersdaughter.com/
-- Prize: one TV per pub, raffled after the World Cup Final (July 19, 2026)
+- Prize: **one TV — one winner across both pubs**, drawn by raffle after the World Cup Final (July 19, 2026). All entries from Haverhill and Nashua compete in one combined draw.
 
 ---
 
@@ -331,18 +333,20 @@ Print and laminate for tables:
 ## Admin Workflow (day of a match)
 
 1. Nothing needed before kick-off — match activates automatically
-2. Patron code is automatic (`peddlers` + day number) — tell bar staff
-3. After full time → go to `/admin` → set result → leaderboard updates instantly
-4. Admin panel has 4 tabs: Results, Entrants, Stats, Feedback
+2. Patron code is automatic (`{prefix}` + day number) — tell bar staff
+3. After full time → go to `/admin` → click **⟳ Sync** to auto-fetch results, or set manually
+4. Admin panel has 6 tabs: Results, Entrants, Stats, Feedback, Raffle, Teams
 
 ### Admin panel features
 - **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
-  - Each match row has a result dropdown + optional score inputs (home − away) before confirming
-  - Scores saved to `matches.home_score` / `matches.away_score` and used to award +2 bonus points
+  - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp, sets result + score, and scores all entries automatically. Reports how many matches updated and entries scored.
+  - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming
+  - Email reminders: select upcoming matches and send match-day emails to all patrons who provided an email
 - **Entrants tab**: filterable by date, shows name/phone/email/pick/result, CSV export button
 - **Stats tab**: total entries, unique players, emails collected, bar chart by day split by pub
 - **Feedback tab**: bug reports and feedback from patrons, unread count badge, mark-as-read per item
-- **Raffle tab**: weighted draw — 1 ticket per correct result, 3 tickets if exact score also correct
+- **Raffle tab**: weighted draw — 1 ticket per correct result, 3 tickets if exact score also correct; filterable by pub
+- **Teams tab**: 48-team cache status — fd_loaded flag, player/photo/club counts; "Load FD" and "Enrich AF" buttons per team; "Load all from FD" sequential bulk loader
 
 ---
 
@@ -354,13 +358,15 @@ npm run test:watch    # watch mode during development
 npm run test:coverage # coverage report
 ```
 
-### Test files (106 tests total)
+### Test files (156 tests total across 9 suites)
 | File | What it covers |
 |------|---------------|
+| `src/lib/__tests__/matchSchedule.test.ts` | Rolling 4-day window, isMatchLive, getDailyCode prefix/fallback, isValidOverrideCode |
 | `src/lib/__tests__/teamResolution.test.ts` | Name aliases, youth team filter, WC list resolution, search resolution, cache validation |
 | `src/lib/__tests__/goldenBootContenders.test.ts` | Contender list — 10 players, required fields, no duplicates, WC nations |
 | `src/app/api/team/__tests__/resolution.test.ts` | Regression tests for USA/France/Israel bugs |
 | `src/app/api/team/__tests__/route.test.ts` | Team route integration tests |
+| `src/app/api/entries/__tests__/route.test.ts` | Entry submission validation, duplicate detection, geo/code checks |
 | `src/app/api/feedback/__tests__/route.test.ts` | Feedback POST validation, Supabase insert |
 | `src/app/api/admin/__tests__/auth.test.ts` | Admin password auth, mark_feedback_read |
 | `src/app/api/my-picks/__tests__/route.test.ts` | Entries + stats response, scorerPick included/null |
