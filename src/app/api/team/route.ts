@@ -45,14 +45,16 @@ export async function GET(req: NextRequest) {
         cacheData = data.data as Record<string, unknown>
       }
     } else {
-      const { data } = await supabaseAdmin
+      const { data: rows } = await supabaseAdmin
         .from('team_cache')
         .select('team_name,data')
         .ilike('team_name', nameParam!)
-        .maybeSingle()
-      if (data) {
-        teamName  = data.team_name
-        cacheData = data.data as Record<string, unknown>
+        .order('cached_at', { ascending: false })
+        .limit(1)
+      const row = rows?.[0] ?? null
+      if (row) {
+        teamName  = row.team_name
+        cacheData = row.data as Record<string, unknown>
       }
     }
 
