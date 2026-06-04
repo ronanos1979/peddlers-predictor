@@ -51,6 +51,8 @@ export default function AdminPage() {
   const [teamAction, setTeamAction] = useState<string | null>(null)
   const [loadAllFdRunning, setLoadAllFdRunning] = useState(false)
   const [loadAllFdProgress, setLoadAllFdProgress] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -324,6 +326,25 @@ export default function AdminPage() {
     setTimeout(() => setMsg(''), 5000)
   }
 
+  async function syncResults() {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'sync_results', payload: {} })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Sync failed', 'error'); setSyncing(false); return }
+      setSyncResult(data)
+      if (data.updated > 0) { loadMatches(); loadStats(); loadEntrants() }
+    } catch {
+      flash('Network error during sync', 'error')
+    }
+    setSyncing(false)
+  }
+
   async function markFeedbackRead(id: string) {
     await fetch('/api/admin', {
       method: 'POST',
@@ -473,6 +494,27 @@ export default function AdminPage() {
                 <p className="muted" style={{ fontSize: 12 }}>Changes automatically at midnight</p>
               </div>
             </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Sync results from API</div>
+                <div className="muted" style={{ fontSize: 12 }}>Fetches all finished WC matches and scores entries automatically</div>
+              </div>
+              <button className="btn btn-primary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={syncing} onClick={syncResults}>
+                {syncing ? 'Syncing…' : '⟳ Sync'}
+              </button>
+            </div>
+            {syncResult && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                background: syncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
+                color: syncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
+                border: `1px solid ${syncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
+                {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored`}
+              </div>
+            )}
           </div>
 
           <div className="card">
