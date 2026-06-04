@@ -117,24 +117,25 @@ export async function GET(req: NextRequest) {
       }
 
       case 'teams': {
-        // FD primary (used for WC team list in name resolution)
-        if (FD_KEY && !team) {
-          try {
-            const data = await getFdTeamsList()
-            if (afHasData(data)) { setCached(cacheKey, data); return NextResponse.json(data) }
-          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD teams error:', e) }
-        }
-        // AF fallback
-        if (AF_KEY) {
-          if (team) {
+        if (team) {
+          // Single-team lookup — AF only (FD free tier doesn't expose this)
+          if (AF_KEY) {
             const res = await fetch(`${AF_BASE}/teams?id=${team}`, { headers: { 'x-apisports-key': AF_KEY } })
             const data = await res.json()
             setCached(cacheKey, data)
             return NextResponse.json(data)
           }
-          const data = await afFetch('teams')
-          setCached(cacheKey, data)
-          return NextResponse.json(data)
+          return NextResponse.json({ response: [] })
+        }
+        // Full WC team list — FD only.
+        // AF IDs are incompatible with the FD IDs stored in team_cache, so we never
+        // fall back to AF here. If FD returns empty the team picker falls through to
+        // the Supabase matches fallback, which uses schedule names that always match.
+        if (FD_KEY) {
+          try {
+            const data = await getFdTeamsList()
+            if (afHasData(data)) { setCached(cacheKey, data); return NextResponse.json(data) }
+          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD teams error:', e) }
         }
         return NextResponse.json({ response: [] })
       }

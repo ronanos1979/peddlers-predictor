@@ -361,6 +361,10 @@ function TeamContent() {
   const upcomingFixtures = fixtures.filter(f => new Date(f.fixture.date) >= new Date() && f.fixture.status.short !== 'FT')
   const upcomingLocalMatches = localMatches.filter(m => new Date(m.kickoff_at) >= new Date())
   const numericTeamId = parseInt(teamId || '0')
+  const firstLocalMatch = localMatches[0]
+  const localFlagEmoji = firstLocalMatch
+    ? (firstLocalMatch.home_team === localScheduleTeamName ? firstLocalMatch.home_flag : firstLocalMatch.away_flag)
+    : ''
 
   if (teamName && !teamId && !teamInfo) {
     const flag = savedTeam?.logo || ''
@@ -371,7 +375,7 @@ function TeamContent() {
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '24px 0 20px' }}>
-              <div style={{ fontSize: 54, lineHeight: 1 }}>{flag}</div>
+              <Flag emoji={flag} size={72} />
               <div>
                 <h1 style={{ marginBottom: 4 }}>{teamName}</h1>
                 <p className="muted">{t.savedOnThisPhone} · {t.localSchedule}</p>
@@ -434,9 +438,10 @@ function TeamContent() {
         <>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '24px 0 20px' }}>
-            {teamInfo.team.logo && (
-              <img src={teamInfo.team.logo} alt="" style={{ width: 72, height: 72, objectFit: 'contain' }} />
-            )}
+            {teamInfo.team.logo
+              ? <img src={teamInfo.team.logo} alt="" style={{ width: 72, height: 72, objectFit: 'contain' }} />
+              : localFlagEmoji ? <Flag emoji={localFlagEmoji} size={72} /> : null
+            }
             <div>
               <h1 style={{ marginBottom: 4 }}>{teamInfo.team.name}</h1>
               <p className="muted">{teamInfo.team.country} · Est. {teamInfo.team.founded}</p>
