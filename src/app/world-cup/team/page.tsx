@@ -3,6 +3,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { supabase, type Match } from '@/lib/supabase'
+import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 type TeamInfo = { team: { id: number; name: string; country: string; logo: string; founded: number; national: boolean }; venue: { name: string; city: string; capacity: number } }
@@ -407,7 +408,7 @@ function TeamContent() {
                       {match.stage}
                     </div>
                     <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14 }}>
-                      {isHome ? 'vs' : '@'} {opponentFlag} {opponent}
+                      {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} style={{ marginRight: 4 }} />{opponent}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
                   </div>
@@ -581,7 +582,7 @@ function TeamContent() {
                         {match.stage}
                       </div>
                       <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14 }}>
-                        {isHome ? 'vs' : '@'} {opponentFlag} {opponent}
+                        {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} style={{ marginRight: 4 }} />{opponent}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
                     </div>

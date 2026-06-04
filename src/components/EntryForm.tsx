@@ -435,9 +435,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                     {p === 'home' ? t.homeWin : p === 'draw' ? t.draw : t.awayWin}
                   </div>
                   <div className="pick-team">
-                    {p === 'home' ? `${match.home_flag} ${match.home_team}` :
+                    {p === 'home' ? <><Flag emoji={match.home_flag} size={16} style={{ marginRight: 4 }} />{match.home_team}</> :
                      p === 'draw' ? '—' :
-                     `${match.away_flag} ${match.away_team}`}
+                     <><Flag emoji={match.away_flag} size={16} style={{ marginRight: 4 }} />{match.away_team}</>}
                   </div>
                 </button>
               ))}

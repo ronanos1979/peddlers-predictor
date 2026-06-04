@@ -4,11 +4,12 @@ import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
+import Flag from '@/components/Flag'
 
 function TeamLink({ name, flag }: { name: string; flag: string }) {
   return (
     <Link href={`/world-cup/team?name=${encodeURIComponent(name)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-      {flag} {name}
+      <Flag emoji={flag} size={16} style={{ marginRight: 4 }} />{name}
     </Link>
   )
 }
@@ -87,9 +88,9 @@ function MyPicksContent() {
   }, []) // eslint-disable-line
 
   function pickLabel(pick: string, m: EntryWithMatch['matches']) {
-    if (pick === 'home') return `${m.home_flag} ${t.teamWon.replace('{team}', m.home_team)}`
-    if (pick === 'away') return `${m.away_flag} ${t.teamWon.replace('{team}', m.away_team)}`
-    return t.draw
+    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.home_team)}</>
+    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.away_team)}</>
+    return <>{t.draw}</>
   }
 
   function fmtDate(iso: string) {

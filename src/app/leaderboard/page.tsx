@@ -3,6 +3,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, type Entry, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
+import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 
@@ -48,10 +49,10 @@ function LeaderboardContent() {
   const medals = ['🥇', '🥈', '🥉']
 
   function pickLabel(pick: string, m: Match | null) {
-    if (!m) return pick
-    if (pick === 'home') return `${m.home_flag} ${m.home_team}`
-    if (pick === 'away') return `${m.away_flag} ${m.away_team}`
-    return t.draw
+    if (!m) return <>{pick}</>
+    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{m.home_team}</>
+    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{m.away_team}</>
+    return <>{t.draw}</>
   }
 
   return (
@@ -62,7 +63,7 @@ function LeaderboardContent() {
         </div>
         <h1>{t.leaderboard}</h1>
         {match && (
-          <p className="muted">{t.current}: {match.home_flag} {match.home_team} vs {match.away_flag} {match.away_team}</p>
+          <p className="muted">{t.current}: <Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team} vs <Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</p>
         )}
       </div>
 

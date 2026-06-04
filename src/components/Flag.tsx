@@ -1,6 +1,6 @@
-// Renders a country flag emoji as an <img> from flagcdn.com.
-// Flag emoji on Windows don't render as colored flag images — this fixes that.
-// Falls back to rendering the raw emoji text if the code can't be extracted.
+// Renders a country flag as a background-image span from flagcdn.com.
+// Flag emoji on Windows don't render as colored flags — this fixes that cross-platform.
+// Falls back to the raw emoji text if the country code can't be extracted.
 
 function emojiToCode(emoji: string): string | null {
   const chars = Array.from(emoji || '')
@@ -23,12 +23,21 @@ export default function Flag({
   const code = emojiToCode(emoji)
   if (!code) return <span>{emoji}</span>
   return (
-    <img
-      src={`https://flagcdn.com/w${size}/${code}.png`}
-      srcSet={`https://flagcdn.com/w${size * 2}/${code}.png 2x`}
-      alt={emoji}
-      width={size}
-      style={{ display: 'inline-block', verticalAlign: 'middle', objectFit: 'contain', ...style }}
+    <span
+      role="img"
+      aria-label={emoji}
+      style={{
+        display: 'inline-block',
+        width: size,
+        height: Math.round(size * 0.75),
+        backgroundImage: `url(https://flagcdn.com/w${size * 2}/${code}.png)`,
+        backgroundSize: 'contain',
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'center',
+        verticalAlign: 'middle',
+        flexShrink: 0,
+        ...style,
+      }}
     />
   )
 }

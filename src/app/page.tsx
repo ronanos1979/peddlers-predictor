@@ -143,8 +143,8 @@ function MyTeamWidget({ t }: { t: Translations }) {
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 4 }}>
             {isHome
-              ? <>{savedTeam.logo && <span>{savedTeam.logo} </span>}{savedTeam.name} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {opponentFlag} {opponentName}</>
-              : <>{opponentFlag} {opponentName} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {savedTeam.logo && <span> {savedTeam.logo}</span>} {savedTeam.name}</>
+              ? <>{savedTeam.logo && <span>{savedTeam.logo} </span>}{savedTeam.name} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {opponentFlag && <Flag emoji={opponentFlag} size={20} style={{ marginRight: 4 }} />}{opponentName}</>
+              : <>{opponentFlag && <Flag emoji={opponentFlag} size={20} style={{ marginRight: 4 }} />}{opponentName} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {savedTeam.logo && <span> {savedTeam.logo}</span>} {savedTeam.name}</>
             }
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>

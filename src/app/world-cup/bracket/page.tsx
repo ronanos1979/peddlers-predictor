@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
+import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 const KNOCKOUT_STAGES = [
@@ -157,8 +158,8 @@ export default function BracketPage() {
                   borderBottom: '1px solid var(--border)',
                   opacity: homePH ? 0.45 : 1,
                 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1, width: 28, textAlign: 'center', flexShrink: 0 }}>
-                    {homePH ? '🏳' : m.home_flag}
+                  <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {homePH ? <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span> : <Flag emoji={m.home_flag} size={22} />}
                   </span>
                   <span style={{
                     flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15,
@@ -182,8 +183,8 @@ export default function BracketPage() {
                   padding: '11px 0',
                   opacity: awayPH ? 0.45 : 1,
                 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1, width: 28, textAlign: 'center', flexShrink: 0 }}>
-                    {awayPH ? '🏳' : m.away_flag}
+                  <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {awayPH ? <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span> : <Flag emoji={m.away_flag} size={22} />}
                   </span>
                   <span style={{
                     flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15,
