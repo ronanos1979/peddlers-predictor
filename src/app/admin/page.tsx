@@ -996,48 +996,54 @@ export default function AdminPage() {
                       borderRadius: 8, padding: '8px 12px',
                       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                     }}>
-                      <Flag emoji={team.flag} size={22} style={{ flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 90 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{team.name}</div>
-                        {team.coach_name && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{team.coach_name}</div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span style={{
-                          fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
-                          background: team.fd_loaded ? 'rgba(0,200,122,0.12)' : 'var(--surface2)',
-                          color: team.fd_loaded ? 'var(--green)' : 'var(--text-muted)',
-                          border: `1px solid ${team.fd_loaded ? 'var(--green)' : 'var(--border)'}`,
-                        }}>
-                          {team.fd_loaded ? '✓ FD' : '— FD'}
-                        </span>
-                        {team.player_count > 0 && (
-                          <>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              {team.player_count}p
-                            </span>
-                            <span style={{ fontSize: 11, color: team.photo_count === team.player_count ? 'var(--green)' : 'var(--amber)' }}>
-                              {team.photo_count}/{team.player_count} photos
-                            </span>
-                            <span style={{ fontSize: 11, color: team.club_count === team.player_count ? 'var(--green)' : 'var(--text-muted)' }}>
-                              {team.club_count}/{team.player_count} clubs
-                            </span>
-                          </>
-                        )}
+                      <a href={`/world-cup/team?name=${encodeURIComponent(team.name)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'inherit', flexShrink: 0 }}>
+                        <Flag emoji={team.flag} size={22} />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{team.name}</div>
+                          {team.coach_name && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{team.coach_name}</div>
+                          )}
+                        </div>
+                      </a>
+                      <div style={{ flex: 1 }} />
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ textAlign: 'center', minWidth: 60 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: team.player_count > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+                            {team.player_count > 0 ? team.player_count : '—'}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>players</div>
+                        </div>
+                        <div style={{ textAlign: 'center', minWidth: 52 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700,
+                            color: team.player_count === 0 ? 'var(--text-muted)' :
+                              team.photo_count === team.player_count ? 'var(--green)' : 'var(--amber)' }}>
+                            {team.player_count > 0 ? `${team.photo_count}/${team.player_count}` : '—'}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>photos</div>
+                        </div>
+                        <div style={{ textAlign: 'center', minWidth: 52 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700,
+                            color: team.player_count === 0 ? 'var(--text-muted)' :
+                              team.club_count === team.player_count ? 'var(--green)' : 'var(--text-muted)' }}>
+                            {team.player_count > 0 ? `${team.club_count}/${team.player_count}` : '—'}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>clubs</div>
+                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy}
                           onClick={() => loadTeamFd(team.name)}>
-                          {isFdLoading ? '…' : 'Load FD'}
+                          {isFdLoading ? '…' : 'Load players'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0 || fullyDone}
                           onClick={() => loadTeamAf(team.name)}>
-                          {isAfLoading ? '…' : 'Enrich AF'}
+                          {isAfLoading ? '…' : 'Load photos'}
                         </button>
                       </div>
                     </div>
