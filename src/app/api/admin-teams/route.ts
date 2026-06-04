@@ -130,7 +130,7 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
 
   // Upsert team_cache — schedule name as team_name for direct ilike lookups
   // Squad is NOT stored in the data blob — it lives in player_cache
-  await supabaseAdmin.from('team_cache').upsert({
+  const { error: teamUpsertError } = await supabaseAdmin.from('team_cache').upsert({
     team_id:           fdId,
     team_name:         scheduleName,
     data:              { teamInfo: fdData.teamInfo, coach: fdData.coach, fixtures: fdData.fixtures },
@@ -139,6 +139,11 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
     coach_nationality: fdData.coach?.nationality || null,
     cached_at:         new Date().toISOString(),
   }, { onConflict: 'team_id' })
+
+  if (teamUpsertError) {
+    console.error('team_cache upsert failed:', teamUpsertError)
+    return NextResponse.json({ error: `DB write failed (team_cache): ${teamUpsertError.message}` }, { status: 500 })
+  }
 
   // Upsert each player — only structural fields; photo/club columns not in payload
   // so ON CONFLICT DO UPDATE preserves any existing enrichment data
@@ -154,7 +159,13 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
       cached_at: now,
     }))
     for (let i = 0; i < rows.length; i += 50) {
-      await supabaseAdmin.from('player_cache').upsert(rows.slice(i, i + 50), { onConflict: 'fd_id' })
+      const { error: playerUpsertError } = await supabaseAdmin
+        .from('player_cache')
+        .upsert(rows.slice(i, i + 50), { onConflict: 'fd_id' })
+      if (playerUpsertError) {
+        console.error('player_cache upsert failed:', playerUpsertError)
+        return NextResponse.json({ error: `DB write failed (player_cache): ${playerUpsertError.message}` }, { status: 500 })
+      }
     }
   }
 
