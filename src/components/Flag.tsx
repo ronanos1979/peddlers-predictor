@@ -30,7 +30,7 @@ export default function Flag({
         display: 'inline-block',
         width: size,
         height: Math.round(size * 0.75),
-        backgroundImage: `url(https://flagcdn.com/w${size * 2}/${code}.png)`,
+        backgroundImage: `url(https://flagcdn.com/w40/${code}.png)`,
         backgroundSize: 'contain',
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'center',
