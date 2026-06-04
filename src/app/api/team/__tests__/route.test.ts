@@ -66,13 +66,31 @@ const LOCAL_SCHEDULE = [
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
-function makeChain(maybeSingleResult: unknown, orderResult?: unknown) {
-  const c: Record<string, jest.Mock> = {}
+function makeChain(result: unknown) {
+  // Wrap a single-row result into an array for .limit(1) callers
+  const asArray = (r: unknown) => {
+    const d = (r as { data?: unknown } | null)?.data
+    return { data: d != null ? [d] : [], error: null }
+  }
+
+  // c is a thenable so `await chain.ilike(...).order(...)` works for
+  // queries that terminate at .order() (player_cache, matches).
+  const c: Record<string, unknown> & { then: unknown; catch: unknown } = {
+    then:  (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+             Promise.resolve(result).then(res, rej),
+    catch: (rej: (e: unknown) => unknown) => Promise.resolve(result).catch(rej),
+  }
+
   ;['select','eq','ilike','neq','or','order','gt'].forEach(m => {
     c[m] = jest.fn().mockReturnValue(c)
   })
-  c.maybeSingle = jest.fn().mockResolvedValue(maybeSingleResult)
-  c.order       = jest.fn().mockResolvedValue(orderResult ?? maybeSingleResult)
+
+  // .maybeSingle() — used by ?id= path, returns single row
+  c.maybeSingle = jest.fn().mockResolvedValue(result)
+
+  // .limit() — used by ?name= path after .order(), returns array
+  c.limit = jest.fn().mockResolvedValue(asArray(result))
+
   return c
 }
 
