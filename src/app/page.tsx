@@ -498,8 +498,17 @@ function HomeContent() {
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 38, letterSpacing: 2, color: 'var(--amber)', lineHeight: 1, marginBottom: 4 }}>
           The Peddler&apos;s Daughter
         </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>
           {t.tournamentLine}
+        </div>
+        {/* WC 2026 logo */}
+        <div style={{ marginBottom: 12 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://crests.football-data.org/2000.png"
+            alt="FIFA World Cup 2026"
+            style={{ height: 72, width: 'auto', objectFit: 'contain' }}
+          />
         </div>
         <h1 style={{ fontSize: 42, marginBottom: 8 }}>
           {t.heroTitle.split('\n')[0]}<br /><span style={{ color: 'var(--green)' }}>{t.heroTitle.split('\n')[1]}</span>
@@ -512,6 +521,14 @@ function HomeContent() {
             🏃 {t.totalPlayers.replace('{count}', String(rivalry.haverhill.entries + rivalry.nashua.entries))}
           </div>
         )}
+        <div style={{ marginTop: 16 }}>
+          <button
+            onClick={() => document.getElementById('explore-menu')?.scrollIntoView({ behavior: 'smooth' })}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '8px 20px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', cursor: 'pointer' }}
+          >
+            Explore Options ↓
+          </button>
+        </div>
       </div>
 
       {/* Returning patron greeting */}
@@ -694,7 +711,7 @@ function HomeContent() {
       <MyTeamWidget t={t} />
 
       {/* Nav grid */}
-      <div className="section-label" style={{ marginTop: 24 }}>{t.explore}</div>
+      <div id="explore-menu" className="section-label" style={{ marginTop: 24 }}>{t.explore}</div>
       <div className="nav-grid">
         {[
           { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: t.schedule },

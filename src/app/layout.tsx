@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import LangSwitcher from '@/components/LangSwitcher'
+import HeaderLocation from '@/components/HeaderLocation'
 import SiteFooter from '@/components/SiteFooter'
 import './globals.css'
 
@@ -24,9 +25,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Image src="/logo.avif" alt="The Peddler's Daughter" width={160} height={60}
                 style={{ objectFit: 'contain', height: 44, width: 'auto' }} priority />
             </Link>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <HeaderLocation />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <LangSwitcher />
-              <span className="header-tag">⚽ 2026</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://crests.football-data.org/2000.png"
+                alt="FIFA World Cup 2026"
+                style={{ height: 30, width: 30, objectFit: 'contain' }}
+              />
             </div>
           </div>
         </header>
