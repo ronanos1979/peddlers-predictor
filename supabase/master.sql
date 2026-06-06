@@ -32,8 +32,11 @@ create table if not exists matches (
   result           text check (result in ('home','draw','away')) default null,
   is_active        boolean not null default false,
   venue            text default null,  -- e.g. 'MetLife Stadium, East Rutherford, NJ'
-  home_score       integer default null,
-  away_score       integer default null
+  home_score            integer default null,
+  away_score            integer default null,
+  checkin_winner_name   text default null,
+  checkin_winner_phone  text default null,
+  checkin_draw_at       timestamptz default null
 );
 
 -- Entries
@@ -55,6 +58,22 @@ create table if not exists entries (
   entry_distance_m integer default null,
   unique(phone, match_id)
 );
+
+-- Match attendance check-ins (for in-match prize draws)
+create table if not exists check_ins (
+  id          uuid primary key default gen_random_uuid(),
+  pub_id      text not null references pubs(id),
+  match_id    uuid not null references matches(id),
+  name        text not null,
+  phone       text not null,
+  email       text default null,
+  shared_to   text default null,   -- 'native', 'x', 'facebook', 'copy', or null
+  created_at  timestamptz not null default now(),
+  unique(phone, match_id)
+);
+
+alter table check_ins enable row level security;
+create policy "Public insert check_ins" on check_ins for insert to anon with check (true);
 
 -- Golden Boot (top scorer) picks
 create table if not exists scorer_picks (

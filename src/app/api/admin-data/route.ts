@@ -88,6 +88,16 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  if (action === 'checkins') {
+    // Returns check-ins grouped by match for recent/live matches
+    const { data } = await supabaseAdmin
+      .from('check_ins')
+      .select('id, name, phone, email, pub_id, shared_to, created_at, match_id, matches(home_team, away_team, home_flag, away_flag, kickoff_at, stage, checkin_winner_name, checkin_winner_phone, checkin_draw_at)')
+      .order('created_at', { ascending: false })
+      .limit(500)
+    return NextResponse.json({ checkins: data || [] })
+  }
+
   if (action === 'feedback') {
     const { data } = await supabaseAdmin
       .from('feedback')

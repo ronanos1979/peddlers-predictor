@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { supabase, type Match } from '@/lib/supabase'
 import { PUB_DATA, type PubInfo } from '@/lib/pubData'
 import EntryForm from '@/components/EntryForm'
+import CheckInCard from '@/components/CheckInCard'
 import ShareCard from '@/components/ShareCard'
 import Flag from '@/components/Flag'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
@@ -377,6 +378,7 @@ function HomeContent() {
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
   const [pickStats, setPickStats] = useState<Record<string, { home: number; draw: number; away: number }>>({})
   const [loading, setLoading] = useState(false)
+  const [liveMatches, setLiveMatches] = useState<Match[]>([])
   const [patronKey, setPatronKey] = useState(0)
   const [rivalry, setRivalry] = useState<Record<string, RivalryTotals>>(EMPTY_RIVALRY)
   const [geoDetecting, setGeoDetecting] = useState(false)
@@ -430,6 +432,17 @@ function HomeContent() {
     async function load() {
       const now = new Date()
       const windowEnd = getPredictableWindowEnd(now)
+
+      // Matches currently in progress (kicked off ≤ 140 min ago, no result yet)
+      const liveStart = new Date(now.getTime() - 140 * 60 * 1000)
+      const { data: live } = await supabase.from('matches').select('*')
+        .lt('kickoff_at', now.toISOString())
+        .gte('kickoff_at', liveStart.toISOString())
+        .is('result', null)
+        .neq('stage', 'Demo Match')
+        .order('kickoff_at', { ascending: true })
+      setLiveMatches(live || [])
+
       const { data: matches } = await supabase.from('matches').select('*')
         .gte('kickoff_at', now.toISOString())
         .lt('kickoff_at', windowEnd.toISOString())
@@ -563,6 +576,15 @@ function HomeContent() {
       {/* ── MATCHES — shown first, prominently ── */}
       {selectedPub && loading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
+      )}
+
+      {/* Live match check-in cards — shown when a match is in progress */}
+      {selectedPub && !loading && pub && liveMatches.length > 0 && !selectedMatch && (
+        <div style={{ marginBottom: 8 }}>
+          {liveMatches.map(m => (
+            <CheckInCard key={m.id} pubId={selectedPub} match={m} pubCity={pub.city} />
+          ))}
+        </div>
       )}
 
       {selectedPub && !loading && pub && (() => {

@@ -13,6 +13,7 @@ type EntryRow = {
 type DayStat = [string, { haverhill: number; nashua: number; total: number }]
 type Totals = { total_entries: number; unique_phones: number; emails_collected: number; correct: number; haverhill: number; nashua: number }
 type FeedbackRow = { id: string; message: string; email: string | null; page: string | null; created_at: string; read: boolean }
+type CheckInRow = { id: string; name: string; phone: string; email: string | null; pub_id: string; shared_to: string | null; created_at: string; match_id: string; matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; kickoff_at: string; stage: string; checkin_winner_name: string | null; checkin_winner_phone: string | null; checkin_draw_at: string | null } | null }
 type RaffleEntrant = { name: string; phone: string; pub_id: string; tickets: number }
 type RaffleWinner = RaffleEntrant & { place: number }
 type TeamStatus = {
@@ -59,6 +60,11 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [checkins, setCheckins] = useState<CheckInRow[]>([])
+  const [checkinMinDraw, setCheckinMinDraw] = useState<number>(() =>
+    typeof window !== 'undefined' ? parseInt(localStorage.getItem('checkin_min_draw') || '10', 10) : 10
+  )
+  const [drawingMatchId, setDrawingMatchId] = useState<string | null>(null)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -123,6 +129,12 @@ export default function AdminPage() {
     setFeedback(data.feedback || [])
   }, [password])
 
+  const loadCheckins = useCallback(async () => {
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=checkins`)
+    const data = await res.json()
+    setCheckins(data.checkins || [])
+  }, [password])
+
   const loadTeams = useCallback(async () => {
     setTeamsLoading(true)
     const res  = await fetch(`/api/admin-teams?password=${encodeURIComponent(password)}`)
@@ -137,7 +149,8 @@ export default function AdminPage() {
     loadStats()
     loadEntrants()
     loadFeedback()
-  }, [authed, loadMatches, loadStats, loadEntrants, loadFeedback])
+    loadCheckins()
+  }, [authed, loadMatches, loadStats, loadEntrants, loadFeedback, loadCheckins])
 
   useEffect(() => {
     if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
@@ -162,14 +175,34 @@ export default function AdminPage() {
           match_id: match.id, result,
           home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
           away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+          auto_draw_min: checkinMinDraw,
         }
       })
     })
     const data = await res.json()
     if (data.success) {
-      flash(`✅ Result set! ${data.updated} entries updated.`, 'success')
-      loadMatches(); loadStats(); loadEntrants()
+      let msg = `✅ Result set! ${data.updated} entries updated.`
+      if (data.checkin_draw) {
+        msg += `\n🏆 Attendance draw winner: ${data.checkin_draw.winner_name} (${data.checkin_draw.winner_phone})`
+      }
+      flash(msg, 'success')
+      loadMatches(); loadStats(); loadEntrants(); loadCheckins()
     } else flash(data.error, 'error')
+  }
+
+  async function drawCheckinWinner(matchId: string) {
+    setDrawingMatchId(matchId)
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'draw_checkin_winner', payload: { match_id: matchId } })
+    })
+    const data = await res.json()
+    setDrawingMatchId(null)
+    if (data.success) {
+      flash(`🏆 Winner: ${data.winner_name} — ${data.winner_phone}${data.emailed ? ' (emailed!)' : ''}`, 'success')
+      loadCheckins(); loadMatches()
+    } else flash(data.error || 'Draw failed', 'error')
   }
 
   async function sendReminder() {
@@ -519,6 +552,101 @@ export default function AdminPage() {
       {/* RESULTS TAB */}
       {tab === 'results' && (
         <>
+          {/* Check-In Attendance Draw */}
+          {(() => {
+            // Group check-ins by match
+            const byMatch = new Map<string, CheckInRow[]>()
+            for (const c of checkins) {
+              if (!byMatch.has(c.match_id)) byMatch.set(c.match_id, [])
+              byMatch.get(c.match_id)!.push(c)
+            }
+            if (byMatch.size === 0) return null
+            return (
+              <div className="card" style={{ marginBottom: 16, border: '1px solid rgba(255,59,59,0.3)', background: 'linear-gradient(135deg, #1a0000, #0f0000)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--red)', marginBottom: 4 }}>
+                      🍺 Attendance Check-Ins
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      {checkins.length} total · {byMatch.size} match{byMatch.size !== 1 ? 'es' : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      Auto-draw if ≥
+                    </label>
+                    <input
+                      type="number" min="0" max="999" value={checkinMinDraw}
+                      onChange={e => {
+                        const v = parseInt(e.target.value, 10)
+                        if (!isNaN(v) && v >= 0) {
+                          setCheckinMinDraw(v)
+                          localStorage.setItem('checkin_min_draw', String(v))
+                        }
+                      }}
+                      style={{ width: 56, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, textAlign: 'center' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>check-ins</span>
+                  </div>
+                </div>
+                {Array.from(byMatch.entries()).map(([matchId, rows]) => {
+                  const m = rows[0].matches
+                  const alreadyDrawn = m?.checkin_winner_name
+                  return (
+                    <div key={matchId} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>
+                            {m?.home_flag} {m?.home_team} vs {m?.away_flag} {m?.away_team}
+                          </div>
+                          <div className="muted" style={{ fontSize: 12 }}>{m?.stage} · {rows.length} checked in</div>
+                        </div>
+                        {alreadyDrawn ? (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>🏆 Winner Drawn</div>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>{m.checkin_winner_name}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.checkin_winner_phone}</div>
+                            <button
+                              onClick={() => drawCheckinWinner(matchId)}
+                              disabled={drawingMatchId === matchId}
+                              style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                            >
+                              Re-draw
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="btn btn-primary"
+                            style={{ width: 'auto', padding: '7px 14px', fontSize: 13, background: 'var(--red)', borderColor: 'transparent' }}
+                            onClick={() => drawCheckinWinner(matchId)}
+                            disabled={drawingMatchId === matchId}
+                          >
+                            {drawingMatchId === matchId ? 'Drawing…' : `🎲 Draw Winner (${rows.length})`}
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {rows.slice(0, 10).map(c => (
+                          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>
+                            <span>·</span>
+                            <span>{c.phone}</span>
+                            {c.email && <><span>·</span><span style={{ color: 'var(--green)' }}>✉</span></>}
+                            {c.shared_to && <span style={{ color: 'var(--amber)', fontSize: 11 }}>shared via {c.shared_to}</span>}
+                          </div>
+                        ))}
+                        {rows.length > 10 && (
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>+ {rows.length - 10} more</div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
+
           <div className="card" style={{ background: 'var(--amber-light)', border: '1px solid var(--amber)', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: 3,

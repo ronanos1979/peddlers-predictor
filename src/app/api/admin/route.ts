@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     // Set match result and score all entries
     if (action === 'set_result') {
-      const { match_id, result, home_score, away_score } = payload
+      const { match_id, result, home_score, away_score, auto_draw_min } = payload
 
       if (!['home', 'draw', 'away'].includes(result)) {
         return NextResponse.json({ error: 'Invalid result' }, { status: 400 })
@@ -65,7 +65,50 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ success: true, updated: entries?.length || 0 })
+      // Auto-draw check-in winner if threshold met and not already drawn
+      let checkinDraw: { winner_name: string; winner_phone: string } | null = null
+      const minDraw = auto_draw_min != null ? parseInt(String(auto_draw_min), 10) : 0
+      if (minDraw > 0) {
+        const { data: match } = await supabaseAdmin
+          .from('matches').select('checkin_winner_name').eq('id', match_id).single()
+        if (!match?.checkin_winner_name) {
+          const { data: checkins } = await supabaseAdmin
+            .from('check_ins').select('name, phone, email').eq('match_id', match_id)
+          if (checkins && checkins.length >= minDraw) {
+            const winner = checkins[Math.floor(Math.random() * checkins.length)]
+            await supabaseAdmin.from('matches').update({
+              checkin_winner_name: winner.name,
+              checkin_winner_phone: winner.phone,
+              checkin_draw_at: new Date().toISOString(),
+            }).eq('id', match_id)
+            checkinDraw = { winner_name: winner.name, winner_phone: winner.phone }
+            // Email winner if they provided address
+            if (winner.email && process.env.RESEND_API_KEY) {
+              const { data: matchData } = await supabaseAdmin
+                .from('matches').select('home_team, away_team').eq('id', match_id).single()
+              const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from, to: winner.email,
+                  subject: `🏆 You won the attendance draw at The Peddler's Daughter!`,
+                  html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
+                    <div style="font-size:28px;font-weight:900;color:#FF9500;margin-bottom:16px;">🏆 You Won!</div>
+                    <p style="font-size:15px;margin:0 0 12px;">Hi ${winner.name.split(' ')[0]},</p>
+                    <p style="font-size:14px;color:#aaa;margin:0 0 16px;line-height:1.6;">Congratulations — you've been drawn as the <strong style="color:#f0ede8;">attendance draw winner</strong> for${matchData ? ` <strong>${matchData.home_team} vs ${matchData.away_team}</strong>` : ' tonight\'s match'}!</p>
+                    <p style="font-size:14px;color:#aaa;margin:0 0 24px;line-height:1.6;">Please visit the bar to claim your prize. 🍺</p>
+                    <p style="font-size:12px;color:#555;">The Peddler's Daughter · Haverhill MA &amp; Nashua NH</p>
+                  </div>`
+                })
+              }).catch(() => {})
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({ success: true, updated: entries?.length || 0, checkin_draw: checkinDraw })
     }
 
     if (action === 'mark_feedback_read') {
@@ -148,6 +191,44 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, updated, entries_scored })
+    }
+
+    if (action === 'draw_checkin_winner') {
+      const { match_id } = payload
+      const { data: checkins } = await supabaseAdmin
+        .from('check_ins').select('name, phone, email').eq('match_id', match_id)
+      if (!checkins?.length) {
+        return NextResponse.json({ error: 'No check-ins for this match' }, { status: 400 })
+      }
+      const winner = checkins[Math.floor(Math.random() * checkins.length)]
+      await supabaseAdmin.from('matches').update({
+        checkin_winner_name: winner.name,
+        checkin_winner_phone: winner.phone,
+        checkin_draw_at: new Date().toISOString(),
+      }).eq('id', match_id)
+      // Email winner if provided
+      if (winner.email && process.env.RESEND_API_KEY) {
+        const { data: matchData } = await supabaseAdmin
+          .from('matches').select('home_team, away_team').eq('id', match_id).single()
+        const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from, to: winner.email,
+            subject: `🏆 You won the attendance draw at The Peddler's Daughter!`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
+              <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
+              <div style="font-size:28px;font-weight:900;color:#FF9500;margin-bottom:16px;">🏆 You Won!</div>
+              <p style="font-size:15px;margin:0 0 12px;">Hi ${winner.name.split(' ')[0]},</p>
+              <p style="font-size:14px;color:#aaa;margin:0 0 16px;line-height:1.6;">You've been drawn as the <strong style="color:#f0ede8;">attendance draw winner</strong> for${matchData ? ` <strong>${matchData.home_team} vs ${matchData.away_team}</strong>` : ' tonight\'s match'}!</p>
+              <p style="font-size:14px;color:#aaa;margin:0 0 24px;line-height:1.6;">Please visit the bar to claim your prize. 🍺</p>
+              <p style="font-size:12px;color:#555;">The Peddler's Daughter · Haverhill MA &amp; Nashua NH</p>
+            </div>`
+          })
+        }).catch(() => {})
+      }
+      return NextResponse.json({ success: true, winner_name: winner.name, winner_phone: winner.phone, emailed: !!winner.email })
     }
 
     if (action === 'delete_entry') {
