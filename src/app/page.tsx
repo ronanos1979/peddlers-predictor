@@ -113,7 +113,6 @@ function MyTeamWidget({ t }: { t: Translations }) {
     ? `/world-cup/team?name=${encodeURIComponent(savedTeam.name)}`
     : `/world-cup/team?id=${savedTeam.id}`
 
-  // Determine which side of the match is the opponent
   const scheduleName = SCHEDULE_ALIASES[savedTeam.name] ?? savedTeam.name
   const isHome = nextMatch && (nextMatch.home_team === scheduleName || nextMatch.home_team === savedTeam.name)
   const opponentFlag = nextMatch ? (isHome ? nextMatch.away_flag : nextMatch.home_flag) : ''
@@ -199,23 +198,48 @@ function Countdown({ t }: { t: Translations }) {
   )
 }
 
-function PatronWelcome({ onClear, t }: { onClear: () => void; t: Translations }) {
+function PatronWelcome({ onClear, t, selectedPub, pubCity }: {
+  onClear: () => void
+  t: Translations
+  selectedPub: string
+  pubCity: string
+}) {
   const [patron, setPatron] = useState<{ name: string; phone: string } | null>(null)
   const [tickets, setTickets] = useState<number | null>(null)
+  const [rank, setRank] = useState<number | null>(null)
 
   useEffect(() => {
     const p = loadPatron()
     if (!p) return
     setPatron(p)
-    // Load their raffle ticket count
-    supabase
-      .from('entries')
-      .select('raffle_entries')
-      .eq('phone', p.phone)
+
+    const raw = p.phone.replace(/\D/g, '')
+    const phone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+
+    if (!selectedPub || phone.length !== 10) {
+      supabase.from('entries').select('raffle_entries').eq('phone', p.phone)
+        .then(({ data }) => {
+          if (data) setTickets(data.reduce((sum, e) => sum + (e.raffle_entries || 0), 0))
+        })
+      return
+    }
+
+    supabase.from('entries').select('phone, raffle_entries').eq('pub_id', selectedPub)
       .then(({ data }) => {
-        if (data) setTickets(data.reduce((sum, e) => sum + (e.raffle_entries || 0), 0))
+        if (!data) return
+        const totals: Record<string, number> = {}
+        data.forEach(e => {
+          totals[e.phone] = (totals[e.phone] || 0) + (e.raffle_entries || 0)
+        })
+        const myTotal = totals[phone] || 0
+        setTickets(myTotal)
+        if (myTotal > 0) {
+          const sorted = Object.values(totals).sort((a, b) => b - a)
+          const r = sorted.findIndex(v => v <= myTotal) + 1
+          if (r > 0) setRank(r)
+        }
       })
-  }, [])
+  }, [selectedPub]) // eslint-disable-line
 
   if (!patron) return null
 
@@ -229,7 +253,7 @@ function PatronWelcome({ onClear, t }: { onClear: () => void; t: Translations })
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12
+      gap: 12,
     }}>
       <div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: 'var(--green)', marginBottom: 2 }}>
@@ -239,6 +263,9 @@ function PatronWelcome({ onClear, t }: { onClear: () => void; t: Translations })
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)' }}>
             {t.youHave}{' '}
             <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{tickets} {tickets === 1 ? t.raffleTicket : t.raffleTickets}</span>
+            {rank !== null && pubCity && (
+              <span style={{ color: 'var(--text-dim)' }}> · #{rank} at {pubCity}</span>
+            )}
           </div>
         )}
         {tickets === 0 && (
@@ -258,6 +285,153 @@ function PatronWelcome({ onClear, t }: { onClear: () => void; t: Translations })
         </button>
       </div>
     </div>
+  )
+}
+
+function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
+  const pub = selectedPub || 'haverhill'
+  const items = [
+    { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: 'Leaderboard', desc: "Who's winning the TV" },
+    { href: '/world-cup', icon: '⚽', title: 'World Cup Hub', desc: 'Squads, standings, bracket' },
+    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: 'Golden Boot', desc: '+10 bonus tickets' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 0 12px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+      {items.map(item => (
+        <Link key={item.href} href={item.href} style={{
+          flex: '0 0 auto', width: 130,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: '12px 12px 14px',
+          textDecoration: 'none', display: 'block',
+          transition: 'border-color 0.15s',
+        }}>
+          <div style={{ fontSize: 22, marginBottom: 5 }}>{item.icon}</div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text)', marginBottom: 2 }}>
+            {item.title}
+          </div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.35 }}>
+            {item.desc}
+          </div>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function FirstTimeCard() {
+  const [show, setShow] = useState(false)
+  const [expanded, setExpanded] = useState(true)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !localStorage.getItem('peddlers_toured')) {
+      setShow(true)
+    }
+  }, [])
+
+  function dismiss() {
+    localStorage.setItem('peddlers_toured', '1')
+    setShow(false)
+  }
+
+  if (!show) return null
+
+  const steps = [
+    'Predict home win, draw, or away win before kick-off',
+    'Correct result = 1 ticket · Exact score = 3 tickets',
+    'Pick the Golden Boot winner = +10 bonus tickets',
+    'Most tickets after the Final (July 19) wins the TV!',
+  ]
+
+  return (
+    <div style={{
+      background: 'rgba(245,197,24,0.06)',
+      border: '1px solid rgba(245,197,24,0.2)',
+      borderRadius: 10,
+      marginBottom: 16,
+      overflow: 'hidden',
+    }}>
+      <button onClick={() => setExpanded(e => !e)} style={{
+        width: '100%', background: 'none', border: 'none',
+        padding: '13px 16px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', cursor: 'pointer',
+      }}>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--gold)' }}>
+          ✨ New here? How it works
+        </span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div style={{ padding: '0 16px 16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+            {steps.map((text, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{
+                  flexShrink: 0, width: 20, height: 20,
+                  background: 'rgba(245,197,24,0.15)', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--gold)',
+                }}>
+                  {i + 1}
+                </span>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text)', lineHeight: 1.45 }}>
+                  {text}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button onClick={dismiss} className="btn btn-gold" style={{ width: '100%', fontSize: 13 }}>
+            Got it!
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
+  const [hasPick, setHasPick] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const p = loadPatron()
+    if (!p?.phone) { setHasPick(false); return }
+    const raw = p.phone.replace(/\D/g, '')
+    const phone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+    if (phone.length !== 10) { setHasPick(false); return }
+    supabase.from('scorer_picks').select('id').eq('phone', phone).maybeSingle()
+      .then(({ data }) => setHasPick(!!data))
+  }, [])
+
+  if (hasPick === null || hasPick) return null
+
+  const pub = selectedPub || 'haverhill'
+  return (
+    <Link href={`/world-cup/top-scorer-pick?pub=${pub}`} style={{ textDecoration: 'none', display: 'block', marginBottom: 18 }}>
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(245,197,24,0.10), rgba(245,197,24,0.03))',
+        border: '1px solid rgba(245,197,24,0.28)',
+        borderRadius: 12,
+        padding: '14px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 14,
+      }}>
+        <div style={{ fontSize: 30, flexShrink: 0 }}>🎯</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>
+            Bonus Tickets
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 0.5, color: 'var(--text)', lineHeight: 1.2 }}>
+            Pick the Golden Boot Winner
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            Correct pick = +10 raffle tickets
+          </div>
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>
+          Pick →
+        </div>
+      </div>
+    </Link>
   )
 }
 
@@ -382,7 +556,6 @@ function HomeContent() {
   const [patronKey, setPatronKey] = useState(0)
   const [rivalry, setRivalry] = useState<Record<string, RivalryTotals>>(EMPTY_RIVALRY)
   const [geoDetecting, setGeoDetecting] = useState(false)
-  const [showManualSelector, setShowManualSelector] = useState(false)
 
   function choosePub(id: string) {
     setSelectedPub(id)
@@ -516,20 +689,22 @@ function HomeContent() {
     loadRivalry()
   }, [])
 
+  const navItems = [
+    { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: 'All 104 Matches', desc: 'Group stage through the Final' },
+    { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: t.leaderboard, desc: "Who's in the lead" },
+    { href: '/my-picks', icon: '👤', label: t.myPicks, desc: 'Your predictions & tickets' },
+    { href: '/world-cup', icon: '⚽', label: 'World Cup Hub', desc: 'Squads, standings, bracket' },
+    { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: 'Golden Boot +10', desc: 'Pick the top scorer' },
+    { href: '/overall-picks', icon: '📊', label: t.overallPicks, desc: 'How the pub is picking' },
+    { href: '/rules', icon: '📋', label: t.rules, desc: 'How the game works' },
+    { href: `/demo?pub=${selectedPub || 'haverhill'}`, icon: '🎮', label: t.demo, desc: 'Try a prediction first' },
+    { href: '/locations', icon: '📍', label: t.locations, desc: 'Haverhill, MA & Nashua, NH' },
+  ]
+
   return (
     <div className="container">
-      {/* Explore shortcut — very top */}
-      <div style={{ textAlign: 'center', paddingTop: 12, paddingBottom: 4 }}>
-        <button
-          onClick={() => document.getElementById('explore-menu')?.scrollIntoView({ behavior: 'smooth' })}
-          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 18px', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', cursor: 'pointer' }}
-        >
-          Explore Options ↓
-        </button>
-      </div>
-
       {/* Hero */}
-      <div style={{ padding: '20px 0 24px' }}>
+      <div style={{ padding: '20px 0 16px' }}>
         {/* Full-width pub name + tournament label */}
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 38, letterSpacing: 2, color: 'var(--amber)', lineHeight: 1, marginBottom: 4 }}>
@@ -566,12 +741,23 @@ function HomeContent() {
         </div>
       </div>
 
+      {/* Discovery strip — scrollable feature teaser */}
+      <DiscoveryStrip selectedPub={selectedPub} />
+
       {/* Returning patron greeting */}
-      <PatronWelcome key={patronKey} onClear={() => setPatronKey(k => k + 1)} t={t} />
+      <PatronWelcome
+        key={patronKey}
+        onClear={() => setPatronKey(k => k + 1)}
+        t={t}
+        selectedPub={selectedPub}
+        pubCity={pub?.city || ''}
+      />
+
+      {/* First-time visitor explainer */}
+      <FirstTimeCard />
 
       {/* Countdown */}
       <Countdown t={t} />
-
 
       {/* ── MATCHES — shown first, prominently ── */}
       {selectedPub && loading && (
@@ -707,7 +893,24 @@ function HomeContent() {
         )
       })()}
 
-      {/* MatchNightHub and PubRivalry — below matches */}
+      {/* Golden Boot callout — shown after matches if patron hasn't picked yet */}
+      {selectedPub && !loading && !selectedMatch && (
+        <GoldenBootCallout selectedPub={selectedPub} />
+      )}
+
+      {/* Nav grid — moved up so features are discoverable */}
+      <div className="section-label" style={{ marginTop: 8 }}>{t.explore}</div>
+      <div className="nav-grid" style={{ marginBottom: 20 }}>
+        {navItems.map(({ href, icon, label, desc }) => (
+          <Link key={label} href={href} className="nav-card">
+            <div className="nav-card-icon">{icon}</div>
+            <div className="nav-card-label">{label}</div>
+            <div className="nav-card-desc">{desc}</div>
+          </Link>
+        ))}
+      </div>
+
+      {/* MatchNightHub and PubRivalry */}
       {selectedPub && pub && (
         <>
           <MatchNightHub pub={pub} selectedPub={selectedPub} upcomingMatch={predictableMatches[0] ?? null} t={t} />
@@ -718,28 +921,7 @@ function HomeContent() {
       {/* My Team widget — only renders if a team is saved in localStorage */}
       <MyTeamWidget t={t} />
 
-      {/* Nav grid */}
-      <div id="explore-menu" className="section-label" style={{ marginTop: 24 }}>{t.explore}</div>
-      <div className="nav-grid">
-        {[
-          { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: t.schedule },
-          { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: t.leaderboard },
-          { href: '/my-picks', icon: '👤', label: t.myPicks },
-          { href: '/world-cup', icon: '⚽', label: t.worldCup },
-          { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: t.goldenBoot },
-          { href: '/overall-picks', icon: '📊', label: t.overallPicks },
-          { href: '/rules', icon: '📋', label: t.rules },
-          { href: `/demo?pub=${selectedPub || 'haverhill'}`, icon: '🎮', label: t.demo },
-          { href: '/locations', icon: '📍', label: t.locations },
-        ].map(({ href, icon, label }) => (
-          <Link key={label} href={href} className="nav-card">
-            <div className="nav-card-icon">{icon}</div>
-            <div className="nav-card-label">{label}</div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Location selector — bottom of page */}
+      {/* Location selector */}
       <div style={{ marginTop: 8, marginBottom: 16 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10, textAlign: 'center' }}>
           📍 Change Location
