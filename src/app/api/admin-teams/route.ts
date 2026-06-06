@@ -207,16 +207,17 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
       const norm    = scheduleName.toLowerCase().trim()
       const aliased = NAME_ALIASES[norm] || norm
 
-      // Use WC 2026 teams list — gives exactly the 48 national teams with no youth/variant confusion.
-      // Search fallback is unreliable (e.g. "united states" returns only U20/Women/Futsal variants).
-      const wcData   = await afFetch('teams', { league: '1', season: '2026' })
-      const wcTeams  = (wcData.response || []) as Array<{ team: { id: number; name: string } }>
+      // AF free plan only allows seasons 2022-2024; use WC 2022 (season=2022) to get national team IDs.
+      // Team IDs are stable across tournaments, so WC 2022 IDs work for squad lookups.
+      // For teams not in WC 2022 (new WC 2026 entrants), fall back to name search.
+      const wcData  = await afFetch('teams', { league: '1', season: '2022' })
+      const wcTeams = (wcData.response || []) as Array<{ team: { id: number; name: string } }>
       let afTeam = wcTeams.find(t => {
         const n = t.team.name.toLowerCase()
         return n === aliased || n === norm
       })
 
-      // Fall back to name search if not in WC list
+      // Fall back to name search for teams not in WC 2022 (new WC 2026 entrants)
       if (!afTeam) {
         const searchData = await afFetch('teams', { search: aliased })
         const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
