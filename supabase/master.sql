@@ -111,6 +111,16 @@ create table if not exists player_cache (
 
 create index if not exists player_cache_team_name_idx on player_cache (team_name);
 
+-- Aggregated player stats per team — avoids PostgREST row-limit issues when counting
+create or replace view player_cache_stats as
+select
+  team_name,
+  count(*)                              as total,
+  count(*) filter (where photo_enriched) as photos,
+  count(*) filter (where club_enriched)  as clubs
+from player_cache
+group by team_name;
+
 -- =============================================================
 -- 2. ROW LEVEL SECURITY
 -- =============================================================

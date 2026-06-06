@@ -62,19 +62,17 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const { data: playerRows } = await supabaseAdmin
-    .from('player_cache')
-    .select('team_name,photo_enriched,club_enriched')
-    .limit(5000)
+  const { data: statsRows } = await supabaseAdmin
+    .from('player_cache_stats')
+    .select('team_name,total,photos,clubs')
 
   const playerStats = new Map<string, { total: number; photos: number; clubs: number }>()
-  for (const p of (playerRows || [])) {
-    const key = p.team_name.toLowerCase()
-    if (!playerStats.has(key)) playerStats.set(key, { total: 0, photos: 0, clubs: 0 })
-    const s = playerStats.get(key)!
-    s.total++
-    if (p.photo_enriched) s.photos++
-    if (p.club_enriched)  s.clubs++
+  for (const s of (statsRows || [])) {
+    playerStats.set(s.team_name.toLowerCase(), {
+      total:  Number(s.total),
+      photos: Number(s.photos),
+      clubs:  Number(s.clubs),
+    })
   }
 
   const teams = teamNames.map(name => {
