@@ -209,18 +209,29 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
       const norm    = scheduleName.toLowerCase().trim()
       const aliased = NAME_ALIASES[norm] || norm
 
-      const searchData = await afFetch('teams', { search: aliased })
-      const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
-      // Prefer national===true; if none returned with that flag, fall back to any non-youth match
-      let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
-      if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
-      const afTeam = pool.find(t => {
+      // Use WC 2026 teams list — gives exactly the 48 national teams with no youth/variant confusion.
+      // Search fallback is unreliable (e.g. "united states" returns only U20/Women/Futsal variants).
+      const wcData   = await afFetch('teams', { league: '1', season: '2026' })
+      const wcTeams  = (wcData.response || []) as Array<{ team: { id: number; name: string } }>
+      let afTeam = wcTeams.find(t => {
         const n = t.team.name.toLowerCase()
         return n === aliased || n === norm
-      }) || pool[0]
+      })
+
+      // Fall back to name search if not in WC list
+      if (!afTeam) {
+        const searchData = await afFetch('teams', { search: aliased })
+        const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
+        let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+        if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
+        afTeam = pool.find(t => {
+          const n = t.team.name.toLowerCase()
+          return n === aliased || n === norm
+        }) || pool[0]
+      }
 
       if (!afTeam) {
-        photoError = `No AF team found for "${scheduleName}" (searched "${aliased}", got ${candidates.length} results)`
+        photoError = `No AF team found for "${scheduleName}" (tried WC list + search for "${aliased}")`
       } else {
         afTeamFound = afTeam.team.name
         const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
