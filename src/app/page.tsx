@@ -8,6 +8,7 @@ import EntryForm from '@/components/EntryForm'
 import ShareCard from '@/components/ShareCard'
 import Flag from '@/components/Flag'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
+import { distanceMetres } from '@/lib/geo'
 import { getPredictableWindowEnd } from '@/lib/matchSchedule'
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
@@ -377,6 +378,8 @@ function HomeContent() {
   const [loading, setLoading] = useState(false)
   const [patronKey, setPatronKey] = useState(0)
   const [rivalry, setRivalry] = useState<Record<string, RivalryTotals>>(EMPTY_RIVALRY)
+  const [geoDetecting, setGeoDetecting] = useState(false)
+  const [showManualSelector, setShowManualSelector] = useState(false)
 
   function choosePub(id: string) {
     setSelectedPub(id)
@@ -388,11 +391,24 @@ function HomeContent() {
     router.replace(`/?pub=${id}`, { scroll: false })
   }
 
-  // Restore saved pub on first load when no ?pub= in the URL
+  // Auto-select pub on first load: saved pref → GPS nearest → manual
   useEffect(() => {
     if (pubId) return
     const saved = loadPubPref()
-    if (saved && PUB_DATA[saved]) choosePub(saved)
+    if (saved && PUB_DATA[saved]) { choosePub(saved); return }
+    if (!navigator.geolocation) return
+    setGeoDetecting(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        const dH = distanceMetres(lat, lng, PUB_DATA.haverhill.lat, PUB_DATA.haverhill.lng)
+        const dN = distanceMetres(lat, lng, PUB_DATA.nashua.lat, PUB_DATA.nashua.lng)
+        choosePub(dH <= dN ? 'haverhill' : 'nashua')
+        setGeoDetecting(false)
+      },
+      () => setGeoDetecting(false),
+      { timeout: 7000, maximumAge: 300000 }
+    )
   }, []) // eslint-disable-line
 
   useEffect(() => {
@@ -504,36 +520,44 @@ function HomeContent() {
       {/* Countdown */}
       <Countdown t={t} />
 
-      {/* Location selector */}
-      <div style={{ marginBottom: 4 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-dim)', textAlign: 'center', marginBottom: 8 }}>
-          {t.chooseLocation}
-        </div>
-        <div className="loc-selector">
-          <button className={`loc-btn ${selectedPub === 'haverhill' ? 'active' : ''}`} onClick={() => choosePub('haverhill')}>
-            📍 Haverhill, MA
-          </button>
-          <button className={`loc-btn ${selectedPub === 'nashua' ? 'active' : ''}`} onClick={() => choosePub('nashua')}>
-            📍 Nashua, NH
-          </button>
-        </div>
-      </div>
-
-      {selectedPub && pub && (
-        <>
-          <MatchNightHub pub={pub} selectedPub={selectedPub} upcomingMatch={predictableMatches[0] ?? null} t={t} />
-          <PubRivalry rivalry={rivalry} selectedPub={selectedPub} t={t} />
-        </>
-      )}
-
-      {!selectedPub && (
-        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', borderStyle: 'dashed', borderColor: 'var(--border2)' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>👆</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 16, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{t.selectPubAbove}</p>
-          <p className="muted">{t.selectPubSub}</p>
+      {/* Location — detecting strip, compact selected header, or full selector */}
+      {geoDetecting && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 0', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
+          <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid var(--green)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          Detecting your nearest pub…
         </div>
       )}
 
+      {!geoDetecting && selectedPub && !showManualSelector && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '10px 14px', background: 'rgba(0,200,122,0.07)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 10 }}>
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700 }}>
+            📍 {PUB_DATA[selectedPub].city}, {PUB_DATA[selectedPub].state}
+          </span>
+          <button onClick={() => setShowManualSelector(true)} style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Change ↓
+          </button>
+        </div>
+      )}
+
+      {(!geoDetecting && !selectedPub) || showManualSelector ? (
+        <div style={{ marginBottom: 16 }}>
+          {!selectedPub && (
+            <div style={{ fontSize: 13, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text)', textAlign: 'center', marginBottom: 10 }}>
+              📍 Where are you watching?
+            </div>
+          )}
+          <div className="loc-selector">
+            <button className={`loc-btn ${selectedPub === 'haverhill' ? 'active' : ''}`} onClick={() => { choosePub('haverhill'); setShowManualSelector(false) }}>
+              Haverhill, MA
+            </button>
+            <button className={`loc-btn ${selectedPub === 'nashua' ? 'active' : ''}`} onClick={() => { choosePub('nashua'); setShowManualSelector(false) }}>
+              Nashua, NH
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── MATCHES — shown first, prominently ── */}
       {selectedPub && loading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
       )}
@@ -578,7 +602,6 @@ function HomeContent() {
           )
         }
 
-        // Group all matches in window by local date (picked + unpicked)
         const days: { label: string; matches: Match[] }[] = []
         for (const m of predictableMatches) {
           const label = new Date(m.kickoff_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -589,7 +612,7 @@ function HomeContent() {
 
         return (
           <div style={{ marginBottom: 4 }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 14 }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 14 }}>
               ⚽ Make Your Predictions
             </div>
             {days.map(({ label, matches }) => (
@@ -641,20 +664,11 @@ function HomeContent() {
                           )}
                         </div>
                         {done ? (
-                          <span style={{
-                            flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11,
-                            fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)',
-                            background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)',
-                            borderRadius: 6, padding: '4px 10px',
-                          }}>
+                          <span style={{ flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 6, padding: '4px 10px' }}>
                             ✓ Picked
                           </span>
                         ) : (
-                          <button
-                            onClick={() => setSelectedMatch(m)}
-                            className="btn btn-primary"
-                            style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}
-                          >
+                          <button onClick={() => setSelectedMatch(m)} className="btn btn-primary" style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}>
                             Pick →
                           </button>
                         )}
@@ -667,6 +681,14 @@ function HomeContent() {
           </div>
         )
       })()}
+
+      {/* MatchNightHub and PubRivalry — below matches */}
+      {selectedPub && pub && (
+        <>
+          <MatchNightHub pub={pub} selectedPub={selectedPub} upcomingMatch={predictableMatches[0] ?? null} t={t} />
+          <PubRivalry rivalry={rivalry} selectedPub={selectedPub} t={t} />
+        </>
+      )}
 
       {/* My Team widget — only renders if a team is saved in localStorage */}
       <MyTeamWidget t={t} />

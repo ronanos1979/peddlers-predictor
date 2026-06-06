@@ -398,30 +398,36 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           </div>
 
           {geoStatus === 'geo_blocked' && (
-            <div className="card" style={{ marginBottom: 12 }}>
-              <div className="field" style={{ marginBottom: overrideError ? 6 : 0 }}>
-                <label>{t.accessCode}</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    value={overrideCode}
-                    onChange={e => { setOverrideCode(e.target.value); setOverrideError('') }}
-                    placeholder={t.accessCodePlaceholder}
-                    onKeyDown={e => e.key === 'Enter' && handleOverrideCode()}
-                    style={{ flex: 1 }}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={handleOverrideCode}
-                    style={{ flexShrink: 0, paddingInline: 16 }}
-                  >
-                    {t.verifyCode}
-                  </button>
+            <div className="card" style={{ marginBottom: 12, border: '1px solid rgba(245,197,24,0.35)', background: 'linear-gradient(135deg, #131000, #111)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 28 }}>🔑</span>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 18, color: 'var(--gold)', letterSpacing: 0.5 }}>
+                    {t.accessCode}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Ask bar staff for today&apos;s code
+                  </div>
                 </div>
               </div>
+              <input
+                value={overrideCode}
+                onChange={e => { setOverrideCode(e.target.value); setOverrideError('') }}
+                placeholder={t.accessCodePlaceholder}
+                onKeyDown={e => e.key === 'Enter' && handleOverrideCode()}
+                autoComplete="off"
+                style={{ fontSize: 20, padding: '14px 16px', letterSpacing: 2, marginBottom: 10, textTransform: 'lowercase' }}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleOverrideCode}
+                style={{ width: '100%', fontSize: 16 }}
+              >
+                {t.verifyCode}
+              </button>
               {overrideError && (
-                <p className="error" style={{ marginBottom: 0 }}>{overrideError}</p>
+                <p className="error" style={{ marginBottom: 0, marginTop: 8 }}>{overrideError}</p>
               )}
             </div>
           )}
