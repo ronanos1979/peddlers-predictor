@@ -240,12 +240,41 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
         if (afPlayers.length === 0) {
           photoError = `AF returned 0 players for ${afTeam.team.name} (id ${afTeam.team.id})`
         } else {
-          const afByName = new Map<string, { id: number; photo: string }>()
-          afPlayers.forEach(p => { if (p.name) afByName.set(p.name.toLowerCase(), { id: p.id, photo: p.photo || '' }) })
+          // Build three lookup maps for progressive name matching:
+          // FD and AF use different name formats, so exact match alone misses many players.
+          type AfPlayer = { id: number; photo: string }
+          const normStr = (s: string) => s.toLowerCase()
+            .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
+            .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+
+          const afByExact = new Map<string, AfPlayer>()
+          const afByNorm  = new Map<string, AfPlayer>()
+          const afByLast  = new Map<string, AfPlayer[]>()
+
+          afPlayers.forEach(p => {
+            if (!p.name) return
+            const val  = { id: p.id, photo: p.photo || '' }
+            const norm = normStr(p.name)
+            const last = norm.split(' ').pop()!
+            afByExact.set(p.name.toLowerCase(), val)
+            afByNorm.set(norm, val)
+            if (!afByLast.has(last)) afByLast.set(last, [])
+            afByLast.get(last)!.push(val)
+          })
 
           const now = new Date().toISOString()
           const upserts = players.map(player => {
-            const af       = afByName.get(player.name.toLowerCase())
+            const fdNorm = normStr(player.name)
+            const fdLast = fdNorm.split(' ').pop()!
+            // 1. Exact lowercase match
+            let af: AfPlayer | undefined = afByExact.get(player.name.toLowerCase())
+            // 2. Accent/punctuation-normalised match
+            if (!af) af = afByNorm.get(fdNorm)
+            // 3. Unique last-name match (handles "Timothy" vs "Tim" etc.)
+            if (!af) {
+              const lastMatches = afByLast.get(fdLast) || []
+              if (lastMatches.length === 1) af = lastMatches[0]
+            }
             const newPhoto = af?.photo && !player.photo ? af.photo : player.photo || ''
             if (newPhoto && !player.photo) photosAdded++
             return {
