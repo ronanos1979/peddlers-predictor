@@ -46,6 +46,8 @@ const RULES = {
       ['🎲 The TV raffle draw', [
         'The raffle draw takes place after the World Cup Final on July 19, 2026',
         'There is one combined draw — all entries from Haverhill and Nashua go into the same pool',
+        'The leaderboard shows raffle ticket counts — more tickets means more chances, but it is a random draw',
+        'Being at the top of the leaderboard does not guarantee winning — the winner is drawn at random',
         'Your raffle entries = 1 per correct result + 2 bonus per exact score',
         'If the winner is not present, they will be contacted by phone',
         'Winners have 48 hours to claim their prize',
@@ -117,6 +119,8 @@ const RULES = {
       ['🎲 Sorteo del televisor', [
         'El sorteo se realiza después de la Final del Mundial el 19 de julio de 2026',
         'Hay un único sorteo combinado — todas las entradas de Haverhill y Nashua van al mismo bombo',
+        'La clasificación muestra el conteo de boletos — más boletos = más chances, pero es un sorteo aleatorio',
+        'Estar en lo alto de la clasificación no garantiza ganar — el ganador se elige al azar',
         'Tus boletos = 1 por resultado correcto + 2 de bonificación por marcador exacto',
         'Si el ganador no está presente, se le contactará por teléfono',
         'Los ganadores tienen 48 horas para reclamar el premio',

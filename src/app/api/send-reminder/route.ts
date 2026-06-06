@@ -73,7 +73,7 @@ function buildHtml(matches: Match[], name: string, pubId: string) {
     <p style="font-size:16px;margin:0 0 6px;color:#f0ede8;">Hey ${first}! ⚽</p>
     <p style="font-size:14px;color:#999;margin:0 0 20px;line-height:1.6;">
       ${matches.length === 1 ? 'There&rsquo;s a match on' : 'There are matches on'} at ${pubName}.
-      Make your prediction before kick-off to earn raffle tickets toward the TV giveaway.
+      Make your prediction before kick-off to earn raffle tickets &mdash; more tickets means more chances to win the TV raffle.
     </p>
 
     <!-- Matches -->
@@ -88,7 +88,7 @@ function buildHtml(matches: Match[], name: string, pubId: string) {
     </div>
 
     <p style="font-size:13px;color:#777770;text-align:center;margin:0 0 24px;">
-      3 raffle entries for every correct pick &mdash; TV giveaway after the Final on July 19.
+      Up to 3 raffle entries per pick &mdash; raffle draw after the Final on July 19. More tickets = more chances!
     </p>
 
     <!-- Footer -->

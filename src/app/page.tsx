@@ -291,7 +291,7 @@ function PatronWelcome({ onClear, t, selectedPub, pubCity }: {
 function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   const pub = selectedPub || 'haverhill'
   const items = [
-    { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: 'Leaderboard', desc: "Who's winning the TV" },
+    { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: 'Leaderboard', desc: 'Raffle ticket standings' },
     { href: '/world-cup', icon: '⚽', title: 'World Cup Hub', desc: 'Squads, standings, bracket' },
     { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: 'Golden Boot', desc: '+10 bonus tickets' },
   ]
@@ -339,7 +339,7 @@ function FirstTimeCard() {
     'Predict home win, draw, or away win before kick-off',
     'Correct result = 1 ticket · Exact score = 3 tickets',
     'Pick the Golden Boot winner = +10 bonus tickets',
-    'Most tickets after the Final (July 19) wins the TV!',
+    'More tickets = more chances in the TV raffle draw on July 19!',
   ]
 
   return (

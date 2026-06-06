@@ -62,6 +62,7 @@ function LeaderboardContent() {
           {t.liveRankings}
         </div>
         <h1>{t.leaderboard}</h1>
+        <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>Raffle ticket standings — more tickets = more chances, but anyone can win the draw</p>
         {match && (
           <p className="muted">{t.current}: <Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team} vs <Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</p>
         )}
