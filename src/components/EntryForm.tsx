@@ -39,8 +39,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [pick, setPick] = useState<'home' | 'draw' | 'away' | null>(null)
-  const [homeScorePred, setHomeScorePred] = useState<number | null>(null)
-  const [awayScorePred, setAwayScorePred] = useState<number | null>(null)
+  const [homeScorePred, setHomeScorePred] = useState<number>(0)
+  const [awayScorePred, setAwayScorePred] = useState<number>(0)
+  const [scoreSkipped, setScoreSkipped] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -134,8 +135,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           code: dailyCode,
           is_demo: isDemo,
           honeypot,
-          home_score_pred: homeScorePred,
-          away_score_pred: awayScorePred,
+          home_score_pred: scoreSkipped ? null : homeScorePred,
+          away_score_pred: scoreSkipped ? null : awayScorePred,
           entry_lat: userCoords?.lat ?? null,
           entry_lng: userCoords?.lng ?? null,
           entry_distance_m: userDistance !== null ? Math.round(userDistance) : null,
@@ -437,6 +438,18 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               {overrideError && (
                 <p className="error" style={{ marginBottom: 0, marginTop: 8 }}>{overrideError}</p>
               )}
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+                  At the pub? Enable location in your browser settings, then:
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setGeoStatus('checking'); setGeoMessage(t.checkingLocation); checkGeo() }}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 14px' }}
+                >
+                  📍 Try location again
+                </button>
+              </div>
             </div>
           )}
 
@@ -498,45 +511,59 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               ))}
             </div>
 
-            {pick && (
-              <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 10 }}>
-                  🎯 Predict the score <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 10 }}>— optional, +2 bonus if exact</span>
+            {pick && !scoreSkipped && (
+              <div style={{ marginTop: 14, padding: '14px 16px', background: 'linear-gradient(135deg, #131000, #0f0e00)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,197,24,0.3)' }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2, textAlign: 'center' }}>
+                  🎯 Predict the score
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}><Flag emoji={match.home_flag} size={16} style={{ marginRight: 4 }} />{match.home_team}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button type="button" onClick={() => setHomeScorePred(h => Math.max(0, (h ?? 0) - 1))}
-                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>−</button>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, minWidth: 32, textAlign: 'center', color: 'var(--text)' }}>
-                        {homeScorePred ?? '—'}
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 16 }}>
+                  Optional — +2 bonus raffle tickets if exact
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                  {/* Home team */}
+                  <div style={{ textAlign: 'center', flex: 1 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <Flag emoji={match.home_flag} size={18} />{match.home_team}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setHomeScorePred(h => Math.max(0, h - 1))}
+                        style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 20, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 44, minWidth: 44, textAlign: 'center', color: 'var(--text)', lineHeight: 1 }}>
+                        {homeScorePred}
                       </div>
-                      <button type="button" onClick={() => setHomeScorePred(h => Math.min(20, (h ?? -1) + 1))}
-                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>+</button>
+                      <button type="button" onClick={() => setHomeScorePred(h => Math.min(20, h + 1))}
+                        style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.08)', color: 'var(--gold)', fontSize: 20, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                     </div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-muted)', paddingTop: 20 }}>–</div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}><Flag emoji={match.away_flag} size={16} style={{ marginRight: 4 }} />{match.away_team}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button type="button" onClick={() => setAwayScorePred(a => Math.max(0, (a ?? 0) - 1))}
-                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>−</button>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, minWidth: 32, textAlign: 'center', color: 'var(--text)' }}>
-                        {awayScorePred ?? '—'}
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-muted)', paddingTop: 28 }}>–</div>
+                  {/* Away team */}
+                  <div style={{ textAlign: 'center', flex: 1 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <Flag emoji={match.away_flag} size={18} />{match.away_team}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setAwayScorePred(a => Math.max(0, a - 1))}
+                        style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 20, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 44, minWidth: 44, textAlign: 'center', color: 'var(--text)', lineHeight: 1 }}>
+                        {awayScorePred}
                       </div>
-                      <button type="button" onClick={() => setAwayScorePred(a => Math.min(20, (a ?? -1) + 1))}
-                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, cursor: 'pointer', flexShrink: 0 }}>+</button>
+                      <button type="button" onClick={() => setAwayScorePred(a => Math.min(20, a + 1))}
+                        style={{ width: 44, height: 44, borderRadius: '50%', border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.08)', color: 'var(--gold)', fontSize: 20, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                     </div>
                   </div>
                 </div>
-                {(homeScorePred !== null || awayScorePred !== null) && (
-                  <button type="button" onClick={() => { setHomeScorePred(null); setAwayScorePred(null) }}
-                    style={{ display: 'block', margin: '10px auto 0', background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, cursor: 'pointer' }}>
-                    Clear score prediction
-                  </button>
-                )}
+                <button type="button" onClick={() => { setScoreSkipped(true); setHomeScorePred(0); setAwayScorePred(0) }}
+                  style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                  Skip — no score prediction
+                </button>
               </div>
+            )}
+
+            {pick && scoreSkipped && (
+              <button type="button" onClick={() => setScoreSkipped(false)}
+                style={{ display: 'block', width: '100%', marginTop: 10, padding: '10px 14px', background: 'rgba(245,197,24,0.06)', border: '1px dashed rgba(245,197,24,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--gold)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>
+                🎯 Add score prediction (+2 bonus tickets)
+              </button>
             )}
 
             {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}

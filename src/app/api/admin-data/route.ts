@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       .from('entries')
       .select(`
         id, name, phone, email, pick, is_correct, raffle_entries,
+        home_score_pred, away_score_pred,
         pub_id, created_at,
         matches (home_team, away_team, home_flag, away_flag, stage, kickoff_at)
       `)

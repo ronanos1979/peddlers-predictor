@@ -11,7 +11,8 @@
       "Bash(npx jest *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -L https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png -H 'User-Agent: Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36' -H 'Referer: https://www.fifplay.com/' -o C:/dev/git/peddlers/peddlers-predictor/public/wc2026.png --silent --show-error)"
     ]
   }
 }

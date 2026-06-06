@@ -7,6 +7,7 @@ import Flag from '@/components/Flag'
 type EntryRow = {
   id: string; name: string; phone: string; email: string | null; pick: string
   is_correct: boolean | null; raffle_entries: number; pub_id: string; created_at: string
+  home_score_pred: number | null; away_score_pred: number | null
   matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; stage: string; kickoff_at: string } | null
 }
 type DayStat = [string, { haverhill: number; nashua: number; total: number }]
@@ -757,6 +758,11 @@ export default function AdminPage() {
                       {e.pick === 'home' ? `${e.matches.home_team} win` :
                        e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
                     </strong>
+                    {e.home_score_pred != null && e.away_score_pred != null && (
+                      <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
+                        ({e.home_score_pred}–{e.away_score_pred})
+                      </span>
+                    )}
                     {' · '}
                     {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct</span>}
                     {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}

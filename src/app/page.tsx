@@ -117,6 +117,7 @@ function MyTeamWidget({ t }: { t: Translations }) {
   const isHome = nextMatch && (nextMatch.home_team === scheduleName || nextMatch.home_team === savedTeam.name)
   const opponentFlag = nextMatch ? (isHome ? nextMatch.away_flag : nextMatch.home_flag) : ''
   const opponentName = nextMatch ? (isHome ? nextMatch.away_team : nextMatch.home_team) : ''
+  const myTeamFlag = nextMatch ? (isHome ? nextMatch.home_flag : nextMatch.away_flag) : ''
 
   return (
     <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #0d1520, #111)', borderColor: 'rgba(245,197,24,0.2)' }}>
@@ -144,8 +145,8 @@ function MyTeamWidget({ t }: { t: Translations }) {
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, marginBottom: 4 }}>
             {isHome
-              ? <>{savedTeam.logo && <span>{savedTeam.logo} </span>}{savedTeam.name} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {opponentFlag && <Flag emoji={opponentFlag} size={20} style={{ marginRight: 4 }} />}{opponentName}</>
-              : <>{opponentFlag && <Flag emoji={opponentFlag} size={20} style={{ marginRight: 4 }} />}{opponentName} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {savedTeam.logo && <span> {savedTeam.logo}</span>} {savedTeam.name}</>
+              ? <>{myTeamFlag && <Flag emoji={myTeamFlag} size={20} style={{ marginRight: 4 }} />}{savedTeam.name} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {opponentFlag && <Flag emoji={opponentFlag} size={20} style={{ marginRight: 4, marginLeft: 4 }} />}{opponentName}</>
+              : <>{opponentFlag && <Flag emoji={opponentFlag} size={20} style={{ marginRight: 4 }} />}{opponentName} <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span> {myTeamFlag && <Flag emoji={myTeamFlag} size={20} style={{ marginRight: 4, marginLeft: 4 }} />}{savedTeam.name}</>
             }
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>
