@@ -33,6 +33,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [overrideCode, setOverrideCode] = useState('')
   const [overrideError, setOverrideError] = useState('')
   const [geoMessage, setGeoMessage] = useState(t.checkingLocation)
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [userDistance, setUserDistance] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -85,10 +87,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
     }
     try {
       const pos = await getPosition()
-      const dist = distanceMetres(pos.coords.latitude, pos.coords.longitude, pub.lat, pub.lng)
+      const { latitude: lat, longitude: lng } = pos.coords
+      const dist = distanceMetres(lat, lng, pub.lat, pub.lng)
+      setUserCoords({ lat, lng })
+      setUserDistance(dist)
       if (dist <= pub.radius_m) {
         setGeoStatus('ok')
-        setGeoMessage(`📍 ${t.locationVerified} - ${pub.city}`)
+        setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(dist)}m from pub`)
       } else {
         setGeoStatus('fail')
         setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist))))
@@ -131,6 +136,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           honeypot,
           home_score_pred: homeScorePred,
           away_score_pred: awayScorePred,
+          entry_lat: userCoords?.lat ?? null,
+          entry_lng: userCoords?.lng ?? null,
+          entry_distance_m: userDistance !== null ? Math.round(userDistance) : null,
         })
       })
       const data = await res.json()

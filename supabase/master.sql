@@ -50,6 +50,9 @@ create table if not exists entries (
   created_at       timestamptz not null default now(),
   home_score_pred  integer default null,
   away_score_pred  integer default null,
+  entry_lat        numeric(10,7) default null,
+  entry_lng        numeric(10,7) default null,
+  entry_distance_m integer default null,
   unique(phone, match_id)
 );
 
