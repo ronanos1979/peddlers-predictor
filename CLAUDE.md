@@ -262,7 +262,7 @@ Fully automatic based on datetime — no admin needed:
 ### Two-source architecture
 The app uses **football-data.org (FD) as primary** and **API-Football (AF) for player enrichment**:
 - **FD**: free tier = 10 req/min, no daily cap. WC competition ID: `2000`. Env: `FOOTBALL_DATA_API_KEY`
-- **AF**: free tier = 100 req/day (strict). **Free plan only allows seasons 2022–2024** — do NOT use `season=2026`. League ID: `1`. Env: `API_FOOTBALL_KEY`
+- **AF**: free tier = 100 req/day (strict). League ID: `1`. Env: `API_FOOTBALL_KEY`. For the WC 2026 squad team lookup, code tries `season=2026` first (correct squads + photos), falls back to `season=2022` if 2026 is unavailable on the current plan.
 - Both are optional — the app degrades gracefully if either key is missing
 - The `footballData.ts` adapter converts FD responses to AF-format so frontend code doesn't change
 

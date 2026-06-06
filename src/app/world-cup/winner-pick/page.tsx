@@ -30,9 +30,10 @@ function WinnerPickContent() {
         supabase.from('matches').select('home_team, home_flag').neq('stage', 'Demo Match'),
         supabase.from('matches').select('away_team, away_flag').neq('stage', 'Demo Match'),
       ])
+      const PLACEHOLDER_RE = /TBD|Winner|Runner|Place|R32 |QF[0-9]|SF[0-9]|Group [A-L] /
       const teamMap = new Map<string, string>()
-      homeRows?.forEach(m => { if (m.home_team && m.home_flag) teamMap.set(m.home_team, m.home_flag) })
-      awayRows?.forEach(m => { if (m.away_team && m.away_flag) teamMap.set(m.away_team, m.away_flag) })
+      homeRows?.forEach(m => { if (m.home_team && m.home_flag && !PLACEHOLDER_RE.test(m.home_team)) teamMap.set(m.home_team, m.home_flag) })
+      awayRows?.forEach(m => { if (m.away_team && m.away_flag && !PLACEHOLDER_RE.test(m.away_team)) teamMap.set(m.away_team, m.away_flag) })
       const sorted = Array.from(teamMap.entries())
         .map(([name, flag]) => ({ name, flag }))
         .sort((a, b) => a.name.localeCompare(b.name))

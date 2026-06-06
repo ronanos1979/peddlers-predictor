@@ -207,17 +207,27 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
       const norm    = scheduleName.toLowerCase().trim()
       const aliased = NAME_ALIASES[norm] || norm
 
-      // AF free plan only allows seasons 2022-2024; use WC 2022 (season=2022) to get national team IDs.
-      // Team IDs are stable across tournaments, so WC 2022 IDs work for squad lookups.
-      // For teams not in WC 2022 (new WC 2026 entrants), fall back to name search.
-      const wcData  = await afFetch('teams', { league: '1', season: '2022' })
-      const wcTeams = (wcData.response || []) as Array<{ team: { id: number; name: string } }>
+      // Try WC 2026 first (most accurate for current tournament squads + photos).
+      // Fall back to WC 2022 if 2026 data is unavailable on the current API plan.
+      // Team IDs are stable across tournaments so either season works for squad lookups.
+      let wcTeams: Array<{ team: { id: number; name: string } }> = []
+      try {
+        const wcData2026 = await afFetch('teams', { league: '1', season: '2026' })
+        wcTeams = (wcData2026.response || []) as Array<{ team: { id: number; name: string } }>
+      } catch {
+        // season=2026 not available on this API plan
+      }
+      if (wcTeams.length === 0) {
+        const wcData2022 = await afFetch('teams', { league: '1', season: '2022' })
+        wcTeams = (wcData2022.response || []) as Array<{ team: { id: number; name: string } }>
+      }
+
       let afTeam = wcTeams.find(t => {
         const n = t.team.name.toLowerCase()
         return n === aliased || n === norm
       })
 
-      // Fall back to name search for teams not in WC 2022 (new WC 2026 entrants)
+      // Fall back to name search for teams not found in either WC list
       if (!afTeam) {
         const searchData = await afFetch('teams', { search: aliased })
         const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
