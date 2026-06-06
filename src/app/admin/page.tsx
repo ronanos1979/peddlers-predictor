@@ -283,12 +283,13 @@ export default function AdminPage() {
             club_count:  t.club_count  + (data.clubs_added  || 0),
           } : t))
         }
-        flash(
-          data.rate_limited
-            ? `⚠️ ${teamName}: rate limited — ${data.photos_added} photos, ${data.clubs_added} clubs saved`
-            : `✅ ${teamName}: ${data.photos_added} photos, ${data.clubs_added} clubs`,
-          data.rate_limited ? 'error' : 'success'
-        )
+        if (data.rate_limited) {
+          flash(`⚠️ ${teamName}: rate limited — ${data.photos_added} photos, ${data.clubs_added} clubs saved`, 'error')
+        } else if (data.photo_error) {
+          flash(`⚠️ ${teamName}: ${data.photo_error}`, 'error')
+        } else {
+          flash(`✅ ${teamName}: ${data.photos_added} photos, ${data.clubs_added} clubs loaded`, 'success')
+        }
       } else {
         flash(`❌ ${teamName}: ${data.error}`, 'error')
       }

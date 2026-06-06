@@ -194,6 +194,9 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
 
   let photosAdded  = 0
   let afRateLimited = false
+  let afTeamFound: string | null = null
+  let afPlayersFound = 0
+  let photoError: string | null = null
 
   // ── Step 1: Photo enrichment — 2 AF calls total ────────────────────────────
   const needsPhotos = players.some(p => !p.photo_enriched)
@@ -210,11 +213,17 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
         return n === aliased || n === norm
       }) || seniors[0]
 
-      if (afTeam) {
+      if (!afTeam) {
+        photoError = `No AF national team found for "${scheduleName}" (searched "${aliased}")`
+      } else {
+        afTeamFound = afTeam.team.name
         const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
         const afPlayers = (squadData.response?.[0]?.players || []) as Array<{ id: number; name: string; photo: string }>
+        afPlayersFound = afPlayers.length
 
-        if (afPlayers.length > 0) {
+        if (afPlayers.length === 0) {
+          photoError = `AF returned 0 players for ${afTeam.team.name} (id ${afTeam.team.id})`
+        } else {
           const afByName = new Map<string, { id: number; photo: string }>()
           afPlayers.forEach(p => { if (p.name) afByName.set(p.name.toLowerCase(), { id: p.id, photo: p.photo || '' }) })
 
@@ -233,12 +242,20 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
               cached_at:      now,
             }
           })
-          await supabaseAdmin.from('player_cache').upsert(upserts, { onConflict: 'fd_id' })
+          const { error: upsertErr } = await supabaseAdmin
+            .from('player_cache')
+            .upsert(upserts, { onConflict: 'fd_id' })
+          if (upsertErr) {
+            return NextResponse.json({ error: `DB write failed (photos): ${upsertErr.message}` }, { status: 500 })
+          }
         }
       }
     } catch (e) {
       if ((e as Error).message === 'AF_RATE_LIMIT') afRateLimited = true
-      else console.error('AF photo enrichment error:', e)
+      else {
+        const msg = (e as Error).message || String(e)
+        return NextResponse.json({ error: `AF photo enrichment failed: ${msg}` }, { status: 502 })
+      }
     }
   }
 
@@ -279,9 +296,12 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
   }
 
   return NextResponse.json({
-    success:      true,
-    photos_added: photosAdded,
-    clubs_added:  clubsAdded,
-    rate_limited: afRateLimited,
+    success:           true,
+    photos_added:      photosAdded,
+    clubs_added:       clubsAdded,
+    rate_limited:      afRateLimited,
+    af_team_found:     afTeamFound,
+    af_players_found:  afPlayersFound,
+    photo_error:       photoError,
   })
 }
