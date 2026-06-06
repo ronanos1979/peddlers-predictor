@@ -29,7 +29,7 @@ function isValidPhone(raw: string): boolean {
 
 export default function EntryForm({ pubId, match, pub, isDemo = false, onComplete }: Props) {
   const { t } = useLocale()
-  const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'fail' | 'geo_blocked'>('checking')
+  const [geoStatus, setGeoStatus] = useState<'prompt' | 'checking' | 'ok' | 'fail' | 'geo_blocked'>('prompt')
   const [overrideCode, setOverrideCode] = useState('')
   const [overrideError, setOverrideError] = useState('')
   const [geoMessage, setGeoMessage] = useState(t.checkingLocation)
@@ -105,7 +105,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
     }
   }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationDistanceFail, t.pubCodeRequired])
 
-  useEffect(() => { checkGeo() }, [checkGeo])
+  // Auto-verify for demo or when no pub (no location check needed)
+  useEffect(() => { if (isDemo || !pub) checkGeo() }, [isDemo, pub]) // eslint-disable-line
 
   const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
@@ -401,11 +402,46 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
 
       {!isClosed && (
         <>
-          <div className="geo-strip">
-            <div className={`geo-dot ${geoStatus}`} />
-            <span>{geoMessage}</span>
-          </div>
+          {/* Geo strip — only shown after a check has been attempted */}
+          {(geoStatus === 'ok' || geoStatus === 'checking' || geoStatus === 'fail') && (
+            <div className="geo-strip">
+              <div className={`geo-dot ${geoStatus}`} />
+              <span>{geoMessage}</span>
+            </div>
+          )}
 
+          {/* Location prompt card — shown before any check is made */}
+          {geoStatus === 'prompt' && (
+            <div className="card" style={{ marginBottom: 12, border: '1px solid rgba(0,200,122,0.3)', background: 'linear-gradient(135deg, #091a10, #111)', textAlign: 'center', padding: '20px 16px' }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>📍</div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 20, color: 'var(--text)', marginBottom: 6 }}>
+                Verify you&apos;re at the pub
+              </div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.5 }}>
+                We check your GPS to confirm you&apos;re playing from The Peddler&apos;s Daughter. Your location is not stored or shared.
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ fontSize: 16, marginBottom: 12 }}
+                onClick={() => { setGeoStatus('checking'); setGeoMessage(t.checkingLocation); checkGeo() }}
+              >
+                📍 Allow Location Access
+              </button>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                Your browser will ask to share your location — tap <strong>Allow</strong>.
+              </div>
+              <button
+                type="button"
+                onClick={() => setGeoStatus('geo_blocked')}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: '4px 0' }}
+              >
+                🔑 Enter access code instead
+              </button>
+            </div>
+          )}
+
+          {/* Access code card — shown when location is denied or user chose code path */}
           {geoStatus === 'geo_blocked' && (
             <div className="card" style={{ marginBottom: 12, border: '1px solid rgba(245,197,24,0.35)', background: 'linear-gradient(135deg, #131000, #111)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -440,7 +476,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               )}
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  At the pub? Enable location in your browser settings, then:
+                  At the pub? Tap <strong>Allow</strong> on the location prompt, or enable Location for this site in your browser settings, then:
                 </div>
                 <button
                   type="button"
@@ -450,6 +486,36 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                   📍 Try location again
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Too far from pub — show access code as fallback */}
+          {geoStatus === 'fail' && (
+            <div className="card" style={{ marginBottom: 12, border: '1px solid rgba(245,197,24,0.25)', background: 'linear-gradient(135deg, #131000, #111)', textAlign: 'center', padding: '14px 16px' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Not close enough to the pub? Ask bar staff for today&apos;s access code.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={overrideCode}
+                  onChange={e => { setOverrideCode(e.target.value); setOverrideError('') }}
+                  placeholder={t.accessCodePlaceholder}
+                  onKeyDown={e => e.key === 'Enter' && handleOverrideCode()}
+                  autoComplete="off"
+                  style={{ fontSize: 18, padding: '12px 14px', letterSpacing: 2, flex: 1, textTransform: 'lowercase' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleOverrideCode}
+                  style={{ width: 'auto', padding: '0 18px', fontSize: 14, flexShrink: 0 }}
+                >
+                  {t.verifyCode}
+                </button>
+              </div>
+              {overrideError && (
+                <p className="error" style={{ marginBottom: 0, marginTop: 8 }}>{overrideError}</p>
+              )}
             </div>
           )}
 
