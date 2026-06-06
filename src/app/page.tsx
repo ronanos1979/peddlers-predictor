@@ -391,6 +391,17 @@ function HomeContent() {
     router.replace(`/?pub=${id}`, { scroll: false })
   }
 
+  // Sync when header location switcher changes ?pub= param
+  useEffect(() => {
+    if (pubId && pubId !== selectedPub) {
+      setSelectedPub(pubId)
+      setPredictableMatches([])
+      setSelectedMatch(null)
+      setCompletedIds(new Set())
+      setPickStats({})
+    }
+  }, [pubId]) // eslint-disable-line
+
   // Auto-select pub on first load: saved pref → GPS nearest → manual
   useEffect(() => {
     if (pubId) return
@@ -493,41 +504,51 @@ function HomeContent() {
 
   return (
     <div className="container">
+      {/* Explore shortcut — very top */}
+      <div style={{ textAlign: 'center', paddingTop: 12, paddingBottom: 4 }}>
+        <button
+          onClick={() => document.getElementById('explore-menu')?.scrollIntoView({ behavior: 'smooth' })}
+          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 18px', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', cursor: 'pointer' }}
+        >
+          Explore Options ↓
+        </button>
+      </div>
+
       {/* Hero */}
-      <div style={{ textAlign: 'center', padding: '28px 0 24px' }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 38, letterSpacing: 2, color: 'var(--amber)', lineHeight: 1, marginBottom: 4 }}>
-          The Peddler&apos;s Daughter
-        </div>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>
-          {t.tournamentLine}
-        </div>
-        {/* WC 2026 logo */}
-        <div style={{ marginBottom: 12 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png"
-            alt="FIFA World Cup 2026"
-            style={{ height: 80, width: 'auto', objectFit: 'contain' }}
-          />
-        </div>
-        <h1 style={{ fontSize: 42, marginBottom: 8 }}>
-          {t.heroTitle.split('\n')[0]}<br /><span style={{ color: 'var(--green)' }}>{t.heroTitle.split('\n')[1]}</span>
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, margin: '0 auto' }}>
-          {t.heroSub}
-        </p>
-        {(rivalry.haverhill.entries + rivalry.nashua.entries) > 0 && (
-          <div style={{ display: 'inline-block', marginTop: 14, background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 20, padding: '6px 16px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)' }}>
-            🏃 {t.totalPlayers.replace('{count}', String(rivalry.haverhill.entries + rivalry.nashua.entries))}
+      <div style={{ padding: '20px 0 24px' }}>
+        {/* Full-width pub name + tournament label */}
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 38, letterSpacing: 2, color: 'var(--amber)', lineHeight: 1, marginBottom: 4 }}>
+            The Peddler&apos;s Daughter
           </div>
-        )}
-        <div style={{ marginTop: 16 }}>
-          <button
-            onClick={() => document.getElementById('explore-menu')?.scrollIntoView({ behavior: 'smooth' })}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 20, padding: '8px 20px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', cursor: 'pointer' }}
-          >
-            Explore Options ↓
-          </button>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+            {t.tournamentLine}
+          </div>
+        </div>
+
+        {/* Two-column: WC logo (1/3) | predictor text (2/3) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ flex: '0 0 33%', display: 'flex', justifyContent: 'center' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png"
+              alt="FIFA World Cup 2026"
+              style={{ width: '100%', maxWidth: 110, height: 'auto', objectFit: 'contain' }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 34, marginBottom: 8, lineHeight: 1.1 }}>
+              {t.heroTitle.split('\n')[0]}<br /><span style={{ color: 'var(--green)' }}>{t.heroTitle.split('\n')[1]}</span>
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              {t.heroSub}
+            </p>
+            {(rivalry.haverhill.entries + rivalry.nashua.entries) > 0 && (
+              <div style={{ display: 'inline-block', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 20, padding: '5px 12px', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)' }}>
+                🏃 {t.totalPlayers.replace('{count}', String(rivalry.haverhill.entries + rivalry.nashua.entries))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
