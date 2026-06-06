@@ -25,10 +25,13 @@ The patron code is automatic. Tell bar staff: **`peddlers` + today's date number
 ### After full time
 1. Go to `https://peddlers-predictor.vercel.app/admin`
 2. Log in with the admin password
-3. Find the match under **Results** tab
-4. Select the result: **Home Win / Draw / Away Win**
-5. Click **Set Result**
-6. The leaderboard updates instantly
+3. Click **⟳ Sync results from API** to auto-fetch all finished results, or set manually:
+   - Find the match under **Results** tab
+   - Select the result: **Home Win / Draw / Away Win**
+   - Optionally enter the score (home − away)
+   - Click **Set Result**
+4. The leaderboard updates instantly
+5. **For the Final**: setting the result also auto-scores all `winner_picks` — no separate action needed
 
 ### Checking entrants
 - **Entrants tab**: filter by date, see who predicted what, CSV export
@@ -44,10 +47,12 @@ The patron code is automatic. Tell bar staff: **`peddlers` + today's date number
 
 | Tab | Purpose |
 |-----|---------|
-| Results | Set match outcomes after full time |
-| Entrants | View/export patron predictions |
-| Stats | Entry counts, accuracy, pub breakdown |
-| Feedback | Bug reports and suggestions from patrons |
+| Results | Set match outcomes after full time; ⟳ Sync from football-data.org; email reminders |
+| Entrants | View/export patron predictions; filter by date |
+| Stats | Entry counts, accuracy, pub breakdown, daily chart |
+| Feedback | Bug reports and suggestions from patrons, unread badge |
+| Raffle | Weighted draw view — filterable by pub |
+| Teams | 48-team cache status; load squads from football-data.org; enrich with API-Football photos/clubs |
 
 ---
 

@@ -23,45 +23,58 @@ const mockEntries = [
 
 const mockScorerPick = { player_name: 'Christian Pulisic', player_team: 'AC Milan' }
 
-// Spy that captures what phone value is passed to .eq('phone', ...)
 let capturedPhone: string | null = null
 
-let callCount = 0
-jest.mock('@/lib/supabaseAdmin', () => ({
-  supabaseAdmin: {
-    from: jest.fn(() => {
-      callCount++
-      if (callCount % 2 === 1) {
-        // entries query
-        return {
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn((_col: string, val: string) => {
-              capturedPhone = val
-              return {
-                neq: jest.fn().mockReturnValue({
-                  order: jest.fn().mockResolvedValue({ data: mockEntries, error: null }),
-                }),
-              }
-            }),
-          }),
-        }
-      }
-      // scorer_picks query
+function makeMockFrom(scorerPickData: object | null = mockScorerPick) {
+  return jest.fn((table: string) => {
+    if (table === 'entries') {
       return {
         select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ data: mockScorerPick, error: null }),
+          eq: jest.fn((_col: string, val: string) => {
+            capturedPhone = val
+            return {
+              neq: jest.fn().mockReturnValue({
+                order: jest.fn().mockResolvedValue({ data: mockEntries, error: null }),
+              }),
+            }
           }),
         }),
       }
-    }),
-  },
+    }
+    if (table === 'scorer_picks') {
+      return {
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: scorerPickData, error: null }),
+          }),
+        }),
+      }
+    }
+    if (table === 'winner_picks') {
+      return {
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }
+    }
+    return { select: jest.fn() }
+  })
+}
+
+jest.mock('@/lib/supabaseAdmin', () => ({
+  supabaseAdmin: { from: jest.fn() },
 }))
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
-beforeEach(() => { callCount = 0; capturedPhone = null })
+beforeEach(async () => {
+  capturedPhone = null
+  const { supabaseAdmin } = await import('@/lib/supabaseAdmin')
+  ;(supabaseAdmin.from as jest.Mock).mockImplementation(makeMockFrom())
+})
 
 function makeRequest(phone: string): NextRequest {
   return new NextRequest(`http://localhost/api/my-picks?phone=${encodeURIComponent(phone)}`)
@@ -108,7 +121,6 @@ describe('GET /api/my-picks', () => {
   it('returns the same entries regardless of phone format', async () => {
     const formats = ['6031231231', '603 123 1231', '(603) 123-1231', '+16031231231', '1-603-123-1231']
     for (const fmt of formats) {
-      callCount = 0
       const res = await GET(makeRequest(fmt))
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -145,28 +157,16 @@ describe('GET /api/my-picks', () => {
 
   it('returns scorerPick: null when player has not made a Golden Boot pick', async () => {
     const { supabaseAdmin } = await import('@/lib/supabaseAdmin')
-    const mockFrom = supabaseAdmin.from as jest.Mock
-    mockFrom.mockImplementationOnce(() => ({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn((_col: string, val: string) => {
-          capturedPhone = val
-          return {
-            neq: jest.fn().mockReturnValue({
-              order: jest.fn().mockResolvedValue({ data: mockEntries, error: null }),
-            }),
-          }
-        }),
-      }),
-    })).mockImplementationOnce(() => ({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          single: jest.fn().mockResolvedValue({ data: null, error: null }),
-        }),
-      }),
-    }))
+    ;(supabaseAdmin.from as jest.Mock).mockImplementation(makeMockFrom(null))
 
     const res = await GET(makeRequest('6031231231'))
     const body = await res.json()
     expect(body.scorerPick).toBeNull()
+  })
+
+  it('includes winnerPick in response', async () => {
+    const res = await GET(makeRequest('6031231231'))
+    const body = await res.json()
+    expect(body).toHaveProperty('winnerPick')
   })
 })

@@ -38,7 +38,7 @@ Complete guide to deploying Peddler's Predictor from scratch on a new Supabase +
 2. Paste the entire contents of `supabase/master.sql`
 3. Click **Run** — you should see `Success`
 
-This creates all tables (pubs, matches, entries, scorer_picks, feedback, team_cache), enables RLS, sets policies, seeds pub data, and loads all 104 World Cup 2026 matches.
+This creates all tables (pubs, matches, entries, scorer_picks, winner_picks, check_ins, feedback, team_cache, player_cache), views (player_cache_stats, leaderboard), enables RLS with all policies, seeds pub data, and loads all 104 World Cup 2026 matches.
 
 ---
 
@@ -57,7 +57,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
 ADMIN_PASSWORD=choose-a-strong-password
-API_FOOTBALL_KEY=your-api-football-key
+FOOTBALL_DATA_API_KEY=your-football-data-key   # primary source, 10 req/min, no daily cap
+API_FOOTBALL_KEY=your-api-football-key          # player photos + clubs, 100 req/day
+NEXT_PUBLIC_DAILY_CODE_PREFIX=peddlers          # prefix for daily patron access codes
+RESEND_API_KEY=your-resend-key                  # optional — for match-day email reminders
+RESEND_FROM_EMAIL=noreply@yourdomain.com        # optional — from address for reminders
 ```
 
 **Never commit `.env.local` — it is already in `.gitignore`.**
@@ -100,7 +104,11 @@ npm run build
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - `SUPABASE_SECRET_KEY`
    - `ADMIN_PASSWORD`
+   - `FOOTBALL_DATA_API_KEY`
    - `API_FOOTBALL_KEY`
+   - `NEXT_PUBLIC_DAILY_CODE_PREFIX`
+   - `RESEND_API_KEY` (optional)
+   - `RESEND_FROM_EMAIL` (optional)
 3. Redeploy for the variables to take effect
 
 ### Auto-deploy

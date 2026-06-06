@@ -43,6 +43,7 @@ type Stats = {
   raffle_entries: number
 }
 type ScorerPick = { player_name: string; player_team: string }
+type WinnerPick = { team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number }
 
 function MyPicksContent() {
   const { t } = useLocale()
@@ -53,6 +54,7 @@ function MyPicksContent() {
   const [entries, setEntries] = useState<EntryWithMatch[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [scorerPick, setScorerPick] = useState<ScorerPick | null>(null)
+  const [winnerPick, setWinnerPick] = useState<WinnerPick | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fromCookie, setFromCookie] = useState(false)
@@ -70,6 +72,7 @@ function MyPicksContent() {
       setEntries(data.entries)
       setStats(data.stats)
       setScorerPick(data.scorerPick || null)
+      setWinnerPick(data.winnerPick || null)
     } catch {
       setError(t.networkError)
     }
@@ -109,7 +112,7 @@ function MyPicksContent() {
       {fromCookie && searched && !error ? (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <button
-            onClick={() => { setFromCookie(false); setSearched(false); setEntries([]); setStats(null); setScorerPick(null); setPhone('') }}
+            onClick={() => { setFromCookie(false); setSearched(false); setEntries([]); setStats(null); setScorerPick(null); setWinnerPick(null); setPhone('') }}
             style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 0' }}
           >
             {t.notYou} Search by phone →
@@ -158,7 +161,7 @@ function MyPicksContent() {
           {scorerPick && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 14,
-              padding: '14px 16px', borderRadius: 10, marginBottom: 16,
+              padding: '14px 16px', borderRadius: 10, marginBottom: 10,
               background: 'rgba(245,197,24,0.06)',
               border: '1px solid rgba(245,197,24,0.35)',
             }}>
@@ -177,6 +180,45 @@ function MyPicksContent() {
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)' }}>+10</div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>if correct</div>
+              </div>
+            </div>
+          )}
+
+          {/* World Cup Winner pick */}
+          {winnerPick && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '14px 16px', borderRadius: 10, marginBottom: 16,
+              background: 'rgba(0,200,122,0.05)',
+              border: `1px solid ${winnerPick.is_correct === true ? 'rgba(0,200,122,0.5)' : winnerPick.is_correct === false ? 'rgba(255,59,59,0.3)' : 'rgba(0,200,122,0.25)'}`,
+            }}>
+              <div style={{ fontSize: 32, flexShrink: 0 }}>🏆</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 3 }}>
+                  World Cup Champion Pick
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: winnerPick.is_correct === true ? 'var(--green)' : winnerPick.is_correct === false ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Flag emoji={winnerPick.team_flag} size={22} />
+                  {winnerPick.team_name}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {winnerPick.is_correct === true ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>+15 ✓</div>
+                    <div style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)' }}>correct!</div>
+                  </>
+                ) : winnerPick.is_correct === false ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)' }}>+0</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>wrong</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>+15</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>if correct</div>
+                  </>
+                )}
               </div>
             </div>
           )}

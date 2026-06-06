@@ -1,7 +1,7 @@
 -- =============================================================
 -- PEDDLER'S PREDICTOR — MASTER SQL
 -- Run this once on a fresh Supabase project (or local Postgres)
--- Last updated: June 3 2026
+-- Last updated: June 6 2026
 -- =============================================================
 
 -- =============================================================
@@ -89,6 +89,20 @@ create table if not exists scorer_picks (
   unique(phone)
 );
 
+-- Tournament winner picks (one per phone, locked once submitted)
+create table if not exists winner_picks (
+  id             uuid primary key default gen_random_uuid(),
+  pub_id         text references pubs(id),
+  phone          text not null,
+  name           text not null,
+  team_name      text not null,
+  team_flag      text not null default '',
+  is_correct     boolean default null,
+  raffle_entries integer not null default 0,
+  created_at     timestamptz not null default now(),
+  unique(phone)
+);
+
 -- User feedback / bug reports
 create table if not exists feedback (
   id         uuid primary key default gen_random_uuid(),
@@ -151,6 +165,7 @@ alter table pubs          enable row level security;
 alter table matches        enable row level security;
 alter table entries        enable row level security;
 alter table scorer_picks   enable row level security;
+alter table winner_picks   enable row level security;
 alter table team_cache     enable row level security;
 alter table player_cache   enable row level security;
 alter table feedback       enable row level security;
@@ -178,6 +193,13 @@ create policy "Public read scorer_picks"
 
 create policy "Public insert scorer_picks"
   on scorer_picks for insert with check (true);
+
+-- Public read + insert on winner picks
+create policy "Public read winner_picks"
+  on winner_picks for select using (true);
+
+create policy "Public insert winner_picks"
+  on winner_picks for insert with check (true);
 
 -- Feedback: anyone can submit, only service key (admin) can read
 create policy "Public insert feedback"
@@ -382,11 +404,12 @@ select
   e.name,
   e.phone,
   e.pub_id,
-  count(*)                                          as total_picks,
-  count(*) filter (where e.is_correct = true)       as correct_picks,
-  sum(e.raffle_entries)                             as raffle_tickets,
-  max(e.created_at)                                 as last_entry
+  count(*)                                                      as total_picks,
+  count(*) filter (where e.is_correct = true)                   as correct_picks,
+  sum(e.raffle_entries) + coalesce(max(wp.raffle_entries), 0)  as raffle_tickets,
+  max(e.created_at)                                             as last_entry
 from entries e
+left join winner_picks wp on wp.phone = e.phone
 where e.match_id in (select id from matches where stage != 'Demo Match')
 group by e.name, e.phone, e.pub_id
 order by raffle_tickets desc, correct_picks desc;

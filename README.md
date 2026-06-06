@@ -60,10 +60,10 @@ ADMIN_PASSWORD=<local admin password>
 
 FOOTBALL_DATA_API_KEY=<football-data.org key — primary source, 10 req/min, no daily cap>
 API_FOOTBALL_KEY=<api-football.com key — fallback + player photos, 100 req/day>
-
-# Optional
 NEXT_PUBLIC_DAILY_CODE_PREFIX=peddlers   # prefix for daily patron access codes (default: peddlers)
-RESEND_API_KEY=<Resend API key — for match-day email reminders>
+
+# Optional — for match-day email reminders via Resend
+RESEND_API_KEY=<Resend API key>
 RESEND_FROM_EMAIL=<from address for reminder emails>
 ```
 
@@ -84,7 +84,7 @@ In Studio:
 3. Paste the full SQL into the SQL editor.
 4. Run it once.
 
-This creates the local tables, policies, pubs, demo match, World Cup match schedule, and leaderboard view.
+This creates all local tables (pubs, matches, entries, scorer_picks, winner_picks, check_ins, feedback, team_cache, player_cache), views (player_cache_stats, leaderboard), RLS policies, pub seed data, demo match, and all 104 World Cup match records.
 
 ## Run the App
 

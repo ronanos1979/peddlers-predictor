@@ -108,6 +108,20 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Auto-score winner_picks if this is the Final
+      const { data: finalMatchData } = await supabaseAdmin
+        .from('matches').select('stage, home_team, away_team').eq('id', match_id).single()
+      if (finalMatchData?.stage === 'Final') {
+        const champion = result === 'home' ? finalMatchData.home_team : finalMatchData.away_team
+        await supabaseAdmin.from('winner_picks')
+          .update({ is_correct: true, raffle_entries: 15 })
+          .eq('team_name', champion)
+        await supabaseAdmin.from('winner_picks')
+          .update({ is_correct: false, raffle_entries: 0 })
+          .neq('team_name', champion)
+          .is('is_correct', null)
+      }
+
       return NextResponse.json({ success: true, updated: entries?.length || 0, checkin_draw: checkinDraw })
     }
 

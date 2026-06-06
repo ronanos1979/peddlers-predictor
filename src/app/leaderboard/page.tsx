@@ -23,9 +23,12 @@ function LeaderboardContent() {
   const [lastUpdated, setLastUpdated] = useState('')
 
   async function load() {
-    const { data: matchData } = await supabase.from('matches').select('*').eq('is_active', true).single()
+    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }] = await Promise.all([
+      supabase.from('matches').select('*').eq('is_active', true).single(),
+      supabase.from('entries').select('*').order('created_at', { ascending: false }),
+      supabase.from('winner_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
+    ])
     setMatch(matchData)
-    const { data: rawEntries } = await supabase.from('entries').select('*').order('created_at', { ascending: false })
     if (rawEntries) {
       const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; total: number; last_pick: string; last_correct: boolean | null }> = {}
       rawEntries.forEach((e: Entry) => {
@@ -33,6 +36,10 @@ function LeaderboardContent() {
         byPhone[e.phone].pts += e.raffle_entries
         byPhone[e.phone].total += 1
         if (e.is_correct) byPhone[e.phone].correct += 1
+      })
+      // Add tournament winner pick bonus
+      winnerBonuses?.forEach(wp => {
+        if (byPhone[wp.phone]) byPhone[wp.phone].pts += wp.raffle_entries
       })
       const sorted = Object.values(byPhone)
         .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))

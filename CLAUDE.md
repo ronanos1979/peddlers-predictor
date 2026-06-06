@@ -77,7 +77,21 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 
 **scorer_picks**
 - Golden Boot predictions: `phone`, `name`, `player_name`, `player_team`, `player_id`, `pub_id`
+- `is_correct` (boolean, null until set manually by admin after the Final)
 - Unique: one per phone number
+
+**winner_picks**
+- Tournament champion predictions: `phone`, `name`, `team_name`, `team_flag`, `pub_id`
+- `is_correct` (boolean, null until auto-set when Final result is entered by admin)
+- `raffle_entries` (integer, 0 until Final result — auto-set to 15 for correct pick, 0 for wrong)
+- Unique: one per phone number — pick is locked once submitted, cannot be changed
+- Visible to patron on `/my-picks` page, included in leaderboard raffle ticket total
+
+**check_ins**
+- Match attendance check-ins for in-match prize draws: `pub_id`, `match_id`, `name`, `phone`, `email` (nullable)
+- `shared_to` (text nullable): tracks if patron shared to social — `'native'`, `'x'`, `'facebook'`, `'copy'`, or null
+- Unique: (phone, match_id) — one check-in per person per match
+- Public insert only (RLS)
 
 **team_cache**
 - `team_id` (integer PK — FD team ID), `team_name` (text — schedule name e.g. "USA"), `data` (jsonb — teamInfo, coach, fixtures only, NOT squad), `cached_at` (timestamptz)
@@ -144,7 +158,9 @@ src/
 │   │   ├── scorers/page.tsx        # Top scorers / Golden Boot race
 │   │   ├── bracket/page.tsx        # Knockout bracket (R32→R16→QF→SF→Final)
 │   │   ├── team/page.tsx           # Team profile — squad, manager, fixtures
-│   │   └── top-scorer-pick/page.tsx # Patron picks Golden Boot winner
+│   │   ├── top-scorer-pick/page.tsx # Patron picks Golden Boot winner (+10 bonus tickets)
+│   │   ├── winner-pick/page.tsx    # Patron picks World Cup Champion (+15 bonus tickets, locked once submitted)
+│   │   └── winner-picks/page.tsx  # Community champion picks — team vote counts, progress bars, pub breakdown
 │   └── api/
 │       ├── entries/route.ts        # POST — validate and save match prediction
 │       ├── matches/route.ts        # GET — active match
@@ -207,8 +223,9 @@ Fully automatic based on datetime — no admin needed:
 - Wrong prediction → `is_correct = false`, `raffle_entries = 0`
 - Score prediction (`home_score_pred` / `away_score_pred`) is optional — patron enters via +/− steppers in the form
 - Set via admin panel after each match — either manually via `set_result` action or automatically via `sync_results` (fetches from football-data.org)
-- Leaderboard ranks by total `raffle_entries` descending
+- Leaderboard ranks by total `raffle_entries` descending (match entries + winner pick bonus combined)
 - **Golden Boot bonus**: 10 extra raffle entries if patron's Golden Boot pick is correct — set manually by admin after the Final
+- **Tournament Winner bonus**: 15 extra raffle entries if patron's World Cup Champion pick is correct — auto-scored when admin sets the Final result (see admin `set_result` action)
 
 ### Geolocation
 - Browser GPS check against pub lat/lng + radius_m (300m — must essentially be at the pub)
@@ -367,6 +384,7 @@ Print and laminate for tables:
 - **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
   - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp, sets result + score, and scores all entries automatically. Reports how many matches updated and entries scored.
   - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming
+  - **Auto-scores `winner_picks` when stage is 'Final'**: after setting the Final result, the `set_result` action automatically sets `is_correct=true, raffle_entries=15` for the champion pick and `is_correct=false, raffle_entries=0` for all other pending winner_picks
   - Email reminders: select upcoming matches and send match-day emails to all patrons who provided an email
 - **Entrants tab**: filterable by date, shows name/phone/email/pick/result, CSV export button
 - **Stats tab**: total entries, unique players, emails collected, bar chart by day split by pub
@@ -382,12 +400,16 @@ Print and laminate for tables:
 
 ## Home Page UX
 
-- **"Explore Options ↓"** pill button at the very top of the page content — scrolls smoothly to the nav grid (`#explore-menu`)
 - **Hero**: two-column layout — official FIFA World Cup 2026 logo fills the left third, "World Cup Predictor" title + subtitle + player count fill the right two-thirds
 - **WC logo**: displayed in both the hero and the sticky header; sourced from `https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png`
 - **Pub auto-detection**: on first visit (no saved preference, no `?pub=` param), GPS locates the nearest pub using `distanceMetres()` with a 7-second timeout; detected pub saved to cookie
 - **Header pub switcher** (`HeaderLocation.tsx`): both pub names shown side by side in the sticky header; active pub is green with `📍` prefix, inactive is grayed out and clickable; works on any page with `?pub=` in the URL
-- **Match predictions** appear before the MatchNightHub and PubRivalry sections
+- **DiscoveryStrip**: horizontally scrollable row of 3 cards just below the hero — Leaderboard "Raffle ticket standings", World Cup Hub "Squads, standings, bracket", Golden Boot "+10 bonus tickets"
+- **FirstTimeCard**: collapsible "✨ New here? How it works" card shown once (localStorage `peddlers_toured`), 4 numbered steps explaining the game, dismisses with "Got it!"
+- **PatronWelcome**: shows returning patron's name, raffle ticket count, and rank at their pub (e.g. "· #3 at Haverhill") — rank computed client-side by grouping all pub entries by phone
+- **GoldenBootCallout**: gold card after matches, prompts patron to pick a Golden Boot scorer — disappears once they have a scorer_pick
+- **WinnerPickCallout**: green card after matches, prompts patron to pick the World Cup Champion — disappears once they have a winner_pick
+- **Match predictions** appear before the callouts and nav grid
 - **Access code card** (`EntryForm.tsx`, `geoStatus === 'geo_blocked'`): large prominent card with gold border, key icon, "Ask bar staff for today's code" instruction, full-width verify button — shown when GPS is unavailable
 
 ---
@@ -400,7 +422,7 @@ npm run test:watch    # watch mode during development
 npm run test:coverage # coverage report
 ```
 
-### Test files (156 tests total across 9 suites)
+### Test files (157 tests total across 9 suites)
 | File | What it covers |
 |------|---------------|
 | `src/lib/__tests__/matchSchedule.test.ts` | Rolling 4-day window, isMatchLive, getDailyCode prefix/fallback, isValidOverrideCode |
@@ -411,7 +433,7 @@ npm run test:coverage # coverage report
 | `src/app/api/entries/__tests__/route.test.ts` | Entry submission validation, duplicate detection, geo/code checks |
 | `src/app/api/feedback/__tests__/route.test.ts` | Feedback POST validation, Supabase insert |
 | `src/app/api/admin/__tests__/auth.test.ts` | Admin password auth, mark_feedback_read |
-| `src/app/api/my-picks/__tests__/route.test.ts` | Entries + stats response, scorerPick included/null |
+| `src/app/api/my-picks/__tests__/route.test.ts` | Entries + stats + scorerPick + winnerPick response; mock dispatches by table name (not call order) |
 
 ### Run tests before pushing
 Always run `npm test` before `git push`. The build (`npm run build`) catches TypeScript errors; tests catch logic regressions.

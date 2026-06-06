@@ -6,15 +6,31 @@ How to run the TV giveaway at the end of the tournament.
 
 ## How the raffle works
 
-Every correct prediction earns a patron **3 raffle entries**. A patron who predicts 10 matches correctly has 30 entries. The more correct picks, the better the odds — but it's still a raffle, so anyone can win.
+Patrons earn raffle tickets through correct predictions — more tickets means more chances to win, but it is still a **random draw**. Being at the top of the leaderboard does not guarantee winning.
 
-Each pub (Haverhill and Nashua) has **one TV to give away**. The raffle is run separately per pub.
+### Ticket sources
+
+| Action | Tickets |
+|--------|---------|
+| Correct result prediction | 1 ticket |
+| Correct result + exact score | 3 tickets |
+| Golden Boot pick correct (set manually after Final) | +10 tickets |
+| World Cup Champion pick correct (auto-scored at Final) | +15 tickets |
+
+### Prize
+
+**One TV — one winner across both pubs.** All entries from Haverhill and Nashua compete in a single combined draw.
 
 ---
 
 ## When to run it
 
-After the **World Cup Final** on July 19, 2026. Give it a day or two after the final to make sure all results are entered and scored.
+After the **World Cup Final** on July 19, 2026. Give it a day or two to make sure all results are entered, scored, and the winner_picks bonus has been applied.
+
+**Before running the draw:**
+1. Set the Final result in `/admin` — this auto-scores all World Cup Champion picks
+2. Manually set the Golden Boot (`is_correct`) for the top scorer in the admin panel or directly in Supabase
+3. Verify the leaderboard at `/leaderboard` looks correct
 
 ---
 
@@ -22,37 +38,32 @@ After the **World Cup Final** on July 19, 2026. Give it a day or two after the f
 
 Go to your Supabase dashboard → **SQL Editor** → **New query**.
 
-**For Haverhill pub:**
-```sql
-select
-  name,
-  phone,
-  sum(raffle_entries) as tickets,
-  count(*) filter (where is_correct = true) as correct_picks,
-  count(*) as total_picks
-from entries
-where pub_id = 'haverhill'
-group by name, phone
-having sum(raffle_entries) > 0
-order by tickets desc;
-```
+This query combines match entry tickets with the World Cup Champion bonus across both pubs:
 
-**For Nashua pub:**
 ```sql
 select
-  name,
-  phone,
-  sum(raffle_entries) as tickets,
-  count(*) filter (where is_correct = true) as correct_picks,
+  e.name,
+  e.phone,
+  e.pub_id,
+  sum(e.raffle_entries) + coalesce(wp.raffle_entries, 0) as tickets,
+  count(*) filter (where e.is_correct = true) as correct_picks,
   count(*) as total_picks
-from entries
-where pub_id = 'nashua'
-group by name, phone
-having sum(raffle_entries) > 0
+from entries e
+left join winner_picks wp on wp.phone = e.phone
+where e.match_id in (select id from matches where stage != 'Demo Match')
+group by e.name, e.phone, e.pub_id, wp.raffle_entries
+having sum(e.raffle_entries) + coalesce(wp.raffle_entries, 0) > 0
 order by tickets desc;
 ```
 
 Click **Run**, then click the **Download CSV** button to export.
+
+**To check Golden Boot bonus entries separately:**
+```sql
+select name, phone, pub_id, 10 as golden_boot_bonus
+from scorer_picks
+where is_correct = true;
+```
 
 ---
 
@@ -129,17 +140,18 @@ from entries;
 ```
 
 ```sql
--- Top 10 predictors across both pubs
+-- Top 10 predictors across both pubs (including winner pick bonus)
 select
-  name,
-  pub_id,
-  sum(raffle_entries) as raffle_tickets,
-  count(*) filter (where is_correct = true) as correct,
+  e.name,
+  e.pub_id,
+  sum(e.raffle_entries) + coalesce(max(wp.raffle_entries), 0) as raffle_tickets,
+  count(*) filter (where e.is_correct = true) as correct,
   count(*) as total,
-  round(100.0 * count(*) filter (where is_correct = true) / count(*), 0) as accuracy_pct
-from entries
-group by name, phone, pub_id
-order by correct desc
+  round(100.0 * count(*) filter (where e.is_correct = true) / count(*), 0) as accuracy_pct
+from entries e
+left join winner_picks wp on wp.phone = e.phone
+group by e.name, e.phone, e.pub_id
+order by raffle_tickets desc
 limit 10;
 ```
 
@@ -155,4 +167,17 @@ join entries e on e.match_id = m.id
 where m.result is not null
 group by m.id, m.home_team, m.away_team, m.result
 order by m.kickoff_at;
+```
+
+```sql
+-- World Cup Champion pick breakdown
+select
+  team_name, team_flag,
+  count(*) as picks,
+  count(*) filter (where pub_id = 'haverhill') as haverhill,
+  count(*) filter (where pub_id = 'nashua') as nashua,
+  max(is_correct::int)::boolean as was_correct
+from winner_picks
+group by team_name, team_flag
+order by picks desc;
 ```

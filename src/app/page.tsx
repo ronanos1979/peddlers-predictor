@@ -388,6 +388,53 @@ function FirstTimeCard() {
   )
 }
 
+function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
+  const [hasPick, setHasPick] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const p = loadPatron()
+    if (!p?.phone) { setHasPick(false); return }
+    const raw = p.phone.replace(/\D/g, '')
+    const phone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+    if (phone.length !== 10) { setHasPick(false); return }
+    supabase.from('winner_picks').select('id').eq('phone', phone).maybeSingle()
+      .then(({ data }) => setHasPick(!!data))
+  }, [])
+
+  if (hasPick === null || hasPick) return null
+
+  const pub = selectedPub || 'haverhill'
+  return (
+    <Link href={`/world-cup/winner-pick?pub=${pub}`} style={{ textDecoration: 'none', display: 'block', marginBottom: 14 }}>
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(0,200,122,0.08), rgba(0,200,122,0.02))',
+        border: '1px solid rgba(0,200,122,0.25)',
+        borderRadius: 12,
+        padding: '14px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 14,
+      }}>
+        <div style={{ fontSize: 30, flexShrink: 0 }}>🏆</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 2 }}>
+            Bonus Tickets
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 0.5, color: 'var(--text)', lineHeight: 1.2 }}>
+            Pick the World Cup Champion
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            Correct pick = +15 raffle tickets
+          </div>
+        </div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', flexShrink: 0 }}>
+          Pick →
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
@@ -893,9 +940,12 @@ function HomeContent() {
         )
       })()}
 
-      {/* Golden Boot callout — shown after matches if patron hasn't picked yet */}
+      {/* Bonus pick callouts — shown after matches if patron hasn't picked yet */}
       {selectedPub && !loading && !selectedMatch && (
-        <GoldenBootCallout selectedPub={selectedPub} />
+        <>
+          <GoldenBootCallout selectedPub={selectedPub} />
+          <WinnerPickCallout selectedPub={selectedPub} />
+        </>
       )}
 
       {/* Nav grid — moved up so features are discoverable */}

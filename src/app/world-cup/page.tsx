@@ -12,6 +12,8 @@ export default function WorldCupHub() {
     { href: '/world-cup/results', icon: '⚽', label: t.results, desc: 'Completed matches' },
     { href: '/world-cup/scorers', icon: '🥇', label: t.scorers, desc: 'Golden Boot race' },
     { href: '/world-cup/team', icon: '⭐', label: t.myTeam, desc: 'Squad, manager, fixtures' },
+    { href: '/world-cup/winner-pick', icon: '🏆', label: 'Pick the Champion', desc: '+15 bonus tickets if correct' },
+    { href: '/world-cup/winner-picks', icon: '📊', label: 'Community Champion Picks', desc: 'Who does the pub back?' },
   ]
 
   return (
