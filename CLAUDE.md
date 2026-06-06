@@ -15,7 +15,7 @@ A World Cup 2026 prediction game web app for **The Peddler's Daughter** Irish pu
 | Hosting | Vercel (auto-deploys from GitHub on push to main) |
 | Styling | Custom CSS — globals.css, NO Tailwind, NO Bootstrap |
 | Fonts | Bebas Neue (display), Barlow Condensed (labels), Barlow (body) — loaded via Google Fonts in globals.css |
-| Football data | football-data.org v4 (primary, 10 req/min no daily cap) + API-Football v3 (fallback) — proxied via /api/football and /api/team |
+| Football data | football-data.org v4 (primary, 10 req/min no daily cap) + API-Football v3 (enrichment) — proxied via /api/football and /api/team |
 | Testing | Jest + ts-jest (run with `npm test`) |
 
 ---
@@ -30,7 +30,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
 ADMIN_PASSWORD=...
 FOOTBALL_DATA_API_KEY=...        # football-data.org — primary football data source
-API_FOOTBALL_KEY=...              # API-Football — fallback + player photos source
+API_FOOTBALL_KEY=...              # API-Football — player photos + clubs
 RESEND_API_KEY=...               # Resend — email reminders (optional)
 RESEND_FROM_EMAIL=...            # From address for reminder emails (optional, has default)
 NEXT_PUBLIC_DAILY_CODE_PREFIX=...  # Prefix for daily patron codes — NEXT_PUBLIC_ required for client use
@@ -99,6 +99,21 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - Public insert only; read via admin route (secret key bypasses RLS)
 - Visible in admin panel → Feedback tab with unread badge
 
+### Views
+
+**player_cache_stats** (aggregate view — avoids PostgREST 1000-row default limit)
+```sql
+create or replace view player_cache_stats as
+select
+  team_name,
+  count(*) as total,
+  count(*) filter (where photo_enriched) as photos,
+  count(*) filter (where club_enriched) as clubs
+from player_cache
+group by team_name;
+```
+Used by `/api/admin-teams` GET to show player/photo/club counts per team. Must exist in production DB.
+
 ### Row Level Security
 All tables have RLS enabled. Public read + insert on entries and scorer_picks. Public read on pubs and matches. Public insert on feedback. Server-side admin routes use the secret key to bypass RLS.
 
@@ -109,8 +124,8 @@ All tables have RLS enabled. Public read + insert on entries and scorer_picks. P
 ```
 src/
 ├── app/
-│   ├── page.tsx                    # Home — location selector, countdown, entry form
-│   ├── layout.tsx                  # Root layout — header with logo + lang switcher, footer
+│   ├── page.tsx                    # Home — GPS pub auto-detect, two-column hero, match predictions
+│   ├── layout.tsx                  # Root layout — header with logo, pub switcher, WC logo, lang switcher, footer
 │   ├── globals.css                 # ALL styles — black theme, custom fonts, animations
 │   ├── feedback/page.tsx           # Bug report / feedback form
 │   ├── leaderboard/page.tsx        # Live leaderboard
@@ -145,6 +160,7 @@ src/
 ├── components/
 │   ├── EntryForm.tsx               # Match prediction form — geo check, access-code override, score steppers
 │   ├── Flag.tsx                    # Renders flag emoji via flagcdn.com PNG (fixes Windows text fallback)
+│   ├── HeaderLocation.tsx          # Pub switcher in sticky header — both pubs shown, active highlighted, clickable
 │   ├── LangSwitcher.tsx            # EN/ES toggle buttons in header
 │   ├── ShareCard.tsx               # "Love the app?" share card with Web Share API
 │   └── SiteFooter.tsx              # Footer — Facebook links, nav links, feedback link
@@ -157,7 +173,7 @@ src/
     ├── pubData.ts                  # Pub info constants (address, phone, social links, coords)
     ├── matchSchedule.ts            # getDailyCode(), isValidOverrideCode(), isMatchLive(), selectActiveMatch(), getPredictableWindowEnd()
     ├── geo.ts                      # distanceMetres(), getPosition()
-    ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron()
+    ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron(), savePubPref(), loadPubPref()
     ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
     ├── i18n.ts + useLocale.ts      # EN/ES translations + locale cookie hook
 ```
@@ -195,13 +211,19 @@ Fully automatic based on datetime — no admin needed:
 - **Golden Boot bonus**: 10 extra raffle entries if patron's Golden Boot pick is correct — set manually by admin after the Final
 
 ### Geolocation
-- Browser GPS check against pub lat/lng + radius_m (300m)
-- If GPS is denied or unavailable: form shows an access code input — patron must enter a valid code to proceed
+- Browser GPS check against pub lat/lng + radius_m (300m — must essentially be at the pub)
+- If GPS is denied or unavailable: form shows a large prominent access code card — patron must enter today's code to proceed
   - Validated client-side via `isValidOverrideCode()` in `src/lib/matchSchedule.ts` (case-insensitive, accepts today's or yesterday's code)
   - On success: `geoStatus` advances to `'ok'` and the form unlocks
   - The code prefix is controlled by `NEXT_PUBLIC_DAILY_CODE_PREFIX` env var — must be set in `.env.local` and Vercel
 - `geoStatus` type: `'checking' | 'ok' | 'fail' | 'geo_blocked'` — submit is only enabled when status is `'ok'`
 - Demo page skips geo check entirely
+
+### Pub selection
+- On first visit (no `?pub=` param, no saved preference): GPS auto-detects nearest pub using `distanceMetres()` from `geo.ts`
+- Detected pub saved to cookie via `savePubPref()` in `patron.ts`, restored on next visit
+- Header shows both pubs as clickable buttons (`HeaderLocation.tsx`) — active pub is green, inactive is grayed out; clicking switches pub across all pages
+- Manual selector also available in page content if user wants to change
 
 ### Cookie persistence
 - After first entry, patron's name + phone saved to `peddlers_patron` cookie (90 days)
@@ -221,9 +243,9 @@ Fully automatic based on datetime — no admin needed:
 ## Football Data Integration
 
 ### Two-source architecture
-The app uses **football-data.org (FD) as primary** and **API-Football (AF) as fallback**:
+The app uses **football-data.org (FD) as primary** and **API-Football (AF) for player enrichment**:
 - **FD**: free tier = 10 req/min, no daily cap. WC competition ID: `2000`. Env: `FOOTBALL_DATA_API_KEY`
-- **AF**: free tier = 100 req/day (strict). League ID: `1`, Season: `2026`. Env: `API_FOOTBALL_KEY`
+- **AF**: free tier = 100 req/day (strict). **Free plan only allows seasons 2022–2024** — do NOT use `season=2026`. League ID: `1`. Env: `API_FOOTBALL_KEY`
 - Both are optional — the app degrades gracefully if either key is missing
 - The `footballData.ts` adapter converts FD responses to AF-format so frontend code doesn't change
 
@@ -241,9 +263,9 @@ The app uses **football-data.org (FD) as primary** and **API-Football (AF) as fa
 - Always appends `localSchedule` from Supabase matches table
 
 ### Admin team loading route: `/api/admin-teams`
-- **GET** (password required): lists all 48 teams from matches table with `fd_loaded`, player/photo/club counts
-- **POST `load_fd`** (password required): fetches team from football-data.org, upserts `team_cache` + `player_cache`; preserves existing enrichment data on re-load
-- **POST `enrich_af`** (password required): enriches players with AF photos (2 AF calls) + clubs (1 per player); stops on rate limit, saves partial results; safe to retry
+- **GET** (password required): lists all 48 teams from matches table with `fd_loaded`, player/photo/club counts — player counts come from `player_cache_stats` view to avoid PostgREST 1000-row limit
+- **POST `load_fd`** (password required): fetches team from football-data.org, upserts `team_cache` + `player_cache`; preserves existing enrichment data on re-load; returns error if DB write fails
+- **POST `enrich_af`** (password required): enriches players with AF photos + clubs; stops on rate limit, saves partial results; safe to retry
 
 ### FD → player_cache load flow
 1. Admin clicks "Load FD" for a team (or "Load all from FD" — sequential, 7s between calls)
@@ -253,9 +275,13 @@ The app uses **football-data.org (FD) as primary** and **API-Football (AF) as fa
 5. `player_cache` upserted per player: fd_id, name, age, number, position — photo/club columns untouched
 
 ### AF enrichment flow (after FD load)
-1. Admin clicks "Enrich AF" for a team (AF 100/day limit: ~3-4 full teams per day)
-2. Photo enrichment: AF team search + squad (2 calls) → match players by name → update photo + af_id + photo_enriched
-3. Club enrichment: 1 AF call per player with af_id → update club_name, club_logo, club_enriched
+1. Admin clicks "Load photos & clubs" for a team (AF 100/day limit: ~3–4 full teams per day on free plan)
+2. **Photo enrichment** (2 AF calls):
+   - Primary: fetch WC 2022 teams list (`league=1&season=2022`) and match by name — more reliable than search for national teams
+   - Fallback: `teams?search={name}` filtered to senior national teams (no youth teams)
+   - Three-level progressive name matching against AF squad: (1) exact lowercase, (2) accent/punctuation-normalised, (3) unique last name — handles FD/AF name format differences
+   - Updates `photo`, `af_id`, `photo_enriched=true`
+3. **Club enrichment** (1 AF call per player with `af_id`): fetches `players?id={af_id}&season=2024` → finds club that is not the national team → updates `club_name`, `club_logo`, `club_enriched=true`
 4. Stops on rate limit, saves what was collected — retry tomorrow picks up from where it stopped
 
 ### Name resolution (legacy — used by /api/football for standings etc.)
@@ -346,7 +372,23 @@ Print and laminate for tables:
 - **Stats tab**: total entries, unique players, emails collected, bar chart by day split by pub
 - **Feedback tab**: bug reports and feedback from patrons, unread count badge, mark-as-read per item
 - **Raffle tab**: weighted draw — 1 ticket per correct result, 3 tickets if exact score also correct; filterable by pub
-- **Teams tab**: 48-team cache status — fd_loaded flag, player/photo/club counts; "Load FD" and "Enrich AF" buttons per team; "Load all from FD" sequential bulk loader
+- **Teams tab**: 48-team cache status — fd_loaded flag, player/photo/club counts; "Load FD" and "Load photos & clubs" (AF enrichment) buttons per team; "Load all from FD" sequential bulk loader
+
+### Admin session persistence
+- Password and auth state saved in `sessionStorage` (`admin_pw`, `admin_authed`) — survives page refresh but clears when the tab is closed
+- Flash notifications appear as a fixed-position toast at the bottom of the screen with a ✕ dismiss button (no auto-dismiss) — visible regardless of scroll position
+
+---
+
+## Home Page UX
+
+- **"Explore Options ↓"** pill button at the very top of the page content — scrolls smoothly to the nav grid (`#explore-menu`)
+- **Hero**: two-column layout — official FIFA World Cup 2026 logo fills the left third, "World Cup Predictor" title + subtitle + player count fill the right two-thirds
+- **WC logo**: displayed in both the hero and the sticky header; sourced from `https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png`
+- **Pub auto-detection**: on first visit (no saved preference, no `?pub=` param), GPS locates the nearest pub using `distanceMetres()` with a 7-second timeout; detected pub saved to cookie
+- **Header pub switcher** (`HeaderLocation.tsx`): both pub names shown side by side in the sticky header; active pub is green with `📍` prefix, inactive is grayed out and clickable; works on any page with `?pub=` in the URL
+- **Match predictions** appear before the MatchNightHub and PubRivalry sections
+- **Access code card** (`EntryForm.tsx`, `geoStatus === 'geo_blocked'`): large prominent card with gold border, key icon, "Ask bar staff for today's code" instruction, full-width verify button — shown when GPS is unavailable
 
 ---
 
@@ -446,5 +488,6 @@ git add . && git commit -m "message" && git push   # deploy to Vercel
 
 1. Create project at supabase.com
 2. Run `supabase/master.sql` in the SQL editor (Settings → SQL Editor)
-3. Set all environment variables in `.env.local` and Vercel dashboard
-4. Push to GitHub — Vercel auto-deploys
+3. Create the `player_cache_stats` view (SQL in the Views section above)
+4. Set all environment variables in `.env.local` and Vercel dashboard
+5. Push to GitHub — Vercel auto-deploys
