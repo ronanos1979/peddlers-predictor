@@ -24,6 +24,9 @@ async function afFetch(path: string, params: Record<string, string> = {}) {
   })
   const data = await res.json()
   if (data?.errors?.requests) throw new Error('AF_RATE_LIMIT')
+  if (data?.errors && Object.keys(data.errors).length > 0) {
+    throw new Error(`AF_ERROR: ${JSON.stringify(data.errors)}`)
+  }
   return data
 }
 
@@ -207,14 +210,16 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
 
       const searchData = await afFetch('teams', { search: aliased })
       const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
-      const seniors = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
-      const afTeam = seniors.find(t => {
+      // Prefer national===true; if none returned with that flag, fall back to any non-youth match
+      let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+      if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
+      const afTeam = pool.find(t => {
         const n = t.team.name.toLowerCase()
         return n === aliased || n === norm
-      }) || seniors[0]
+      }) || pool[0]
 
       if (!afTeam) {
-        photoError = `No AF national team found for "${scheduleName}" (searched "${aliased}")`
+        photoError = `No AF team found for "${scheduleName}" (searched "${aliased}", got ${candidates.length} results)`
       } else {
         afTeamFound = afTeam.team.name
         const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
