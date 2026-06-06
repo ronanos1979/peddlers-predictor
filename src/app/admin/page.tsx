@@ -20,8 +20,12 @@ type TeamStatus = {
 }
 
 export default function AdminPage() {
-  const [password, setPassword] = useState('')
-  const [authed, setAuthed] = useState(false)
+  const [password, setPassword] = useState(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem('admin_pw') || '' : ''
+  )
+  const [authed, setAuthed] = useState(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem('admin_authed') === '1' : false
+  )
   const [authError, setAuthError] = useState('')
   const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback' | 'raffle' | 'teams'>('results')
   const [todaysMatches, setTodaysMatches] = useState<Match[]>([])
@@ -61,8 +65,12 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, action: 'ping', payload: {} })
     })
-    if (res.ok) { setAuthed(true); setAuthError('') }
-    else setAuthError('Wrong password')
+    if (res.ok) {
+      setAuthed(true)
+      setAuthError('')
+      sessionStorage.setItem('admin_pw', password)
+      sessionStorage.setItem('admin_authed', '1')
+    } else setAuthError('Wrong password')
   }
 
   const loadMatches = useCallback(async () => {

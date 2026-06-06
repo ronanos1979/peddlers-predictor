@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
   const { data: playerRows } = await supabaseAdmin
     .from('player_cache')
     .select('team_name,photo_enriched,club_enriched')
+    .limit(5000)
 
   const playerStats = new Map<string, { total: number; photos: number; clubs: number }>()
   for (const p of (playerRows || [])) {
