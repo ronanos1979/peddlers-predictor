@@ -150,6 +150,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, updated, entries_scored })
     }
 
+    if (action === 'delete_entry') {
+      const { entry_id } = payload
+      if (!entry_id) return NextResponse.json({ error: 'entry_id required' }, { status: 400 })
+      const { error: delError } = await supabaseAdmin.from('entries').delete().eq('id', entry_id)
+      if (delError) return NextResponse.json({ error: delError.message }, { status: 500 })
+      return NextResponse.json({ success: true })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err) {
     console.error('Admin API error:', err)

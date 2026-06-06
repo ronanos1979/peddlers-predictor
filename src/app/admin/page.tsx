@@ -5,7 +5,7 @@ import { getDailyCode } from '@/lib/matchSchedule'
 import Flag from '@/components/Flag'
 
 type EntryRow = {
-  name: string; phone: string; email: string | null; pick: string
+  id: string; name: string; phone: string; email: string | null; pick: string
   is_correct: boolean | null; raffle_entries: number; pub_id: string; created_at: string
   matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; stage: string; kickoff_at: string } | null
 }
@@ -57,6 +57,7 @@ export default function AdminPage() {
   const [loadAllFdProgress, setLoadAllFdProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -360,6 +361,22 @@ export default function AdminPage() {
       body: JSON.stringify({ password, action: 'mark_feedback_read', payload: { id } })
     })
     setFeedback(prev => prev.map(f => f.id === id ? { ...f, read: true } : f))
+  }
+
+  async function deleteEntry(id: string) {
+    setConfirmDeleteId(null)
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'delete_entry', payload: { entry_id: id } })
+    })
+    const data = await res.json()
+    if (data.success) {
+      setEntrants(prev => prev.filter(e => e.id !== id))
+      flash('Entry deleted', 'success')
+    } else {
+      flash(`Delete failed: ${data.error}`, 'error')
+    }
   }
 
   function fmt(iso: string) {
@@ -691,19 +708,42 @@ export default function AdminPage() {
 
           {loadingEntrants
             ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
-            : entrants.map((e, i) => (
-              <div key={i} style={{
+            : entrants.map((e) => (
+              <div key={e.id} style={{
                 background: 'var(--white)', border: '1px solid var(--gray-border)',
                 borderRadius: 10, padding: '12px 14px', marginBottom: 8
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start' }}>
                   <div>
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
                     <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
                       {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
+                    {confirmDeleteId === e.id ? (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => deleteEntry(e.id)}
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'rgba(255,59,59,0.12)', color: 'var(--red)', cursor: 'pointer', fontWeight: 700 }}>
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(e.id)}
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                        title="Delete entry">
+                        🗑
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
                   📞 {e.phone}

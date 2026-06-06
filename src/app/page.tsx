@@ -531,7 +531,7 @@ function HomeContent() {
           <div style={{ flex: '0 0 33%', display: 'flex', justifyContent: 'center' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png"
+              src="/wc2026.png"
               alt="FIFA World Cup 2026"
               style={{ width: '100%', maxWidth: 110, height: 'auto', objectFit: 'contain' }}
             />
@@ -558,42 +558,6 @@ function HomeContent() {
       {/* Countdown */}
       <Countdown t={t} />
 
-      {/* Location — detecting strip, compact selected header, or full selector */}
-      {geoDetecting && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 0', fontFamily: 'var(--font-cond)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
-          <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid var(--green)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          Detecting your nearest pub…
-        </div>
-      )}
-
-      {!geoDetecting && selectedPub && !showManualSelector && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '10px 14px', background: 'rgba(0,200,122,0.07)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 10 }}>
-          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700 }}>
-            📍 {PUB_DATA[selectedPub].city}, {PUB_DATA[selectedPub].state}
-          </span>
-          <button onClick={() => setShowManualSelector(true)} style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Change ↓
-          </button>
-        </div>
-      )}
-
-      {(!geoDetecting && !selectedPub) || showManualSelector ? (
-        <div style={{ marginBottom: 16 }}>
-          {!selectedPub && (
-            <div style={{ fontSize: 13, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text)', textAlign: 'center', marginBottom: 10 }}>
-              📍 Where are you watching?
-            </div>
-          )}
-          <div className="loc-selector">
-            <button className={`loc-btn ${selectedPub === 'haverhill' ? 'active' : ''}`} onClick={() => { choosePub('haverhill'); setShowManualSelector(false) }}>
-              Haverhill, MA
-            </button>
-            <button className={`loc-btn ${selectedPub === 'nashua' ? 'active' : ''}`} onClick={() => { choosePub('nashua'); setShowManualSelector(false) }}>
-              Nashua, NH
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {/* ── MATCHES — shown first, prominently ── */}
       {selectedPub && loading && (
@@ -750,6 +714,27 @@ function HomeContent() {
             <div className="nav-card-label">{label}</div>
           </Link>
         ))}
+      </div>
+
+      {/* Location selector — bottom of page */}
+      <div style={{ marginTop: 8, marginBottom: 16 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10, textAlign: 'center' }}>
+          📍 Change Location
+        </div>
+        <div className="loc-selector">
+          <button className={`loc-btn ${selectedPub === 'haverhill' ? 'active' : ''}`} onClick={() => choosePub('haverhill')}>
+            Haverhill, MA
+          </button>
+          <button className={`loc-btn ${selectedPub === 'nashua' ? 'active' : ''}`} onClick={() => choosePub('nashua')}>
+            Nashua, NH
+          </button>
+        </div>
+        {geoDetecting && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>
+            <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--green)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            Detecting nearest pub…
+          </div>
+        )}
       </div>
 
       <ShareCard />

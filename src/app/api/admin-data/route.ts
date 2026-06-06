@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     let query = supabaseAdmin
       .from('entries')
       .select(`
-        name, phone, email, pick, is_correct, raffle_entries,
+        id, name, phone, email, pick, is_correct, raffle_entries,
         pub_id, created_at,
         matches (home_team, away_team, home_flag, away_flag, stage, kickoff_at)
       `)

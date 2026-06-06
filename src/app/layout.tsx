@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <LangSwitcher />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png"
+                src="/wc2026.png"
                 alt="FIFA World Cup 2026"
                 style={{ height: 30, width: 'auto', objectFit: 'contain' }}
               />
