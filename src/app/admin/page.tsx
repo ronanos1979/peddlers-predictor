@@ -450,9 +450,14 @@ export default function AdminPage() {
       <p className="muted" style={{ marginBottom: 16 }}>The Peddler&apos;s Daughter — World Cup 2026</p>
 
       {msg && (
-        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14,
-          background: msgType === 'success' ? 'var(--green-light)' : 'var(--red-light)',
-          color: msgType === 'success' ? 'var(--green-dark)' : 'var(--red)' }}>{msg}</div>
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+          background: msgType === 'success' ? '#003d25' : '#3d0000',
+          color: msgType === 'success' ? 'var(--green)' : 'var(--red)',
+          whiteSpace: 'nowrap',
+        }}>{msg}</div>
       )}
 
       {/* Tabs */}
@@ -956,7 +961,7 @@ export default function AdminPage() {
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                       FD: 10 req/min — ~2 calls per team. Load all takes ~10 min.
-                      AF: 100 req/day — ~28 calls per team (photos + clubs).
+                      AF: 100 req/day — ~28 calls per team. "Load photos & clubs" loads player photos AND club names in one go.
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1043,7 +1048,7 @@ export default function AdminPage() {
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0 || fullyDone}
                           onClick={() => loadTeamAf(team.name)}>
-                          {isAfLoading ? '…' : 'Load photos'}
+                          {isAfLoading ? '…' : 'Load photos & clubs'}
                         </button>
                       </div>
                     </div>
