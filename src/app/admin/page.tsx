@@ -324,7 +324,6 @@ export default function AdminPage() {
 
   function flash(text: string, type: 'success' | 'error') {
     setMsg(text); setMsgType(type)
-    setTimeout(() => setMsg(''), 5000)
   }
 
   async function syncResults() {
@@ -453,12 +452,18 @@ export default function AdminPage() {
       {msg && (
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+          zIndex: 9999, padding: '12px 16px 12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
           background: msgType === 'success' ? '#003d25' : '#3d0000',
           color: msgType === 'success' ? 'var(--green)' : 'var(--red)',
-          whiteSpace: 'nowrap',
-        }}>{msg}</div>
+          maxWidth: 'calc(100vw - 48px)', display: 'flex', alignItems: 'flex-start', gap: 12,
+        }}>
+          <span style={{ flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg}</span>
+          <button onClick={() => setMsg('')} style={{
+            background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+            color: 'inherit', opacity: 0.7, padding: '0 2px', flexShrink: 0,
+          }}>✕</button>
+        </div>
       )}
 
       {/* Tabs */}
