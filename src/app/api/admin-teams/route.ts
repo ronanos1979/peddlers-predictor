@@ -50,15 +50,16 @@ export async function GET(req: NextRequest) {
 
   const { data: cacheRows } = await supabaseAdmin
     .from('team_cache')
-    .select('team_name,fd_loaded,coach_name,coach_nationality,cached_at')
+    .select('team_name,fd_loaded,coach_name,coach_nationality,cached_at,af_cached_at')
 
-  const cacheByName = new Map<string, { fd_loaded: boolean; coach_name: string | null; coach_nationality: string | null; cached_at: string }>()
+  const cacheByName = new Map<string, { fd_loaded: boolean; coach_name: string | null; coach_nationality: string | null; cached_at: string; af_cached_at: string | null }>()
   for (const row of (cacheRows || [])) {
     cacheByName.set(row.team_name.toLowerCase(), {
       fd_loaded:        row.fd_loaded,
       coach_name:       row.coach_name,
       coach_nationality: row.coach_nationality,
       cached_at:        row.cached_at,
+      af_cached_at:     row.af_cached_at ?? null,
     })
   }
 
@@ -85,6 +86,7 @@ export async function GET(req: NextRequest) {
       coach_name:        c?.coach_name        || null,
       coach_nationality: c?.coach_nationality || null,
       cached_at:         c?.cached_at         || null,
+      af_cached_at:      c?.af_cached_at      || null,
       player_count:      ps.total,
       photo_count:       ps.photos,
       club_count:        ps.clubs,
@@ -357,10 +359,10 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
     }
   }
 
-  // Bump team_cache.cached_at so the admin sees the AF enrichment date
+  // Record the AF enrichment date separately from the FD load date
   await supabaseAdmin
     .from('team_cache')
-    .update({ cached_at: new Date().toISOString() })
+    .update({ af_cached_at: new Date().toISOString() })
     .ilike('team_name', scheduleName)
 
   return NextResponse.json({

@@ -18,7 +18,8 @@ type RaffleEntrant = { name: string; phone: string; pub_id: string; tickets: num
 type RaffleWinner = RaffleEntrant & { place: number }
 type TeamStatus = {
   name: string; flag: string; fd_loaded: boolean; coach_name: string | null
-  player_count: number; photo_count: number; club_count: number; cached_at: string | null
+  player_count: number; photo_count: number; club_count: number
+  cached_at: string | null; af_cached_at: string | null
 }
 
 export default function AdminPage() {
@@ -335,9 +336,9 @@ export default function AdminPage() {
         } else {
           setTeams(prev => prev.map(t => t.name === teamName ? {
             ...t,
-            photo_count: t.photo_count + (data.photos_added || 0),
-            club_count:  t.club_count  + (data.clubs_added  || 0),
-            cached_at:   new Date().toISOString(),
+            photo_count:  t.photo_count + (data.photos_added || 0),
+            club_count:   t.club_count  + (data.clubs_added  || 0),
+            af_cached_at: new Date().toISOString(),
           } : t))
         }
         if (data.rate_limited) {
@@ -1214,7 +1215,12 @@ export default function AdminPage() {
                           )}
                           {team.cached_at && (
                             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-                              cached {new Date(team.cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              FD {new Date(team.cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
+                          )}
+                          {team.af_cached_at && (
+                            <div style={{ fontSize: 10, color: 'var(--amber)', marginTop: 1 }}>
+                              AF {new Date(team.af_cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </div>
                           )}
                         </div>

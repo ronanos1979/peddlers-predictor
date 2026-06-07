@@ -133,7 +133,8 @@ create table if not exists team_cache (
   team_id            integer      primary key,
   team_name          text         not null,
   data               jsonb        not null,
-  cached_at          timestamptz  not null default now(),
+  cached_at          timestamptz  not null default now(),  -- FD load date
+  af_cached_at       timestamptz  default null,            -- AF enrichment date (null until first enrichment)
   fd_loaded          boolean      not null default false,
   coach_name         text,
   coach_nationality  text
