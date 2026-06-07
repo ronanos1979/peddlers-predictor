@@ -157,9 +157,16 @@ function fdGroupLabel(fdGroup: string | null | undefined): string {
 }
 
 // FD-specific name aliases: our schedule name (lowercase) → FD team name (lowercase)
+// FD uses hyphens where our schedule uses "&"; uses FIFA official names for several nations.
 const FD_ALIASES: Record<string, string> = {
-  'usa': 'united states',
-  'türkiye': 'turkey',
+  'usa':                    'united states',
+  'türkiye':                'turkey',
+  'bosnia & herzegovina':   'bosnia-herzegovina',
+  'south korea':            'korea republic',
+  'ivory coast':            "côte d'ivoire",
+  'czechia':                'czech republic',
+  'cape verde':             'cabo verde',
+  'congo dr':               'congo dr',
 }
 
 // ── WC teams list (cached in module scope, re-fetched if stale) ───────────────
@@ -201,6 +208,18 @@ export async function resolveFdTeamId(name: string): Promise<number | null> {
     return api.includes(aliased) || aliased.includes(api) ||
            api.includes(norm)    || norm.includes(api)
   })
+  if (found) return found.id
+
+  // 5. Token match — splits on any non-alphanumeric separator so "Bosnia & Herzegovina"
+  //    matches "Bosnia-Herzegovina" even though "&" !== "-".
+  const tokenize = (s: string) => s.split(/[^a-z0-9]+/).filter(w => w.length >= 2)
+  const ourToks = tokenize(aliased.length > norm.length ? aliased : norm)
+  if (ourToks.length > 0) {
+    found = teams.find(t => {
+      const apiToks = tokenize(t.name.toLowerCase())
+      return ourToks.every(tok => apiToks.includes(tok))
+    })
+  }
   return found?.id ?? null
 }
 
