@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { track } from '@vercel/analytics'
 import { supabase, type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
@@ -58,6 +58,24 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
   const dailyCode = getDailyCode()
   const pubInfo = PUB_DATA[pubId]
+
+  // Track form drop-off — refs keep current values accessible at unmount time
+  const submittedRef = useRef(false)
+  const geoStatusRef = useRef(geoStatus)
+  const pickRef = useRef(pick)
+  const nameRef = useRef(name)
+  const phoneRef = useRef(phone)
+  useEffect(() => { geoStatusRef.current = geoStatus }, [geoStatus])
+  useEffect(() => { pickRef.current = pick }, [pick])
+  useEffect(() => { nameRef.current = name }, [name])
+  useEffect(() => { phoneRef.current = phone }, [phone])
+  useEffect(() => {
+    return () => {
+      if (!isDemo && geoStatusRef.current === 'ok' && pickRef.current && !submittedRef.current) {
+        track('form_abandoned', { pub_id: pubId, pick: pickRef.current, had_name: !!nameRef.current, had_phone: isValidPhone(phoneRef.current) })
+      }
+    }
+  }, []) // eslint-disable-line
 
   // Load patron cookie on mount
   useEffect(() => {
@@ -157,6 +175,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || t.somethingWentWrong); setSubmitting(false); return }
+
+      submittedRef.current = true
 
       // Save patron cookie on successful entry
       if (!isDemo) {
