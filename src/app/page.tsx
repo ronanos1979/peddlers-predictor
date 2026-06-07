@@ -1000,21 +1000,37 @@ function HomeContent() {
 }
 
 export default function Home() {
-  const [splashDone, setSplashDone] = useState(false)
+  const [splashPhase, setSplashPhase] = useState<'wc' | 'pub' | 'exit' | 'done'>('wc')
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashPhase('pub'),  1450)
+    const t2 = setTimeout(() => setSplashPhase('exit'), 3050)
+    const t3 = setTimeout(() => setSplashPhase('done'), 3500)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [])
 
   return (
     <>
-      {!splashDone && (
-        <div className="splash-screen" onAnimationEnd={() => setSplashDone(true)}>
-          <Image
-            src="/logo.avif"
-            alt="The Peddler's Daughter"
-            width={280}
-            height={105}
-            priority
-            style={{ objectFit: 'contain' }}
-          />
-          <div className="splash-tagline">⚽ World Cup 2026 Predictor</div>
+      {splashPhase !== 'done' && (
+        <div className={`splash-screen${splashPhase === 'exit' ? ' splash-exiting' : ''}`}>
+          <div className="splash-stage">
+            {/* WC logo — spins in, then bursts out when pub logo appears */}
+            <div className={`splash-wc-wrap${splashPhase !== 'wc' ? ' splash-wc-exiting' : ''}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/wc2026.png" alt="FIFA World Cup 2026" style={{ width: 180, height: 180, objectFit: 'contain' }} />
+            </div>
+            {/* Pub logo — rises in after WC logo exits */}
+            {splashPhase !== 'wc' && (
+              <div className="splash-pub-wrap">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.avif" alt="The Peddler's Daughter" style={{ width: 280, maxWidth: '85vw', objectFit: 'contain' }} />
+              </div>
+            )}
+          </div>
+          {/* Tagline — re-keyed so the fade-in animation replays on phase change */}
+          <div key={splashPhase === 'wc' ? 'wc' : 'pub'} className={`splash-tagline${splashPhase !== 'wc' ? ' splash-tagline-pub' : ''}`}>
+            {splashPhase === 'wc' ? 'FIFA World Cup 2026' : "The Peddler's Daughter · World Cup 2026"}
+          </div>
         </div>
       )}
       <Suspense><HomeContent /></Suspense>
