@@ -244,7 +244,10 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
       } else {
         afTeamFound = afTeam.team.name
         const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
-        const afPlayers = (squadData.response?.[0]?.players || []) as Array<{ id: number; name: string; photo: string }>
+        const afPlayers = (squadData.response?.[0]?.players || []) as Array<{
+          id: number; name: string; photo: string
+          age?: number; number?: number; position?: string
+        }>
         afPlayersFound = afPlayers.length
 
         if (afPlayers.length === 0) {
@@ -252,7 +255,7 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
         } else {
           // Build three lookup maps for progressive name matching:
           // FD and AF use different name formats, so exact match alone misses many players.
-          type AfPlayer = { id: number; photo: string }
+          type AfPlayer = { id: number; photo: string; name: string; age?: number; number?: number; position?: string }
           const normStr = (s: string) => s.toLowerCase()
             .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
             .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
@@ -263,7 +266,7 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
 
           afPlayers.forEach(p => {
             if (!p.name) return
-            const val  = { id: p.id, photo: p.photo || '' }
+            const val: AfPlayer = { id: p.id, photo: p.photo || '', name: p.name, age: p.age, number: p.number, position: p.position }
             const norm = normStr(p.name)
             const last = norm.split(' ').pop()!
             afByExact.set(p.name.toLowerCase(), val)
@@ -290,7 +293,11 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
             return {
               fd_id:          player.fd_id,
               team_name:      scheduleName,
-              name:           player.name,
+              // AF is more accurate for player details — use AF values when we have a confident match
+              name:           af?.name     || player.name,
+              age:            af?.age      ?? player.age,
+              number:         af?.number   ?? player.number,
+              position:       af?.position || player.position,
               photo:          newPhoto,
               photo_enriched: true,
               af_id:          af?.id || player.af_id || null,
@@ -349,6 +356,12 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
       }
     }
   }
+
+  // Bump team_cache.cached_at so the admin sees the AF enrichment date
+  await supabaseAdmin
+    .from('team_cache')
+    .update({ cached_at: new Date().toISOString() })
+    .ilike('team_name', scheduleName)
 
   return NextResponse.json({
     success:           true,

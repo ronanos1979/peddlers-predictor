@@ -501,16 +501,28 @@ function TeamContent() {
                     </div>
                     {players.map(p => (
                       <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 6 }}>
-                        {p.photo && <img src={p.photo} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)', flexShrink: 0 }} />}
+                        {p.photo
+                          ? <img src={p.photo} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)', flexShrink: 0 }} />
+                          : <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface2)', border: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--text-muted)' }}>
+                              {p.number > 0 ? p.number : '?'}
+                            </div>
+                        }
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14 }}>{p.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                            {t.age} {p.age || t.ageTba} · {p.club?.name || t.clubTba}
+                          <div style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                            <span>{p.age ? `Age ${p.age}` : t.ageTba}</span>
+                            <span style={{ opacity: 0.4 }}>·</span>
+                            {p.club?.logo && (
+                              <img src={p.club.logo} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />
+                            )}
+                            <span>{p.club?.name || t.clubTba}</span>
                           </div>
                         </div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-dim)', letterSpacing: 1 }}>
-                          {p.number || '–'}
-                        </div>
+                        {p.number > 0 && (
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-muted)', letterSpacing: 1, minWidth: 28, textAlign: 'right' }}>
+                            {p.number}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

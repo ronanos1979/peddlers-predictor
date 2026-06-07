@@ -337,6 +337,7 @@ export default function AdminPage() {
             ...t,
             photo_count: t.photo_count + (data.photos_added || 0),
             club_count:  t.club_count  + (data.clubs_added  || 0),
+            cached_at:   new Date().toISOString(),
           } : t))
         }
         if (data.rate_limited) {
@@ -1210,6 +1211,11 @@ export default function AdminPage() {
                           <div style={{ fontWeight: 600, fontSize: 13 }}>{team.name}</div>
                           {team.coach_name && (
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{team.coach_name}</div>
+                          )}
+                          {team.cached_at && (
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                              cached {new Date(team.cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
                           )}
                         </div>
                       </a>
