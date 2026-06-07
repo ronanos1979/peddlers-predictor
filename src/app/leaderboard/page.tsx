@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { track } from '@vercel/analytics'
+import { trackEvent } from '@/lib/analytics'
 import { supabase, type Entry, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
 import Flag from '@/components/Flag'
@@ -52,7 +52,7 @@ function LeaderboardContent() {
   }
 
   useEffect(() => {
-    track('leaderboard_viewed', { pub_id: pubId || 'unknown' })
+    trackEvent('leaderboard_viewed', { pub_id: pubId || 'unknown' })
     load()
     const iv = setInterval(load, 30000)
     return () => clearInterval(iv)

@@ -29,7 +29,7 @@ export default function AdminPage() {
     typeof window !== 'undefined' ? sessionStorage.getItem('admin_authed') === '1' : false
   )
   const [authError, setAuthError] = useState('')
-  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback' | 'raffle' | 'teams'>('results')
+  const [tab, setTab] = useState<'results' | 'entrants' | 'stats' | 'feedback' | 'raffle' | 'teams' | 'analytics'>('results')
   const [todaysMatches, setTodaysMatches] = useState<Match[]>([])
   const [recentMatches, setRecentMatches] = useState<Match[]>([])
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
@@ -58,6 +58,10 @@ export default function AdminPage() {
   const [loadAllFdRunning, setLoadAllFdRunning] = useState(false)
   const [loadAllFdProgress, setLoadAllFdProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
+  type AnalyticsEvent = { event: string; properties: Record<string, unknown>; created_at: string }
+  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[] | null>(null)
+  const [analyticsDays, setAnalyticsDays] = useState(7)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [checkins, setCheckins] = useState<CheckInRow[]>([])
@@ -143,6 +147,14 @@ export default function AdminPage() {
     setTeamsLoading(false)
   }, [password])
 
+  const loadAnalytics = useCallback(async (days: number) => {
+    setAnalyticsLoading(true)
+    const res = await fetch(`/api/analytics?days=${days}`, { headers: { 'x-admin-password': password } })
+    const data = await res.json()
+    setAnalyticsEvents(data.events || [])
+    setAnalyticsLoading(false)
+  }, [password])
+
   useEffect(() => {
     if (!authed) return
     loadMatches()
@@ -154,6 +166,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
+    if (authed && tab === 'analytics' && analyticsEvents === null) loadAnalytics(analyticsDays)
   }, [authed, tab]) // eslint-disable-line
 
   useEffect(() => {
@@ -530,7 +543,7 @@ export default function AdminPage() {
         const unread = feedback.filter(f => !f.read).length
         return (
           <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-            {(['results', 'entrants', 'stats', 'feedback', 'raffle', 'teams'] as const).map(t => (
+            {(['results', 'entrants', 'stats', 'feedback', 'raffle', 'teams', 'analytics'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
                 style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
                   background: tab === t ? 'var(--green)' : 'transparent',
@@ -1247,6 +1260,128 @@ export default function AdminPage() {
           )}
         </>
       )}
+
+      {tab === 'analytics' && (() => {
+        const events = analyticsEvents || []
+
+        function count(name: string, pubFilter?: string) {
+          return events.filter(e => e.event === name && (!pubFilter || e.properties?.pub_id === pubFilter)).length
+        }
+
+        const pubs = ['haverhill', 'nashua'] as const
+        const sections = [
+          {
+            title: 'Geo Funnel',
+            subtitle: 'How patrons gain access at the pub',
+            rows: [
+              { label: '✅ Verified at pub', key: 'geo_verified' },
+              { label: '📍 Too far away', key: 'geo_too_far' },
+              { label: '🚫 Location blocked', key: 'geo_blocked' },
+              { label: '🔑 Chose code path', key: 'chose_code_path' },
+              { label: '✅ Code accepted', key: 'code_verified' },
+              { label: '❌ Wrong code entered', key: 'code_failed' },
+            ],
+          },
+          {
+            title: 'Engagement',
+            subtitle: 'App usage — leaderboard & picks checks are usually out-of-pub',
+            rows: [
+              { label: '🔄 Returning patron visits', key: 'patron_returning' },
+              { label: '🏆 Leaderboard views', key: 'leaderboard_viewed' },
+              { label: '🎯 My picks views', key: 'my_picks_viewed' },
+            ],
+          },
+          {
+            title: 'Conversions',
+            subtitle: 'Prediction funnel',
+            rows: [
+              { label: '✅ Predictions submitted', key: 'prediction_submitted' },
+              { label: '⬅️ Form abandoned', key: 'form_abandoned' },
+            ],
+          },
+        ]
+
+        return (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 20 }}>Analytics</h2>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[7, 30, 90].map(d => (
+                  <button key={d}
+                    onClick={() => { setAnalyticsDays(d); loadAnalytics(d) }}
+                    style={{ padding: '5px 12px', borderRadius: 16, border: '1px solid var(--gray-border)', fontSize: 12, fontWeight: analyticsDays === d ? 700 : 400, background: analyticsDays === d ? 'var(--green)' : 'transparent', color: analyticsDays === d ? '#fff' : 'var(--text)', cursor: 'pointer' }}>
+                    {d}d
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {analyticsLoading && <p className="muted">Loading…</p>}
+
+            {!analyticsLoading && events.length === 0 && (
+              <div className="card" style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14 }}>No events recorded yet. Events start appearing once patrons use the app after the latest deploy.</div>
+              </div>
+            )}
+
+            {!analyticsLoading && events.length > 0 && sections.map(section => (
+              <div key={section.title} className="card" style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 2 }}>{section.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14 }}>{section.subtitle}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '6px 12px', alignItems: 'center' }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Event</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'right' }}>Total</div>
+                  {pubs.map(p => (
+                    <div key={p} style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'right' }}>{p === 'haverhill' ? 'HVH' : 'NSH'}</div>
+                  ))}
+                  {section.rows.map(row => {
+                    const total = count(row.key)
+                    return [
+                      <div key={`${row.key}-label`} style={{ fontFamily: 'var(--font-cond)', fontSize: 14 }}>{row.label}</div>,
+                      <div key={`${row.key}-total`} style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: total > 0 ? 'var(--text)' : 'var(--text-muted)', textAlign: 'right', letterSpacing: 1 }}>{total}</div>,
+                      ...pubs.map(p => (
+                        <div key={`${row.key}-${p}`} style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>{count(row.key, p)}</div>
+                      )),
+                    ]
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {!analyticsLoading && events.length > 0 && (() => {
+              const submissions = events.filter(e => e.event === 'prediction_submitted')
+              const returning = submissions.filter(e => e.properties?.returning === true).length
+              const newPatrons = submissions.filter(e => e.properties?.returning === false).length
+              const withScore = submissions.filter(e => e.properties?.score_predicted === true).length
+              const withEmail = submissions.filter(e => e.properties?.gave_email === true).length
+              const picks = { home: 0, draw: 0, away: 0 } as Record<string, number>
+              submissions.forEach(e => { const p = e.properties?.pick as string; if (p in picks) picks[p]++ })
+              return (
+                <div className="card" style={{ marginBottom: 14 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 14 }}>Prediction Detail</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {[
+                      { label: 'New patrons', value: newPatrons },
+                      { label: 'Returning patrons', value: returning },
+                      { label: 'Added score guess', value: withScore },
+                      { label: 'Gave email', value: withEmail },
+                      { label: 'Picked home win', value: picks.home },
+                      { label: 'Picked draw', value: picks.draw },
+                      { label: 'Picked away win', value: picks.away },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ background: 'var(--surface2)', borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 1 }}>{value}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </>
+        )
+      })()}
     </div>
   )
 }

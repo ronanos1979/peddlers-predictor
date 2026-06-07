@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { track } from '@vercel/analytics'
+import { trackEvent } from '@/lib/analytics'
 import { useLocale } from '@/lib/useLocale'
 import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
@@ -83,7 +83,7 @@ function MyPicksContent() {
   // Auto-lookup: from URL param first, then patron cookie
   useEffect(() => {
     const hasCookie = !phoneParam && !!loadPatron()?.phone
-    track('my_picks_viewed', { source: phoneParam ? 'url_param' : hasCookie ? 'cookie' : 'manual' })
+    trackEvent('my_picks_viewed', { source: phoneParam ? 'url_param' : hasCookie ? 'cookie' : 'manual' })
     if (phoneParam) { lookup(phoneParam); return }
     const patron = loadPatron()
     if (patron?.phone) {

@@ -8,7 +8,7 @@ import EntryForm from '@/components/EntryForm'
 import CheckInCard from '@/components/CheckInCard'
 import ShareCard from '@/components/ShareCard'
 import Flag from '@/components/Flag'
-import { track } from '@vercel/analytics'
+import { trackEvent } from '@/lib/analytics'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
 import { distanceMetres } from '@/lib/geo'
 import { getPredictableWindowEnd } from '@/lib/matchSchedule'
@@ -213,7 +213,7 @@ function PatronWelcome({ onClear, t, selectedPub, pubCity }: {
     const p = loadPatron()
     if (!p) return
     setPatron(p)
-    track('patron_returning', { pub_id: selectedPub || 'unknown' })
+    trackEvent('patron_returning', { pub_id: selectedPub || 'unknown' })
 
     const raw = p.phone.replace(/\D/g, '')
     const phone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
