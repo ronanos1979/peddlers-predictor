@@ -27,6 +27,11 @@ function isValidPhone(raw: string): boolean {
   return normalizePhone(raw).length === 10
 }
 
+function isValidName(raw: string): boolean {
+  const parts = raw.trim().split(/\s+/).filter(Boolean)
+  return parts.length >= 2 && parts.every(p => p.length >= 2)
+}
+
 export default function EntryForm({ pubId, match, pub, isDemo = false, onComplete }: Props) {
   const { t } = useLocale()
   const [geoStatus, setGeoStatus] = useState<'prompt' | 'checking' | 'ok' | 'fail' | 'geo_blocked'>('prompt')
@@ -110,7 +115,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
 
   const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
-  const canSubmit = name && phone && phoneValid && pick && geoStatus === 'ok' && !isClosed && !submitting
+  const nameValid = isValidName(name)
+  const canSubmit = nameValid && phone && phoneValid && pick && geoStatus === 'ok' && !isClosed && !submitting
 
   function handleOverrideCode() {
     if (isValidOverrideCode(overrideCode)) {
@@ -530,6 +536,11 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               <label>{t.yourName}</label>
               <input value={name} onChange={e => setName(e.target.value)}
                 placeholder={t.namePlaceholder} />
+              {name && !nameValid && (
+                <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 4, fontFamily: 'var(--font-cond)' }}>
+                  Enter your full first and last name
+                </div>
+              )}
             </div>
             <div className="field">
               <label>

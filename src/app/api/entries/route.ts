@@ -22,8 +22,12 @@ export async function POST(req: NextRequest) {
     }
 
     const trimmedName = String(name).trim()
-    if (trimmedName.length < 2 || trimmedName.length > 100) {
-      return NextResponse.json({ error: 'Name must be between 2 and 100 characters' }, { status: 400 })
+    if (trimmedName.length > 100) {
+      return NextResponse.json({ error: 'Name too long' }, { status: 400 })
+    }
+    const nameParts = trimmedName.split(/\s+/).filter(Boolean)
+    if (nameParts.length < 2 || nameParts.some(p => p.length < 2)) {
+      return NextResponse.json({ error: 'Please enter your full first and last name' }, { status: 400 })
     }
 
     const normalizedPhone = String(phone).replace(/\D/g, '')
