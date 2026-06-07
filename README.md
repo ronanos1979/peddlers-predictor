@@ -84,7 +84,7 @@ In Studio:
 3. Paste the full SQL into the SQL editor.
 4. Run it once.
 
-This creates all local tables (pubs, matches, entries, scorer_picks, winner_picks, check_ins, feedback, team_cache, player_cache), views (player_cache_stats, leaderboard), RLS policies, pub seed data, demo match, and all 104 World Cup match records.
+This creates all local tables (pubs, matches, entries, scorer_picks, winner_picks, check_ins, feedback, analytics_events, team_cache, player_cache), views (player_cache_stats, leaderboard), RLS policies, pub seed data, demo match, and all 104 World Cup match records.
 
 ## Run the App
 

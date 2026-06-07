@@ -1,7 +1,7 @@
 -- =============================================================
 -- PEDDLER'S PREDICTOR — MASTER SQL
 -- Run this once on a fresh Supabase project (or local Postgres)
--- Last updated: June 6 2026
+-- Last updated: June 7 2026
 -- =============================================================
 
 -- =============================================================
@@ -113,6 +113,19 @@ create table if not exists feedback (
   created_at timestamptz not null default now()
 );
 
+-- Analytics events — patron behaviour tracking (geo outcomes, engagement, conversions)
+-- Written by /api/analytics (public insert); read by admin via service key
+create table if not exists analytics_events (
+  id         uuid primary key default gen_random_uuid(),
+  event      text not null,
+  properties jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+
+alter table analytics_events enable row level security;
+create policy "Public insert analytics_events"
+  on analytics_events for insert to anon with check (true);
+
 -- Team data cache (populated by admin via /api/admin-teams load_fd action)
 -- team_name stores the schedule name (e.g. "USA") for direct ilike lookups
 -- Squad lives in player_cache, not the data blob
@@ -159,6 +172,7 @@ group by team_name;
 
 -- =============================================================
 -- 2. ROW LEVEL SECURITY
+-- Note: check_ins and analytics_events have RLS enabled inline above
 -- =============================================================
 
 alter table pubs          enable row level security;
@@ -416,4 +430,10 @@ order by raffle_tickets desc, correct_picks desc;
 
 -- =============================================================
 -- DONE. Your database is fully set up.
+--
+-- Tables created:
+--   pubs, matches, entries, scorer_picks, winner_picks,
+--   check_ins, feedback, analytics_events,
+--   team_cache, player_cache
+-- Views: player_cache_stats, leaderboard
 -- =============================================================

@@ -38,7 +38,7 @@ Complete guide to deploying Peddler's Predictor from scratch on a new Supabase +
 2. Paste the entire contents of `supabase/master.sql`
 3. Click **Run** — you should see `Success`
 
-This creates all tables (pubs, matches, entries, scorer_picks, winner_picks, check_ins, feedback, team_cache, player_cache), views (player_cache_stats, leaderboard), enables RLS with all policies, seeds pub data, and loads all 104 World Cup 2026 matches.
+This creates all tables (pubs, matches, entries, scorer_picks, winner_picks, check_ins, feedback, analytics_events, team_cache, player_cache), views (player_cache_stats, leaderboard), enables RLS with all policies, seeds pub data, and loads all 104 World Cup 2026 matches.
 
 ---
 
@@ -124,7 +124,7 @@ Every push to `main` automatically deploys in ~60 seconds. Check status at your 
 
 2. Visit `https://your-app.vercel.app/admin`
    - Log in with your `ADMIN_PASSWORD`
-   - You should see the Results, Entrants, Stats, and Feedback tabs
+   - You should see 7 tabs: Results, Entrants, Stats, Feedback, Raffle, Teams, Analytics
 
 3. Visit `https://your-app.vercel.app/world-cup/standings`
    - Pre-tournament: "Standings not available yet"

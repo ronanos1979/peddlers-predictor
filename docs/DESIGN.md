@@ -42,6 +42,7 @@ Next.js 15 App (Vercel — auto-deploy from GitHub main)
            ├── /api/admin               Set results, admin actions (auto-scores winner_picks on Final)
            ├── /api/admin-data          Stats, entrants, feedback
            ├── /api/admin-teams         48-team cache status, FD load, AF enrichment
+           ├── /api/analytics           POST: log event (public, rate-limited); GET: admin read (password header)
            ├── /api/feedback            Public feedback submission
            ├── /api/my-picks            Patron's picks by phone (entries + scorerPick + winnerPick)
            ├── /api/football            Football data proxy (FD primary, AF fallback, 5min cache)
@@ -58,6 +59,7 @@ Next.js 15 App (Vercel — auto-deploy from GitHub main)
                ├── winner_picks
                ├── check_ins
                ├── feedback
+               ├── analytics_events
                ├── team_cache
                └── player_cache
 ```
@@ -94,6 +96,9 @@ One row per player with incremental photo/club enrichment via API-Football. `pho
 
 ### feedback
 Patron bug reports and suggestions. Public insert only; read via admin service key. Visible in the admin panel Feedback tab with unread count.
+
+### analytics_events
+Patron behaviour events (geo outcomes, engagement, conversions). Public insert via `/api/analytics` (rate-limited at 60/min per IP). Read by admin via `GET /api/analytics?days=N` with `x-admin-password` header. Visible in the admin panel Analytics tab. Events are also forwarded to Vercel Analytics via `trackEvent()` in `src/lib/analytics.ts`.
 
 ---
 
@@ -149,6 +154,9 @@ Automatic based on `kickoff_at`. Entries close at `entries_close_at` (kickoff + 
 
 ### Tournament Winner bonus
 +15 extra raffle entries if the patron's World Cup Champion pick is correct. Auto-scored when admin enters the Final result — no separate action needed.
+
+### Name validation
+Patron name must contain a full first and last name — a single initial is rejected. Validation requires at least two whitespace-separated parts each with at least 2 characters. Enforced client-side (inline error, submit disabled) and server-side in `/api/entries`.
 
 ### Geolocation
 Browser GPS checked against pub coordinates (300m radius). Best-effort — falls back to code-only if GPS denied.
@@ -206,3 +214,35 @@ Push to `main` → Vercel auto-deploys in ~60 seconds. No staging environment cu
 1. `npm test` — all 157 tests pass
 2. `npm run build` — no TypeScript errors
 3. `git push origin main`
+
+---
+
+## Analytics
+
+### Vercel built-ins (automatic, no code needed)
+- Page views by URL, unique visitors, new vs returning, browser/OS/device, country
+- `<Analytics />` and `<SpeedInsights />` components mounted in `layout.tsx`
+- Speed Insights reports Core Web Vitals per page
+
+### Custom events (`src/lib/analytics.ts`)
+`trackEvent(name, properties)` calls both:
+1. Vercel `track()` — activates on Pro plan, no-ops on free
+2. `POST /api/analytics` → `analytics_events` Supabase table (always works, free)
+
+Events tracked:
+
+| Event | Properties | What it answers |
+|-------|-----------|----------------|
+| `geo_verified` | pub_id, distance_m | Patron confirmed at pub |
+| `geo_too_far` | pub_id, distance_m | Opened app, not close enough |
+| `geo_blocked` | pub_id | Location permission denied |
+| `chose_code_path` | pub_id | Skipped GPS deliberately |
+| `code_verified` | pub_id | Correct access code entered |
+| `code_failed` | pub_id | Wrong code — staff comms issue |
+| `patron_returning` | pub_id | Known patron opens home page |
+| `leaderboard_viewed` | pub_id | Leaderboard check (often out-of-pub) |
+| `my_picks_viewed` | source | My picks check (cookie/url_param/manual) |
+| `prediction_submitted` | pub_id, match, pick, score_predicted, returning, gave_email | Full conversion |
+| `form_abandoned` | pub_id, pick, had_name, had_phone | Got through geo, left without submitting |
+
+Admin → Analytics tab shows these grouped by Geo Funnel, Engagement, Conversions, and Prediction Detail with a 7d/30d/90d toggle.

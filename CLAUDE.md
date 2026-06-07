@@ -16,6 +16,7 @@ A World Cup 2026 prediction game web app for **The Peddler's Daughter** Irish pu
 | Styling | Custom CSS — globals.css, NO Tailwind, NO Bootstrap |
 | Fonts | Bebas Neue (display), Barlow Condensed (labels), Barlow (body) — loaded via Google Fonts in globals.css |
 | Football data | football-data.org v4 (primary, 10 req/min no daily cap) + API-Football v3 (enrichment) — proxied via /api/football and /api/team |
+| Analytics | `@vercel/analytics` + `@vercel/speed-insights` (page views, Web Vitals) + custom `analytics_events` Supabase table via `src/lib/analytics.ts` |
 | Testing | Jest + ts-jest (run with `npm test`) |
 
 ---
@@ -113,6 +114,14 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - Public insert only; read via admin route (secret key bypasses RLS)
 - Visible in admin panel → Feedback tab with unread badge
 
+**analytics_events**
+- `id` (uuid PK), `event` (text), `properties` (jsonb, default `{}`), `created_at`
+- Written by `/api/analytics` POST (public insert, rate-limited at 60/min per IP)
+- Read by `/api/analytics` GET (requires `x-admin-password` header — service key not needed)
+- Visible in admin panel → Analytics tab with 7d/30d/90d time range selector
+- Events tracked: `geo_verified`, `geo_too_far`, `geo_blocked`, `chose_code_path`, `code_verified`, `code_failed`, `patron_returning`, `leaderboard_viewed`, `my_picks_viewed`, `prediction_submitted`, `form_abandoned`
+- All `track()` calls also forwarded to Vercel Analytics (no-ops on free plan, activates on Pro)
+
 ### Views
 
 **player_cache_stats** (aggregate view — avoids PostgREST 1000-row default limit)
@@ -129,7 +138,7 @@ group by team_name;
 Used by `/api/admin-teams` GET to show player/photo/club counts per team. Must exist in production DB.
 
 ### Row Level Security
-All tables have RLS enabled. Public read + insert on entries and scorer_picks. Public read on pubs and matches. Public insert on feedback. Server-side admin routes use the secret key to bypass RLS.
+All tables have RLS enabled. Public read + insert on entries and scorer_picks. Public read on pubs and matches. Public insert on feedback and analytics_events. Server-side admin routes use the secret key to bypass RLS.
 
 ---
 
@@ -168,6 +177,7 @@ src/
 │       ├── admin/route.ts          # POST — set_result, sync_results, ping, mark_feedback_read (auth)
 │       ├── admin-data/route.ts     # GET — stats, entrants, feedback, CSV export (auth)
 │       ├── admin-teams/route.ts    # GET — 48-team cache status; POST — load_fd, enrich_af (auth)
+│       ├── analytics/route.ts      # POST — log analytics event (public, rate-limited); GET — admin read (password header)
 │       ├── feedback/route.ts       # POST — public feedback/bug report submission
 │       ├── my-picks/route.ts       # GET — patron's picks by phone
 │       ├── football/route.ts       # GET — football data proxy (FD primary, AF fallback, 5min cache)
@@ -191,6 +201,7 @@ src/
     ├── geo.ts                      # distanceMetres(), getPosition()
     ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron(), savePubPref(), loadPubPref()
     ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
+    ├── analytics.ts                # trackEvent() — fires both Vercel Analytics track() and POST /api/analytics
     ├── i18n.ts + useLocale.ts      # EN/ES translations + locale cookie hook
 ```
 
@@ -378,7 +389,13 @@ Print and laminate for tables:
 1. Nothing needed before kick-off — match activates automatically
 2. Patron code is automatic (`{prefix}` + day number) — tell bar staff
 3. After full time → go to `/admin` → click **⟳ Sync** to auto-fetch results, or set manually
-4. Admin panel has 6 tabs: Results, Entrants, Stats, Feedback, Raffle, Teams
+4. Admin panel has 7 tabs: Results, Entrants, Stats, Feedback, Raffle, Teams, Analytics
+
+### Name validation
+- Patron name requires a full first **and** last name — a single initial is rejected
+- Validation: at least 2 whitespace-separated parts, each at least 2 characters
+- Applied both client-side (inline error, submit disabled) and server-side (`/api/entries`)
+- Placeholder changed from "First name + last initial" to "First name Last name"
 
 ### Admin panel features
 - **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
@@ -391,6 +408,7 @@ Print and laminate for tables:
 - **Feedback tab**: bug reports and feedback from patrons, unread count badge, mark-as-read per item
 - **Raffle tab**: weighted draw — 1 ticket per correct result, 3 tickets if exact score also correct; filterable by pub
 - **Teams tab**: 48-team cache status — fd_loaded flag, player/photo/club counts; "Load FD" and "Load photos & clubs" (AF enrichment) buttons per team; "Load all from FD" sequential bulk loader
+- **Analytics tab**: patron behaviour dashboard — geo funnel (verified/too_far/blocked/code), engagement (returning visits, leaderboard views, my-picks views), conversions (submissions vs abandoned), prediction detail (new vs returning, score guesses, email rate, pick distribution); time range selector (7d/30d/90d); Haverhill vs Nashua column split
 
 ### Admin session persistence
 - Password and auth state saved in `sessionStorage` (`admin_pw`, `admin_authed`) — survives page refresh but clears when the tab is closed

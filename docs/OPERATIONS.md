@@ -53,6 +53,7 @@ The patron code is automatic. Tell bar staff: **`peddlers` + today's date number
 | Feedback | Bug reports and suggestions from patrons, unread badge |
 | Raffle | Weighted draw view — filterable by pub |
 | Teams | 48-team cache status; load squads from football-data.org; enrich with API-Football photos/clubs |
+| Analytics | Patron behaviour — geo funnel, engagement (leaderboard/picks views), conversions; 7d/30d/90d toggle |
 
 ---
 
