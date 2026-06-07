@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
+import { Analytics } from '@vercel/analytics/next'
 import LangSwitcher from '@/components/LangSwitcher'
 import HeaderLocation from '@/components/HeaderLocation'
 import SiteFooter from '@/components/SiteFooter'
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>{children}</main>
 
         <SiteFooter />
+        <Analytics />
       </body>
     </html>
   )
