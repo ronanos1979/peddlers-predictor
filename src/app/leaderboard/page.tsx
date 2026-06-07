@@ -107,9 +107,8 @@ function LeaderboardContent() {
         </div>
       ) : (
         filtered.map((e, i) => (
-          <div key={i} className={`lb-entry ${i < 3 ? 'top' : ''}`}
-            style={{ borderColor: i === 0 ? 'var(--gold)' : i < 3 ? 'rgba(245,197,24,0.3)' : 'var(--border)' }}>
-            <div className="lb-rank" style={{ color: i === 0 ? 'var(--gold)' : i === 1 ? '#aaa' : i === 2 ? '#cd7f32' : 'var(--text-dim)' }}>
+          <div key={i} className={`lb-entry${i === 0 ? ' lb-gold' : i === 1 ? ' lb-silver' : i === 2 ? ' lb-bronze' : ''}`}>
+            <div className="lb-rank" style={{ color: i === 0 ? 'var(--gold)' : i === 1 ? '#b0b8c8' : i === 2 ? '#cd7f32' : 'var(--text-dim)', fontSize: i === 0 ? 26 : i === 1 ? 22 : 20 }}>
               {medals[i] || i + 1}
             </div>
             <div style={{ flex: 1 }}>
