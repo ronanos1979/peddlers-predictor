@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { track } from '@vercel/analytics'
 import { supabase, type Match, type Pub } from '@/lib/supabase'
 import { distanceMetres, getPosition } from '@/lib/geo'
 import { getDailyCode, isValidOverrideCode } from '@/lib/matchSchedule'
@@ -100,13 +101,16 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       if (dist <= pub.radius_m) {
         setGeoStatus('ok')
         setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(dist)}m from pub`)
+        track('geo_verified', { pub_id: pubId, distance_m: Math.round(dist) })
       } else {
         setGeoStatus('fail')
         setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist))))
+        track('geo_too_far', { pub_id: pubId, distance_m: Math.round(dist) })
       }
     } catch {
       setGeoStatus('geo_blocked')
       setGeoMessage(t.geoUnavailable)
+      track('geo_blocked', { pub_id: pubId })
     }
   }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationDistanceFail, t.pubCodeRequired])
 
@@ -123,8 +127,10 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       setGeoStatus('ok')
       setGeoMessage(`📍 ${t.locationVerified}`)
       setOverrideError('')
+      track('code_verified', { pub_id: pubId })
     } else {
       setOverrideError(t.invalidAccessCode)
+      track('code_failed', { pub_id: pubId })
     }
   }
 
@@ -155,6 +161,14 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       // Save patron cookie on successful entry
       if (!isDemo) {
         savePatron({ name, phone, pub_id: pubId, email: email || undefined })
+        track('prediction_submitted', {
+          pub_id: pubId,
+          match: `${match.home_team} vs ${match.away_team}`,
+          pick,
+          score_predicted: !scoreSkipped,
+          returning: !!returningPatron,
+          gave_email: !!email,
+        })
       }
 
       if (!isDemo) {
@@ -439,7 +453,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               </div>
               <button
                 type="button"
-                onClick={() => setGeoStatus('geo_blocked')}
+                onClick={() => { setGeoStatus('geo_blocked'); track('chose_code_path', { pub_id: pubId }) }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: '4px 0' }}
               >
                 🔑 Enter access code instead
