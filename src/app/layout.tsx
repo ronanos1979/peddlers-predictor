@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import LangSwitcher from '@/components/LangSwitcher'
 import HeaderLocation from '@/components/HeaderLocation'
 import SiteFooter from '@/components/SiteFooter'
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <SiteFooter />
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
