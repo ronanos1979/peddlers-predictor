@@ -1027,9 +1027,9 @@ export default function Home() {
               </div>
             )}
           </div>
-          {/* Tagline — re-keyed so the fade-in animation replays on phase change */}
-          <div key={splashPhase === 'wc' ? 'wc' : 'pub'} className={`splash-tagline${splashPhase !== 'wc' ? ' splash-tagline-pub' : ''}`}>
-            {splashPhase === 'wc' ? 'FIFA World Cup 2026' : "The Peddler's Daughter · World Cup 2026"}
+          {/* Tagline — only shown during the WC phase; pub logo speaks for itself */}
+          <div className="splash-tagline" style={{ visibility: splashPhase === 'wc' ? 'visible' : 'hidden' }}>
+            FIFA World Cup 2026
           </div>
         </div>
       )}
