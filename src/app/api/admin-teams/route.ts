@@ -390,8 +390,13 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
     for (const player of (unenriched || [])) {
       if (!player.af_id) continue
       try {
-        const data  = await afFetch('players', { id: String(player.af_id), season: '2024' })
-        const stats = (data.response?.[0]?.statistics || []) as Array<{ team?: { name: string; logo?: string } }>
+        // Try the most recent completed club season first, fall back one year
+        let stats: Array<{ team?: { name: string; logo?: string } }> = []
+        for (const season of ['2025', '2024']) {
+          const data = await afFetch('players', { id: String(player.af_id), season })
+          stats = (data.response?.[0]?.statistics || []) as typeof stats
+          if (stats.length > 0) break
+        }
         const club  = stats.find(s => s.team?.name && s.team.name.toLowerCase() !== natLower)
         if (club?.team?.name) {
           // Found a club — always write it
