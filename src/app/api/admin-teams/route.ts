@@ -393,15 +393,21 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
         const data  = await afFetch('players', { id: String(player.af_id), season: '2024' })
         const stats = (data.response?.[0]?.statistics || []) as Array<{ team?: { name: string; logo?: string } }>
         const club  = stats.find(s => s.team?.name && s.team.name.toLowerCase() !== natLower)
-        await supabaseAdmin
-          .from('player_cache')
-          .update({
-            club_name:     club?.team?.name || null,
-            club_logo:     club?.team?.logo || null,
-            club_enriched: true,
-          })
-          .eq('fd_id', player.fd_id)
-        if (club?.team?.name) clubsAdded++
+        if (club?.team?.name) {
+          // Found a club — always write it
+          await supabaseAdmin
+            .from('player_cache')
+            .update({ club_name: club.team.name, club_logo: club.team.logo || null, club_enriched: true })
+            .eq('fd_id', player.fd_id)
+          clubsAdded++
+        } else if (!force) {
+          // Delta mode: mark done even when no club found (e.g. stats not yet available)
+          await supabaseAdmin
+            .from('player_cache')
+            .update({ club_name: null, club_logo: null, club_enriched: true })
+            .eq('fd_id', player.fd_id)
+        }
+        // Force mode + no club found: leave existing data intact
       } catch (e) {
         if ((e as Error).message === 'AF_RATE_LIMIT') {
           afRateLimited = true
