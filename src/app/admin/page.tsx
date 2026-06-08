@@ -58,6 +58,8 @@ export default function AdminPage() {
   const [teamAction, setTeamAction] = useState<string | null>(null)
   const [loadAllFdRunning, setLoadAllFdRunning] = useState(false)
   const [loadAllFdProgress, setLoadAllFdProgress] = useState('')
+  const [loadAllShirtsRunning, setLoadAllShirtsRunning] = useState(false)
+  const [loadAllShirtsProgress, setLoadAllShirtsProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
   type AnalyticsEvent = { event: string; properties: Record<string, unknown>; created_at: string }
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[] | null>(null)
@@ -380,6 +382,33 @@ export default function AdminPage() {
     }
     setLoadAllFdRunning(false)
     setLoadAllFdProgress('')
+  }
+
+  async function loadAllShirts() {
+    // Only teams that have players loaded but are missing some shirt numbers
+    const missing = teams.filter(t => t.fd_loaded && t.player_count > 0 && t.number_count < t.player_count)
+    if (!missing.length) return
+    setLoadAllShirtsRunning(true)
+    for (let i = 0; i < missing.length; i++) {
+      setLoadAllShirtsProgress(`${i + 1}/${missing.length}`)
+      const team = missing[i]
+      try {
+        const res = await fetch('/api/admin-teams', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, action: 'load_fd', team_name: team.name }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          setTeams(prev => prev.map(t => t.name === team.name
+            ? { ...t, player_count: data.player_count, coach_name: data.coach }
+            : t))
+        }
+      } catch { /* continue on network error */ }
+      if (i < missing.length - 1) await new Promise(r => setTimeout(r, 7000))
+    }
+    setLoadAllShirtsRunning(false)
+    setLoadAllShirtsProgress('')
+    loadTeams()
   }
 
   function flash(text: string, type: 'success' | 'error') {
@@ -1171,9 +1200,9 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {loadAllFdRunning && (
+                    {(loadAllFdRunning || loadAllShirtsRunning) && (
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        {loadAllFdProgress}…
+                        {loadAllFdRunning ? loadAllFdProgress : loadAllShirtsProgress}…
                       </span>
                     )}
                     <button className="btn btn-secondary"
@@ -1181,9 +1210,18 @@ export default function AdminPage() {
                       onClick={loadTeams} disabled={teamsLoading}>
                       Refresh
                     </button>
+                    <button className="btn btn-secondary"
+                      style={{ width: 'auto', padding: '7px 12px', fontSize: 12 }}
+                      disabled={loadAllFdRunning || loadAllShirtsRunning || !!teamAction || teams.every(t => t.number_count >= t.player_count && t.player_count > 0)}
+                      onClick={loadAllShirts}
+                      title="Reload FD squad for all teams with missing shirt numbers. Won't overwrite numbers already set.">
+                      {loadAllShirtsRunning
+                        ? `Reloading shirts ${loadAllShirtsProgress}…`
+                        : `Reload all shirts (${teams.filter(t => t.fd_loaded && t.player_count > 0 && t.number_count < t.player_count).length} teams missing)`}
+                    </button>
                     <button className="btn btn-primary"
                       style={{ width: 'auto', padding: '7px 12px', fontSize: 12 }}
-                      disabled={loadAllFdRunning || !!teamAction || teams.every(t => t.fd_loaded)}
+                      disabled={loadAllFdRunning || loadAllShirtsRunning || !!teamAction || teams.every(t => t.fd_loaded)}
                       onClick={loadAllFd}>
                       {loadAllFdRunning
                         ? `Loading ${loadAllFdProgress}…`
