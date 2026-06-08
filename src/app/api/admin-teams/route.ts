@@ -157,15 +157,20 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
   // so ON CONFLICT DO UPDATE preserves any existing enrichment data
   if (fdData.squad.length > 0) {
     const now = new Date().toISOString()
-    const rows = fdData.squad.map(p => ({
-      fd_id:     p.id,
-      team_name: scheduleName,
-      name:      p.name,
-      age:       p.age,
-      number:    p.number,
-      position:  p.position,
-      cached_at: now,
-    }))
+    const rows = fdData.squad.map(p => {
+      const base: Record<string, unknown> = {
+        fd_id:     p.id,
+        team_name: scheduleName,
+        name:      p.name,
+        age:       p.age,
+        position:  p.position,
+        cached_at: now,
+      }
+      // Only write number when FD has a real value — omitting the column on
+      // conflict preserves any number already set by AF photo enrichment.
+      if (p.number != null && p.number > 0) base.number = p.number
+      return base
+    })
     for (let i = 0; i < rows.length; i += 50) {
       const { error: playerUpsertError } = await supabaseAdmin
         .from('player_cache')

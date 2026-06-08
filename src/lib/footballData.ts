@@ -230,7 +230,7 @@ export interface FdTeamData {
     team: { id: number; name: string; country: string; logo: string; founded: number | null; national: boolean }
     venue: { name: string; city: string; capacity: number }
   } | null
-  squad: Array<{ id: number; name: string; age: number; number: number; position: string; photo: string; afId?: number; club?: { name: string; logo?: string } }>
+  squad: Array<{ id: number; name: string; age: number; number: number | null; position: string; photo: string; afId?: number; club?: { name: string; logo?: string } }>
   coach: { id: number; name: string; nationality: string; photo: string; career: unknown[] } | null
   fixtures: Array<{
     fixture: { id: number; date: string; status: { short: string } }
@@ -270,7 +270,7 @@ export async function buildFdTeamData(teamId: number): Promise<FdTeamData | null
     id:       p.id,
     name:     p.name,
     age:      calcAge(p.dateOfBirth),
-    number:   p.shirtNumber ?? 0,
+    number:   p.shirtNumber ?? null,
     position: mapFdPosition(p.position),
     photo:    '',  // FD free tier doesn't provide player photos
   }))
