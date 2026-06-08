@@ -321,7 +321,9 @@ export default function AdminPage() {
   }
 
   async function loadTeamAf(teamName: string, action: 'enrich_af' | 'force_enrich_af' = 'enrich_af', steps: 'photos' | 'clubs' | 'all' = 'all') {
-    const tag = action === 'force_enrich_af' ? ':force' : steps === 'photos' ? ':photos' : steps === 'clubs' ? ':clubs' : ':af'
+    const tag = action === 'force_enrich_af'
+      ? (steps === 'photos' ? ':force-photos' : steps === 'clubs' ? ':force-clubs' : ':force')
+      : (steps === 'photos' ? ':photos' : steps === 'clubs' ? ':clubs' : ':af')
     setTeamAction(teamName + tag)
     try {
       const res  = await fetch('/api/admin-teams', {
@@ -1159,7 +1161,7 @@ export default function AdminPage() {
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {teams.reduce((s, t) => s + t.player_count, 0)} players ·{' '}
-                      {teams.reduce((s, t) => s + t.number_count, 0)} #s ·{' '}
+                      {teams.reduce((s, t) => s + t.number_count, 0)} shirts ·{' '}
                       {teams.reduce((s, t) => s + t.photo_count, 0)} photos ·{' '}
                       {teams.reduce((s, t) => s + t.club_count, 0)} clubs
                     </div>
@@ -1193,11 +1195,12 @@ export default function AdminPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {teams.map(team => {
-                  const isFdLoading      = teamAction === team.name + ':fd'
-                  const isPhotosLoading  = teamAction === team.name + ':photos'
-                  const isClubsLoading   = teamAction === team.name + ':clubs'
-                  const isForceLoading   = teamAction === team.name + ':force'
-                  const isAnyBusy       = !!teamAction || loadAllFdRunning
+                  const isFdLoading          = teamAction === team.name + ':fd'
+                  const isPhotosLoading      = teamAction === team.name + ':photos'
+                  const isForcePhotosLoading = teamAction === team.name + ':force-photos'
+                  const isClubsLoading       = teamAction === team.name + ':clubs'
+                  const isForceClubsLoading  = teamAction === team.name + ':force-clubs'
+                  const isAnyBusy            = !!teamAction || loadAllFdRunning
                   return (
                     <div key={team.name} style={{
                       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -1229,7 +1232,7 @@ export default function AdminPage() {
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                         {[
                           { label: 'players', val: team.player_count, total: team.player_count, alwaysGreen: true },
-                          { label: '#s',      val: team.number_count, total: team.player_count },
+                          { label: 'shirts',  val: team.number_count, total: team.player_count },
                           { label: 'photos',  val: team.photo_count,  total: team.player_count },
                           { label: 'clubs',   val: team.club_count,   total: team.player_count },
                         ].map(({ label, val, total, alwaysGreen }) => (
@@ -1247,31 +1250,45 @@ export default function AdminPage() {
                       <div style={{ display: 'flex', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
+                          disabled={isAnyBusy || (team.number_count === team.player_count && team.player_count > 0)}
+                          onClick={() => loadTeamFd(team.name)}
+                          title="Reload shirt numbers only for players missing them (skips if all have numbers)">
+                          {isFdLoading ? '…' : 'Delta shirts'}
+                        </button>
+                        <button className="btn btn-secondary"
+                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy}
                           onClick={() => loadTeamFd(team.name)}
-                          title="Reload squad + numbers from football-data.org">
-                          {isFdLoading ? '…' : 'Reload #s'}
+                          title="Force reload full squad + shirt numbers from football-data.org">
+                          {isFdLoading ? '…' : 'Reload shirts'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
                           onClick={() => loadTeamAf(team.name, 'enrich_af', 'photos')}
-                          title="Fetch missing player photos + coach photo from API-Football">
-                          {isPhotosLoading ? '…' : 'Reload photos'}
+                          title="Fetch photos only for players currently missing them">
+                          {isPhotosLoading ? '…' : 'Delta photos'}
+                        </button>
+                        <button className="btn btn-secondary"
+                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
+                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
+                          onClick={() => loadTeamAf(team.name, 'force_enrich_af', 'photos')}
+                          title="Force re-fetch all player photos from API-Football">
+                          {isForcePhotosLoading ? '…' : 'Reload photos'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
                           onClick={() => loadTeamAf(team.name, 'enrich_af', 'clubs')}
-                          title="Fetch missing club info from API-Football">
-                          {isClubsLoading ? '…' : 'Reload clubs'}
+                          title="Fetch club info only for players currently missing it">
+                          {isClubsLoading ? '…' : 'Delta clubs'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
-                          onClick={() => loadTeamAf(team.name, 'force_enrich_af', 'all')}
-                          title="Force re-fetch all photos + clubs from API-Football, overwriting existing data">
-                          {isForceLoading ? '…' : 'Force all'}
+                          onClick={() => loadTeamAf(team.name, 'force_enrich_af', 'clubs')}
+                          title="Force re-fetch all club info from API-Football">
+                          {isForceClubsLoading ? '…' : 'Reload clubs'}
                         </button>
                       </div>
                     </div>
