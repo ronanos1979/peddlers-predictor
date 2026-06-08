@@ -165,9 +165,10 @@ create index if not exists player_cache_team_name_idx on player_cache (team_name
 create or replace view player_cache_stats as
 select
   team_name,
-  count(*)                              as total,
-  count(*) filter (where photo is not null and photo != '') as photos,
-  count(*) filter (where club_enriched)  as clubs
+  count(*)                                                               as total,
+  count(*) filter (where number is not null and number > 0)             as numbers,
+  count(*) filter (where photo is not null and photo != '')             as photos,
+  count(*) filter (where club_name is not null and club_name != '')     as clubs
 from player_cache
 group by team_name;
 

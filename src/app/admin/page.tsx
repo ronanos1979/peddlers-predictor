@@ -18,7 +18,7 @@ type RaffleEntrant = { name: string; phone: string; pub_id: string; tickets: num
 type RaffleWinner = RaffleEntrant & { place: number }
 type TeamStatus = {
   name: string; flag: string; fd_loaded: boolean; coach_name: string | null
-  player_count: number; photo_count: number; club_count: number
+  player_count: number; number_count: number; photo_count: number; club_count: number
   cached_at: string | null; af_cached_at: string | null
 }
 
@@ -311,10 +311,8 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (data.success) {
-        setTeams(prev => prev.map(t => t.name === teamName
-          ? { ...t, fd_loaded: true, player_count: data.player_count, coach_name: data.coach }
-          : t))
         flash(`✅ ${teamName}: ${data.player_count} players loaded from FD`, 'success')
+        loadTeams()
       } else {
         flash(`❌ ${teamName}: ${data.error}`, 'error')
       }
@@ -322,13 +320,13 @@ export default function AdminPage() {
     setTeamAction(null)
   }
 
-  async function loadTeamAf(teamName: string, action: 'enrich_af' | 'force_enrich_af' = 'enrich_af') {
-    const tag = action === 'force_enrich_af' ? ':force' : ':af'
+  async function loadTeamAf(teamName: string, action: 'enrich_af' | 'force_enrich_af' = 'enrich_af', steps: 'photos' | 'clubs' | 'all' = 'all') {
+    const tag = action === 'force_enrich_af' ? ':force' : steps === 'photos' ? ':photos' : steps === 'clubs' ? ':clubs' : ':af'
     setTeamAction(teamName + tag)
     try {
       const res  = await fetch('/api/admin-teams', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, action, team_name: teamName }),
+        body: JSON.stringify({ password, action, team_name: teamName, steps }),
       })
       const data = await res.json()
       if (data.success) {
@@ -1161,6 +1159,7 @@ export default function AdminPage() {
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {teams.reduce((s, t) => s + t.player_count, 0)} players ·{' '}
+                      {teams.reduce((s, t) => s + t.number_count, 0)} #s ·{' '}
                       {teams.reduce((s, t) => s + t.photo_count, 0)} photos ·{' '}
                       {teams.reduce((s, t) => s + t.club_count, 0)} clubs
                     </div>
@@ -1194,10 +1193,11 @@ export default function AdminPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {teams.map(team => {
-                  const isFdLoading    = teamAction === team.name + ':fd'
-                  const isAfLoading    = teamAction === team.name + ':af'
-                  const isForceLoading = teamAction === team.name + ':force'
-                  const isAnyBusy     = !!teamAction || loadAllFdRunning
+                  const isFdLoading      = teamAction === team.name + ':fd'
+                  const isPhotosLoading  = teamAction === team.name + ':photos'
+                  const isClubsLoading   = teamAction === team.name + ':clubs'
+                  const isForceLoading   = teamAction === team.name + ':force'
+                  const isAnyBusy       = !!teamAction || loadAllFdRunning
                   return (
                     <div key={team.name} style={{
                       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -1226,48 +1226,52 @@ export default function AdminPage() {
                         </div>
                       </a>
                       <div style={{ flex: 1 }} />
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <div style={{ textAlign: 'center', minWidth: 60 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: team.player_count > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
-                            {team.player_count > 0 ? team.player_count : '—'}
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'players', val: team.player_count, total: team.player_count, alwaysGreen: true },
+                          { label: '#s',      val: team.number_count, total: team.player_count },
+                          { label: 'photos',  val: team.photo_count,  total: team.player_count },
+                          { label: 'clubs',   val: team.club_count,   total: team.player_count },
+                        ].map(({ label, val, total, alwaysGreen }) => (
+                          <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700,
+                              color: total === 0 ? 'var(--text-muted)'
+                                : (alwaysGreen || val === total) ? 'var(--green)'
+                                : val > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>
+                              {total > 0 ? (alwaysGreen ? val : `${val}/${total}`) : '—'}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
                           </div>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>players</div>
-                        </div>
-                        <div style={{ textAlign: 'center', minWidth: 52 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700,
-                            color: team.player_count === 0 ? 'var(--text-muted)' :
-                              team.photo_count === team.player_count ? 'var(--green)' : 'var(--amber)' }}>
-                            {team.player_count > 0 ? `${team.photo_count}/${team.player_count}` : '—'}
-                          </div>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>photos</div>
-                        </div>
-                        <div style={{ textAlign: 'center', minWidth: 52 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700,
-                            color: team.player_count === 0 ? 'var(--text-muted)' :
-                              team.club_count === team.player_count ? 'var(--green)' : 'var(--text-muted)' }}>
-                            {team.player_count > 0 ? `${team.club_count}/${team.player_count}` : '—'}
-                          </div>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>clubs</div>
-                        </div>
+                        ))}
                       </div>
                       <div style={{ display: 'flex', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy}
-                          onClick={() => loadTeamFd(team.name)}>
-                          {isFdLoading ? '…' : 'Load players'}
+                          onClick={() => loadTeamFd(team.name)}
+                          title="Reload squad + numbers from football-data.org">
+                          {isFdLoading ? '…' : 'Reload #s'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
-                          onClick={() => loadTeamAf(team.name)}>
-                          {isAfLoading ? '…' : 'Fill missing'}
+                          onClick={() => loadTeamAf(team.name, 'enrich_af', 'photos')}
+                          title="Fetch missing player photos + coach photo from API-Football">
+                          {isPhotosLoading ? '…' : 'Reload photos'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
-                          onClick={() => loadTeamAf(team.name, 'force_enrich_af')}>
-                          {isForceLoading ? '…' : 'Force reload AF'}
+                          onClick={() => loadTeamAf(team.name, 'enrich_af', 'clubs')}
+                          title="Fetch missing club info from API-Football">
+                          {isClubsLoading ? '…' : 'Reload clubs'}
+                        </button>
+                        <button className="btn btn-secondary"
+                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
+                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
+                          onClick={() => loadTeamAf(team.name, 'force_enrich_af', 'all')}
+                          title="Force re-fetch all photos + clubs from API-Football, overwriting existing data">
+                          {isForceLoading ? '…' : 'Force all'}
                         </button>
                       </div>
                     </div>

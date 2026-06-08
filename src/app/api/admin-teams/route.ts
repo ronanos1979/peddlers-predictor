@@ -65,20 +65,21 @@ export async function GET(req: NextRequest) {
 
   const { data: statsRows } = await supabaseAdmin
     .from('player_cache_stats')
-    .select('team_name,total,photos,clubs')
+    .select('team_name,total,numbers,photos,clubs')
 
-  const playerStats = new Map<string, { total: number; photos: number; clubs: number }>()
+  const playerStats = new Map<string, { total: number; numbers: number; photos: number; clubs: number }>()
   for (const s of (statsRows || [])) {
     playerStats.set(s.team_name.toLowerCase(), {
-      total:  Number(s.total),
-      photos: Number(s.photos),
-      clubs:  Number(s.clubs),
+      total:   Number(s.total),
+      numbers: Number(s.numbers),
+      photos:  Number(s.photos),
+      clubs:   Number(s.clubs),
     })
   }
 
   const teams = teamNames.map(name => {
     const c  = cacheByName.get(name.toLowerCase())
-    const ps = playerStats.get(name.toLowerCase()) || { total: 0, photos: 0, clubs: 0 }
+    const ps = playerStats.get(name.toLowerCase()) || { total: 0, numbers: 0, photos: 0, clubs: 0 }
     return {
       name,
       flag:              teamMap.get(name) || '',
@@ -88,6 +89,7 @@ export async function GET(req: NextRequest) {
       cached_at:         c?.cached_at         || null,
       af_cached_at:      c?.af_cached_at      || null,
       player_count:      ps.total,
+      number_count:      ps.numbers,
       photo_count:       ps.photos,
       club_count:        ps.clubs,
     }
@@ -99,14 +101,15 @@ export async function GET(req: NextRequest) {
 // ── POST — load_fd | enrich_af ────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const body = await req.json() as { password?: string; action?: string; team_name?: string }
+  const body = await req.json() as { password?: string; action?: string; team_name?: string; steps?: string }
 
   if (!auth(body.password || null)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!body.team_name) return NextResponse.json({ error: 'team_name required' }, { status: 400 })
 
+  const steps = (body.steps as 'photos' | 'clubs' | 'all') || 'all'
   if (body.action === 'load_fd')          return handleLoadFd(body.team_name)
-  if (body.action === 'enrich_af')        return handleEnrichAf(body.team_name)
-  if (body.action === 'force_enrich_af')  return handleEnrichAf(body.team_name, true)
+  if (body.action === 'enrich_af')        return handleEnrichAf(body.team_name, false, steps)
+  if (body.action === 'force_enrich_af')  return handleEnrichAf(body.team_name, true,  steps)
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
 
@@ -185,8 +188,11 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
 // ── enrich_af: add photos + clubs from API-Football, respects 100/day limit ──
 // force=true: re-fetch and overwrite all players even if already enriched
 
-async function handleEnrichAf(scheduleName: string, force = false): Promise<NextResponse> {
+async function handleEnrichAf(scheduleName: string, force = false, steps: 'photos' | 'clubs' | 'all' = 'all'): Promise<NextResponse> {
   if (!AF_KEY) return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
+
+  const doPhotos = steps !== 'clubs'
+  const doClubs  = steps !== 'photos'
 
   const { data: players, error } = await supabaseAdmin
     .from('player_cache')
@@ -205,7 +211,7 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
   let photoError: string | null = null
 
   // Delta: process players with missing photos even if previously marked photo_enriched
-  const needsPhotos = force || players.some(p => !p.photo_enriched || !p.photo)
+  const needsPhotos = doPhotos && (force || players.some(p => !p.photo_enriched || !p.photo))
 
   // Check if coach photo needs fetching
   const { data: teamRow } = await supabaseAdmin
@@ -213,7 +219,7 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
     .select('data')
     .ilike('team_name', scheduleName)
     .single()
-  const needsCoachPhoto = force || !!(teamRow?.data?.coach && !(teamRow.data.coach as Record<string, unknown>).photo)
+  const needsCoachPhoto = doPhotos && (force || !!(teamRow?.data?.coach && !(teamRow.data.coach as Record<string, unknown>).photo))
 
   // ── Step 1: Photo enrichment ───────────────────────────────────────────────
   if (needsPhotos || needsCoachPhoto) {
@@ -371,7 +377,7 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
   // ── Step 2: Club enrichment — 1 AF call per player with af_id ─────────────
   // Force mode re-fetches clubs even for already-enriched players
   let clubsAdded = 0
-  if (!afRateLimited) {
+  if (!afRateLimited && doClubs) {
     const { data: unenriched } = force
       ? await supabaseAdmin
           .from('player_cache')
@@ -386,6 +392,13 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
           .not('af_id', 'is', null)
 
     const natLower = scheduleName.toLowerCase()
+    // AF player stats use the full official name (e.g. "United States") not the schedule name ("USA").
+    // Build an exclusion set so the national team is never picked as a player's club.
+    const natAliasLower = NAME_ALIASES[natLower] // e.g. "usa" → "united states"
+    const isNatTeam = (name: string) => {
+      const n = name.toLowerCase()
+      return n === natLower || (!!natAliasLower && n === natAliasLower)
+    }
 
     for (const player of (unenriched || [])) {
       if (!player.af_id) continue
@@ -397,7 +410,7 @@ async function handleEnrichAf(scheduleName: string, force = false): Promise<Next
           stats = (data.response?.[0]?.statistics || []) as typeof stats
           if (stats.length > 0) break
         }
-        const club  = stats.find(s => s.team?.name && s.team.name.toLowerCase() !== natLower)
+        const club = stats.find(s => s.team?.name && !isNatTeam(s.team.name))
         if (club?.team?.name) {
           // Found a club — always write it
           await supabaseAdmin
