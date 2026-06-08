@@ -8,7 +8,7 @@ export const NAME_ALIASES: Record<string, string> = {
   'ivory coast':           "côte d'ivoire",
   'türkiye':               'turkey',
   'czechia':               'czech republic',
-  'bosnia & herzegovina':  'bosnia-herzegovina',
+  'bosnia & herzegovina':  'bosnia',
 }
 
 // API-Football official name → local Supabase schedule name (reverse of NAME_ALIASES)
