@@ -25,8 +25,8 @@ export default function SiteFooter() {
       {/* Facebook + website row */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
         {[
-          { href: 'https://www.facebook.com/peddlershaverhill/', label: 'Facebook · Haverhill', fb: true },
-          { href: 'https://www.facebook.com/pg/PeddlersNashua/', label: 'Facebook · Nashua', fb: true },
+          { href: 'https://www.facebook.com/peddlershaverhill/', label: t.facebookHaverhill, fb: true },
+          { href: 'https://www.facebook.com/pg/PeddlersNashua/', label: t.facebookNashua, fb: true },
           { href: 'https://www.thepeddlersdaughter.com/', label: '🌐 Website', fb: false },
         ].map(({ href, label, fb }) => (
           <a key={label} href={href} target="_blank" rel="noopener noreferrer"
@@ -40,7 +40,7 @@ export default function SiteFooter() {
       {/* Nav links */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
         {[
-          { href: '/feedback', label: '🐛 Feedback' },
+          { href: '/feedback', label: t.feedbackLink },
           { href: '/rules', label: t.rules },
           { href: '/locations', label: t.locations },
           { href: '/schedule', label: t.schedule },

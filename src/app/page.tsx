@@ -291,11 +291,12 @@ function PatronWelcome({ onClear, t, selectedPub, pubCity }: {
 }
 
 function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
+  const { t } = useLocale()
   const pub = selectedPub || 'haverhill'
   const items = [
-    { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: 'Leaderboard', desc: 'Raffle ticket standings' },
-    { href: '/world-cup', icon: '⚽', title: 'World Cup Hub', desc: 'Squads, standings, bracket' },
-    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: 'Golden Boot', desc: '+10 bonus tickets' },
+    { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: t.leaderboard, desc: t.leaderboardDesc },
+    { href: '/world-cup', icon: '⚽', title: t.worldCupHub, desc: t.worldCupHubDesc },
+    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDesc },
   ]
   return (
     <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 0 12px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
@@ -321,6 +322,7 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
 }
 
 function FirstTimeCard() {
+  const { t } = useLocale()
   const [show, setShow] = useState(false)
   const [expanded, setExpanded] = useState(true)
 
@@ -338,10 +340,10 @@ function FirstTimeCard() {
   if (!show) return null
 
   const steps = [
-    'Predict home win, draw, or away win before kick-off',
-    'Correct result = 1 ticket · Exact score = 3 tickets',
-    'Pick the Golden Boot winner = +10 bonus tickets',
-    'More tickets = more chances in the TV raffle draw on July 19!',
+    t.onboardStep1,
+    t.onboardStep2,
+    t.onboardStep3,
+    t.onboardStep4,
   ]
 
   return (
@@ -358,7 +360,7 @@ function FirstTimeCard() {
         justifyContent: 'space-between', cursor: 'pointer',
       }}>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--gold)' }}>
-          ✨ New here? How it works
+          {t.newHereTitle}
         </span>
         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{expanded ? '▲' : '▼'}</span>
       </button>
@@ -382,7 +384,7 @@ function FirstTimeCard() {
             ))}
           </div>
           <button onClick={dismiss} className="btn btn-gold" style={{ width: '100%', fontSize: 13 }}>
-            Got it!
+            {t.gotIt}
           </button>
         </div>
       )}
@@ -391,6 +393,7 @@ function FirstTimeCard() {
 }
 
 function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
+  const { t } = useLocale()
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -420,17 +423,17 @@ function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
         <div style={{ fontSize: 30, flexShrink: 0 }}>🏆</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 2 }}>
-            Bonus Tickets
+            {t.winnerPickCalloutLabel}
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 0.5, color: 'var(--text)', lineHeight: 1.2 }}>
-            Pick the World Cup Champion
+            {t.winnerPickCalloutTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            Correct pick = +15 raffle tickets
+            {t.winnerPickCalloutDesc}
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', flexShrink: 0 }}>
-          Pick →
+          {t.pickArrow}
         </div>
       </div>
     </Link>
@@ -438,6 +441,7 @@ function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
 }
 
 function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
+  const { t } = useLocale()
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -467,17 +471,17 @@ function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
         <div style={{ fontSize: 30, flexShrink: 0 }}>🎯</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>
-            Bonus Tickets
+            {t.winnerPickCalloutLabel}
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 0.5, color: 'var(--text)', lineHeight: 1.2 }}>
-            Pick the Golden Boot Winner
+            {t.goldenBootCalloutTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            Correct pick = +10 raffle tickets
+            {t.goldenBootCalloutDesc}
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>
-          Pick →
+          {t.pickArrow}
         </div>
       </div>
     </Link>
@@ -739,11 +743,11 @@ function HomeContent() {
   }, [])
 
   const navItems = [
-    { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: 'All 104 Matches', desc: 'Group stage through the Final' },
+    { href: `/schedule?pub=${selectedPub || 'haverhill'}`, icon: '📅', label: t.allMatches104, desc: t.allMatches104Desc },
     { href: `/leaderboard?pub=${selectedPub || 'haverhill'}`, icon: '🏆', label: t.leaderboard, desc: "Who's in the lead" },
     { href: '/my-picks', icon: '👤', label: t.myPicks, desc: 'Your predictions & tickets' },
-    { href: '/world-cup', icon: '⚽', label: 'World Cup Hub', desc: 'Squads, standings, bracket' },
-    { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: 'Golden Boot +10', desc: 'Pick the top scorer' },
+    { href: '/world-cup', icon: '⚽', label: t.worldCupHub, desc: t.worldCupHubDesc },
+    { href: `/world-cup/top-scorer-pick?pub=${selectedPub || 'haverhill'}`, icon: '🎯', label: t.goldenBootPlus10, desc: t.pickTopScorerShort },
     { href: '/overall-picks', icon: '📊', label: t.overallPicks, desc: 'How the pub is picking' },
     { href: '/rules', icon: '📋', label: t.rules, desc: 'How the game works' },
     { href: `/demo?pub=${selectedPub || 'haverhill'}`, icon: '🎮', label: t.demo, desc: 'Try a prediction first' },
@@ -832,7 +836,7 @@ function HomeContent() {
                 onClick={() => setSelectedMatch(null)}
                 style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-muted)', cursor: 'pointer', padding: '8px 0 12px 0', display: 'flex', alignItems: 'center', gap: 4 }}
               >
-                ← Back to Matches
+                {t.backToMatches}
               </button>
               <EntryForm
                 pubId={selectedPub}
@@ -873,7 +877,7 @@ function HomeContent() {
         return (
           <div style={{ marginBottom: 4 }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 14 }}>
-              ⚽ Make Your Predictions
+              {t.makePredictions}
             </div>
             {days.map(({ label, matches }) => (
               <div key={label} style={{ marginBottom: 20 }}>
@@ -914,22 +918,22 @@ function HomeContent() {
                           </div>
                           {total > 0 && (
                             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}% home</span>
+                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}{t.pctHome}</span>
                               <span>·</span>
-                              <span>{dp}% draw</span>
+                              <span>{dp}{t.pctDraw}</span>
                               <span>·</span>
-                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}% away</span>
+                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}{t.pctAway}</span>
                               <span style={{ marginLeft: 2 }}>({total})</span>
                             </div>
                           )}
                         </div>
                         {done ? (
                           <span style={{ flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 6, padding: '4px 10px' }}>
-                            ✓ Picked
+                            {t.pickedBadge}
                           </span>
                         ) : (
                           <button onClick={() => setSelectedMatch(m)} className="btn btn-primary" style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}>
-                            Pick →
+                            {t.pickArrow}
                           </button>
                         )}
                       </div>
@@ -976,7 +980,7 @@ function HomeContent() {
       {/* Location selector */}
       <div style={{ marginTop: 8, marginBottom: 16 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10, textAlign: 'center' }}>
-          📍 Change Location
+          {t.changeLocation}
         </div>
         <div className="loc-selector">
           <button className={`loc-btn ${selectedPub === 'haverhill' ? 'active' : ''}`} onClick={() => choosePub('haverhill')}>
@@ -989,7 +993,7 @@ function HomeContent() {
         {geoDetecting && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>
             <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--green)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            Detecting nearest pub…
+            {t.detectingPub}
           </div>
         )}
       </div>

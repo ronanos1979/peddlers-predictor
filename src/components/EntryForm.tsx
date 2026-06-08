@@ -270,12 +270,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 6 }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+1</div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>correct result</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.correctResultLabel}</div>
                 </div>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 20, color: 'var(--text-muted)', alignSelf: 'center' }}>+</div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+2</div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>exact score</div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.exactScoreLabel}</div>
                 </div>
               </div>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
@@ -330,7 +330,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
         <div className="slide-up-delay-2" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {onComplete && (
             <button className="btn btn-primary" onClick={onComplete}>
-              ← Back to Matches
+              {t.backToMatches}
             </button>
           )}
           {!isDemo && (
@@ -455,10 +455,10 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             <div className="card" style={{ marginBottom: 12, border: '1px solid rgba(0,200,122,0.3)', background: 'linear-gradient(135deg, #091a10, #111)', textAlign: 'center', padding: '20px 16px' }}>
               <div style={{ fontSize: 40, marginBottom: 8 }}>📍</div>
               <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 20, color: 'var(--text)', marginBottom: 6 }}>
-                Verify you&apos;re at the pub
+                {t.verifyAtPub}
               </div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.5 }}>
-                We check your GPS to confirm you&apos;re playing from The Peddler&apos;s Daughter. Your location is not stored or shared.
+                {t.locationExplanation}
               </div>
               <button
                 type="button"
@@ -466,17 +466,17 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 style={{ fontSize: 16, marginBottom: 12 }}
                 onClick={() => { setGeoStatus('checking'); setGeoMessage(t.checkingLocation); checkGeo() }}
               >
-                📍 Allow Location Access
+                {t.allowLocationAccess}
               </button>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
-                Your browser will ask to share your location — tap <strong>Allow</strong>.
+                {t.browserWillAsk} <strong>{t.allowWord}</strong>.
               </div>
               <button
                 type="button"
                 onClick={() => { setGeoStatus('geo_blocked'); trackEvent('chose_code_path', { pub_id: pubId }) }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: '4px 0' }}
               >
-                🔑 Enter access code instead
+                {t.enterCodeInstead}
               </button>
             </div>
           )}
@@ -491,7 +491,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                     {t.accessCode}
                   </div>
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Ask bar staff for today&apos;s code
+                    {t.askBarStaffCode}
                   </div>
                 </div>
               </div>
@@ -516,14 +516,14 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               )}
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  At the pub? Tap <strong>Allow</strong> on the location prompt, or enable Location for this site in your browser settings, then:
+                  {t.atPubTap} <strong>{t.allowWord}</strong> {t.inBrowserSettings}
                 </div>
                 <button
                   type="button"
                   onClick={() => { setGeoStatus('checking'); setGeoMessage(t.checkingLocation); checkGeo() }}
                   style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 14px' }}
                 >
-                  📍 Try location again
+                  {t.tryLocationAgain}
                 </button>
               </div>
             </div>
@@ -533,7 +533,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           {geoStatus === 'fail' && (
             <div className="card" style={{ marginBottom: 12, border: '1px solid rgba(245,197,24,0.25)', background: 'linear-gradient(135deg, #131000, #111)', textAlign: 'center', padding: '14px 16px' }}>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Not close enough to the pub? Ask bar staff for today&apos;s access code.
+                {t.notCloseEnough}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
@@ -572,7 +572,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 placeholder={t.namePlaceholder} />
               {name && !nameValid && (
                 <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 4, fontFamily: 'var(--font-cond)' }}>
-                  Enter your full first and last name
+                  {t.enterFullName}
                 </div>
               )}
             </div>
@@ -587,7 +587,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 type="tel" placeholder="(555) 867-5309" inputMode="numeric" />
               {phone && !phoneValid && (
                 <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 4, fontFamily: 'var(--font-cond)' }}>
-                  Enter a 10-digit US phone number
+                  {t.enter10DigitPhone}
                 </div>
               )}
             </div>
@@ -625,10 +625,10 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             {pick && !scoreSkipped && (
               <div style={{ marginTop: 14, padding: '14px 16px', background: 'linear-gradient(135deg, #131000, #0f0e00)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,197,24,0.3)' }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2, textAlign: 'center' }}>
-                  🎯 Predict the score
+                  {t.predictScore}
                 </div>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 16 }}>
-                  Optional — +2 bonus raffle tickets if exact
+                  {t.scoreOptional}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
                   {/* Home team */}
@@ -665,7 +665,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 </div>
                 <button type="button" onClick={() => { setScoreSkipped(true); setHomeScorePred(0); setAwayScorePred(0) }}
                   style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
-                  Skip — no score prediction
+                  {t.skipNoScore}
                 </button>
               </div>
             )}
@@ -673,7 +673,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             {pick && scoreSkipped && (
               <button type="button" onClick={() => setScoreSkipped(false)}
                 style={{ display: 'block', width: '100%', marginTop: 10, padding: '10px 14px', background: 'rgba(245,197,24,0.06)', border: '1px dashed rgba(245,197,24,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--gold)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>
-                🎯 Add score prediction (+2 bonus tickets)
+                {t.addScorePrediction}
               </button>
             )}
 

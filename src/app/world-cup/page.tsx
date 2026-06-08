@@ -6,21 +6,21 @@ export default function WorldCupHub() {
   const { t } = useLocale()
 
   const sections = [
-    { href: '/world-cup/groups', icon: '🗂️', label: 'Groups', desc: '12 groups · who goes through' },
+    { href: '/world-cup/groups', icon: '🗂️', label: t.groupsNavLabel, desc: t.groupsNavDesc },
     { href: '/world-cup/standings', icon: '📊', label: t.standings, desc: 'Live group tables' },
     { href: '/world-cup/bracket', icon: '🏆', label: t.bracket, desc: 'Full knockout draw' },
     { href: '/world-cup/results', icon: '⚽', label: t.results, desc: 'Completed matches' },
     { href: '/world-cup/scorers', icon: '🥇', label: t.scorers, desc: 'Golden Boot race' },
     { href: '/world-cup/team', icon: '⭐', label: t.myTeam, desc: 'Squad, manager, fixtures' },
-    { href: '/world-cup/winner-pick', icon: '🏆', label: 'Pick the Champion', desc: '+15 bonus tickets if correct' },
-    { href: '/world-cup/winner-picks', icon: '📊', label: 'Community Champion Picks', desc: 'Who does the pub back?' },
+    { href: '/world-cup/winner-pick', icon: '🏆', label: t.pickChampionLabel, desc: t.pickChampionDesc },
+    { href: '/world-cup/winner-picks', icon: '📊', label: t.communityPicksLabel, desc: t.communityPicksDesc },
   ]
 
   return (
     <div className="container">
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>
-          FIFA World Cup 2026
+          {t.fifaWC2026}
         </div>
         <h1>{t.worldCupHub}</h1>
         <p className="muted">{t.worldCupHubSub}</p>

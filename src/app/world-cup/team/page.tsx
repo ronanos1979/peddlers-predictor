@@ -371,7 +371,7 @@ function TeamContent() {
     return (
       <div className="container">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>Loading…</div>
+          <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.loading}</div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '24px 0 20px' }}>
@@ -386,7 +386,7 @@ function TeamContent() {
               <h2>{t.teamInfo}</h2>
               {rateLimited ? (
                 <p className="muted" style={{ color: 'var(--amber)' }}>
-                  Player profiles are temporarily unavailable — check back in a few hours as the tournament gets closer.
+                  {t.playerProfilesUnavailable}
                 </p>
               ) : (
                 <p className="muted">{t.playerInfoUnavailable}</p>
@@ -528,7 +528,7 @@ function TeamContent() {
                   </div>
                 )
               })}
-              {squad.length === 0 && <p className="muted" style={{ textAlign: 'center', padding: 24 }}>Squad not yet announced</p>}
+              {squad.length === 0 && <p className="muted" style={{ textAlign: 'center', padding: 24 }}>{t.squadNotAnnounced}</p>}
             </>
           )}
 

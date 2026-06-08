@@ -79,7 +79,7 @@ function TopScorerPickContent() {
     if (!selected) return
     const name  = patron?.name  || guestName.trim()
     const phone = patron?.phone || guestPhone.trim()
-    if (!name || !phone) { setError('Please enter your name and phone number.'); return }
+    if (!name || !phone) { setError(t.pleaseEnterNamePhone); return }
     setSubmitting(true)
     setError('')
     try {
@@ -147,7 +147,7 @@ function TopScorerPickContent() {
         <input
           value={search}
           onChange={e => { setSearch(e.target.value); setSelected(null) }}
-          placeholder="Search by player name or country…"
+          placeholder={t.searchPlayerCountry}
           style={{
             width: '100%', boxSizing: 'border-box',
             background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -168,7 +168,7 @@ function TopScorerPickContent() {
       {filteredLive.length > 0 && (
         <>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 10 }}>
-            Tournament Leaders
+            {t.tournamentLeaders}
           </div>
           {filteredLive.slice(0, 5).map(s => {
             const isSelected = selected?.name === s.player.name
@@ -177,7 +177,7 @@ function TopScorerPickContent() {
                 key={s.player.id}
                 name={s.player.name}
                 subtitle={`${s.statistics[0]?.team.name} · ${s.player.nationality}`}
-                right={<><span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: isSelected ? 'var(--gold)' : 'var(--green)', letterSpacing: 1 }}>{s.statistics[0]?.goals.total ?? 0}</span><span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', display: 'block', textTransform: 'uppercase' }}>goals</span></>}
+                right={<><span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: isSelected ? 'var(--gold)' : 'var(--green)', letterSpacing: 1 }}>{s.statistics[0]?.goals.total ?? 0}</span><span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', display: 'block', textTransform: 'uppercase' }}>{t.goalsLower}</span></>}
                 isSelected={isSelected}
                 onSelect={() => setSelected(isSelected ? null : { name: s.player.name, team: s.statistics[0]?.team.name || '', country: s.player.nationality, flag: '', id: s.player.id })}
               />
@@ -191,7 +191,7 @@ function TopScorerPickContent() {
       {filteredContenders.length > 0 && (
         <>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-            {liveScorers.length > 0 ? 'Top Contenders' : '⭐ Top Contenders'}
+            {liveScorers.length > 0 ? t.topContenders : `⭐ ${t.topContenders}`}
           </div>
           {filteredContenders.map(p => {
             const isSelected = selected?.name === p.name
@@ -213,16 +213,16 @@ function TopScorerPickContent() {
       {showCustom && (
         <>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10, marginTop: 8 }}>
-            Not in the list?
+            {t.notInList}
           </div>
           <div className="card" style={{ marginBottom: 8 }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, marginBottom: 10 }}>
-              Pick &ldquo;{search}&rdquo;
+              {t.pickQuoted.replace('{name}', search)}
             </div>
             <input
               value={customTeam}
               onChange={e => setCustomTeam(e.target.value)}
-              placeholder="Their country or club (e.g. France / Bayern Munich)"
+              placeholder={t.teamCountryPlaceholder}
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -236,7 +236,7 @@ function TopScorerPickContent() {
               className="btn btn-secondary"
               style={{ width: '100%' }}
             >
-              Select {search}
+              {t.selectPlayer.replace('{name}', search)}
             </button>
           </div>
         </>

@@ -3,12 +3,14 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
+import { useLocale } from '@/lib/useLocale'
 import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 type Team = { name: string; flag: string }
 
 function WinnerPickContent() {
+  const { t } = useLocale()
   const searchParams = useSearchParams()
   const pubId = searchParams.get('pub') || 'haverhill'
 
@@ -62,7 +64,7 @@ function WinnerPickContent() {
     if (!selected) return
     const name  = patron?.name  || guestName.trim()
     const phone = patron?.phone || guestPhone.trim()
-    if (!name || !phone) { setError('Please enter your name and phone number.'); return }
+    if (!name || !phone) { setError(t.pleaseEnterNamePhone); return }
     const raw = phone.replace(/\D/g, '')
     const cleanPhone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
     if (cleanPhone.length !== 10) { setError('Enter a valid 10-digit US phone number.'); return }
@@ -78,14 +80,14 @@ function WinnerPickContent() {
         team_flag: selected.flag,
       })
       if (err) {
-        setError(err.code === '23505' ? 'You already made a pick — it cannot be changed.' : err.message)
+        setError(err.code === '23505' ? t.onceSubmitted : err.message)
         setSubmitting(false)
         return
       }
       if (!patron) savePatron({ name, phone: cleanPhone, pub_id: pubId })
       setSubmitted(true)
     } catch {
-      setError('Something went wrong — please try again.')
+      setError(t.somethingWentWrong)
       setSubmitting(false)
     }
   }
@@ -98,18 +100,18 @@ function WinnerPickContent() {
         <div style={{ textAlign: 'center', paddingTop: 32 }}>
           <div className="pop-in" style={{ fontSize: 56, marginBottom: 10 }}>🏆</div>
           <div className="slide-up">
-            <h1 style={{ marginBottom: 6 }}>{submitted ? 'Pick locked in!' : 'Your champion pick'}</h1>
+            <h1 style={{ marginBottom: 6 }}>{submitted ? t.pickLocked : t.yourChampionPick}</h1>
             <p className="muted" style={{ marginBottom: 20 }}>
               {pick?.is_correct === true
-                ? '🎉 Correct! +15 bonus raffle tickets added!'
+                ? t.correctBonus
                 : pick?.is_correct === false
-                ? 'Tough luck — keep stacking match tickets!'
-                : '+15 bonus tickets if they lift the trophy on July 19'}
+                ? t.wrongKeepStacking
+                : t.bonusIfTrophy}
             </p>
           </div>
           <div className="slide-up-delay card" style={{ marginBottom: 20, border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.05)', padding: '24px 20px' }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>
-              Your World Cup Champion Pick
+              {t.yourWCChampionPick}
             </div>
             {pick?.team_flag && (
               <div style={{ marginBottom: 10 }}>
@@ -121,23 +123,23 @@ function WinnerPickContent() {
             </div>
             {pick?.is_correct === true && (
               <span style={{ background: 'rgba(0,200,122,0.15)', color: 'var(--green)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 6, padding: '5px 14px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>
-                ✓ Correct — +15 tickets!
+                {t.correctPlus15}
               </span>
             )}
             {pick?.is_correct === false && (
               <span style={{ background: 'rgba(255,59,59,0.1)', color: 'var(--red)', border: '1px solid rgba(255,59,59,0.25)', borderRadius: 6, padding: '5px 14px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>
-                ✗ Didn&apos;t win it
+                {t.didntWin}
               </span>
             )}
           </div>
           <Link href="/world-cup/winner-picks" className="btn btn-gold" style={{ textDecoration: 'none', textAlign: 'center', display: 'block', marginBottom: 8 }}>
-            📊 See who the pub is backing
+            {t.seeCommunityPicks}
           </Link>
           <Link href="/my-picks" className="btn btn-primary" style={{ textDecoration: 'none', textAlign: 'center', display: 'block', marginBottom: 8 }}>
-            👤 My Picks
+            👤 {t.myPicks}
           </Link>
           <Link href="/" className="btn btn-secondary" style={{ textDecoration: 'none', textAlign: 'center', display: 'block' }}>
-            ← Home
+            {t.homeArrow}
           </Link>
         </div>
       </div>
@@ -149,18 +151,18 @@ function WinnerPickContent() {
     <div className="container" style={{ paddingBottom: selected ? (patron ? 92 : 172) : 24 }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
-          🏆 Bonus Pick
+          {t.bonusPickLabel}
         </div>
-        <h1>Predict the Champion</h1>
+        <h1>{t.predictChampion}</h1>
         <p className="muted" style={{ marginBottom: 6 }}>
-          Which team lifts the trophy on July 19?{' '}
-          <strong style={{ color: 'var(--gold)' }}>Correct pick = +15 bonus raffle tickets.</strong>
+          {t.whichTeamLifts}{' '}
+          <strong style={{ color: 'var(--gold)' }}>{t.correctPick15}</strong>
         </p>
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
-          One pick per person — cannot be changed once submitted.
+          {t.onceSubmitted}
         </p>
         <Link href="/world-cup/winner-picks" style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-muted)', textDecoration: 'none', textTransform: 'uppercase' }}>
-          📊 See community picks →
+          {t.seeCommunityPicksArrow}
         </Link>
       </div>
 
@@ -169,7 +171,7 @@ function WinnerPickContent() {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search teams…"
+          placeholder={t.searchTeams}
           style={{
             width: '100%', boxSizing: 'border-box',
             background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -185,10 +187,10 @@ function WinnerPickContent() {
 
       {/* Team list */}
       {teams.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>Loading teams…</div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loadingTeams}</div>
       ) : filtered.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '24px 16px' }}>
-          <p className="muted">No teams found for &ldquo;{search}&rdquo;</p>
+          <p className="muted">{t.noTeamsFound.replace('{search}', search)}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -229,7 +231,7 @@ function WinnerPickContent() {
             )}
             {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{error}</p>}
             <button className="btn btn-gold" disabled={submitting} onClick={handleSubmit} style={{ width: '100%' }}>
-              {submitting ? 'Locking in…' : `🏆 Back ${selected.name} to win it all`}
+              {submitting ? t.lockingIn : t.backTeamToWin.replace('{name}', selected.name)}
             </button>
           </div>
         </div>

@@ -266,6 +266,180 @@ export const translations = {
     yourPick: 'Your pick',
     result: 'Result',
 
+    // Home - discovery strip & onboarding
+    leaderboardDesc: 'Raffle ticket standings',
+    worldCupHubDesc: 'Squads, standings, bracket',
+    goldenBootDesc: '+10 bonus tickets',
+    newHereTitle: '✨ New here? How it works',
+    onboardStep1: 'Predict home win, draw, or away win before kick-off',
+    onboardStep2: 'Correct result = 1 ticket · Exact score = 3 tickets',
+    onboardStep3: 'Pick the Golden Boot winner = +10 bonus tickets',
+    onboardStep4: 'More tickets = more chances in the TV raffle draw on July 19!',
+    gotIt: 'Got it!',
+    winnerPickCalloutLabel: 'Bonus Tickets',
+    winnerPickCalloutTitle: 'Pick the World Cup Champion',
+    winnerPickCalloutDesc: 'Correct pick = +15 raffle tickets',
+    goldenBootCalloutTitle: 'Pick the Golden Boot Winner',
+    goldenBootCalloutDesc: 'Correct pick = +10 raffle tickets',
+    allMatches104: 'All 104 Matches',
+    allMatches104Desc: 'Group stage through the Final',
+    goldenBootPlus10: 'Golden Boot +10',
+    pickTopScorerShort: 'Pick the top scorer',
+    backToMatches: '← Back to Matches',
+    makePredictions: '⚽ Make Your Predictions',
+    pickedBadge: '✓ Picked',
+    pickArrow: 'Pick →',
+    changeLocation: '📍 Change Location',
+    detectingPub: 'Detecting nearest pub…',
+    pctHome: '% home',
+    pctDraw: '% draw',
+    pctAway: '% away',
+
+    // Leaderboard
+    leaderboardSub: 'Raffle ticket standings — more tickets = more chances, but anyone can win the draw',
+    matchSingular: 'match',
+    matchPlural: 'matches',
+
+    // Schedule
+    filterPlaceholder: 'Filter by team, venue, or stage…',
+    matchesFound: '{count} {matches} found',
+    noMatchesFound: 'No matches found for "{filter}"',
+    clearFilter: 'Clear filter',
+    venueTba: '📍 Venue TBA',
+
+    // My Picks
+    searchByPhone: 'Search by phone →',
+    ifCorrect: 'if correct',
+    correctExclaim: 'correct!',
+    wrongLower: 'wrong',
+    usesSameNumber: 'Use the same number every time you pick to keep your predictions together.',
+
+    // Overall Picks
+    overallPicksTitle: 'Overall Picks',
+    overallPicksSub: 'How everyone is predicting every World Cup 2026 match.',
+    totalPicksSoFar: 'total picks so far',
+    allMatches: 'All matches',
+    upcoming: 'Upcoming',
+    completed: 'Completed',
+    noMatchesToShow: 'No matches to show.',
+    noPicksYet: 'No picks yet',
+    pctDrawLabel: '% Draw',
+    pickSingular: 'pick',
+    pickPlural: 'picks',
+    crowdRight: '✓ crowd was right',
+    crowdWrong: '✗ crowd was wrong',
+    homeArrow: '← Home',
+
+    // World Cup hub
+    groupsNavLabel: 'Groups',
+    groupsNavDesc: '12 groups · who goes through',
+    pickChampionLabel: 'Pick the Champion',
+    pickChampionDesc: '+15 bonus tickets if correct',
+    communityPicksLabel: 'Community Champion Picks',
+    communityPicksDesc: 'Who does the pub back?',
+    fifaWC2026: 'FIFA World Cup 2026',
+
+    // Groups page
+    wc2026: 'World Cup 2026',
+    groupsTitle: 'Groups',
+    allGroupsSub: 'All 12 groups · 48 teams',
+    groupDrawUnavailable: 'Group draw not available yet',
+    checkBackJune11: 'Check back closer to June 11',
+    groupLabel: 'Group',
+    advancesToR32: 'Advances to Round of 32',
+    fullStandingsTable: 'Full Standings Table',
+
+    // Standings page
+    checkBackAfterJune11: 'Check back after June 11',
+    standingsUnavailable: 'Standings not available yet',
+
+    // Results page
+    couldNotLoadResults: 'Could not load results. Check back soon.',
+    allFilter: 'All',
+
+    // Scorers page
+    goldenBootRace: '🥇 Golden Boot Race',
+    noGoalsYet: 'No goals scored yet',
+
+    // Bracket page
+    noMatchesRound: 'No matches found for this round.',
+    matchNumber: 'Match {n}',
+    thirdPlace: 'Third Place',
+
+    // Team page
+    playerProfilesUnavailable: 'Player profiles are temporarily unavailable — check back in a few hours as the tournament gets closer.',
+    squadNotAnnounced: 'Squad not yet announced',
+
+    // Top scorer pick
+    searchPlayerCountry: 'Search by player name or country…',
+    tournamentLeaders: 'Tournament Leaders',
+    goalsLower: 'goals',
+    topContenders: 'Top Contenders',
+    notInList: 'Not in the list?',
+    pickQuoted: 'Pick "{name}"',
+    teamCountryPlaceholder: 'Their country or club (e.g. France / Bayern Munich)',
+    selectPlayer: 'Select {name}',
+
+    // Winner pick
+    pickLocked: 'Pick locked in!',
+    yourChampionPick: 'Your champion pick',
+    correctBonus: '🎉 Correct! +15 bonus raffle tickets added!',
+    wrongKeepStacking: 'Tough luck — keep stacking match tickets!',
+    bonusIfTrophy: '+15 bonus tickets if they lift the trophy on July 19',
+    yourWCChampionPick: 'Your World Cup Champion Pick',
+    correctPlus15: '✓ Correct — +15 tickets!',
+    didntWin: "✗ Didn't win it",
+    seeCommunityPicks: '📊 See who the pub is backing',
+    bonusPickLabel: '🏆 Bonus Pick',
+    predictChampion: 'Predict the Champion',
+    whichTeamLifts: 'Which team lifts the trophy on July 19?',
+    correctPick15: 'Correct pick = +15 bonus raffle tickets.',
+    onceSubmitted: 'One pick per person — cannot be changed once submitted.',
+    seeCommunityPicksArrow: '📊 See community picks →',
+    searchTeams: 'Search teams…',
+    noTeamsFound: 'No teams found for "{search}"',
+    lockingIn: 'Locking in…',
+    backTeamToWin: '🏆 Back {name} to win it all',
+
+    // Winner picks community page
+    communityPicksTitle: 'Who Does the Pub Back?',
+    communityPicksSectionLabel: '🏆 Community Picks',
+    patronHas: 'patron has',
+    patronsHave: 'patrons have',
+    pickedChampion: 'picked their World Cup champion',
+    noChampionPicksYet: 'No picks yet',
+    beFirstChampion: 'Be the first to pick your World Cup champion!',
+    makeYourPickArrow: 'Make your pick →',
+    yourPickAnnotation: '← your pick',
+    backToWCHub: '← World Cup Hub',
+
+    // Entry Form
+    verifyAtPub: "Verify you're at the pub",
+    locationExplanation: "We check your GPS to confirm you're playing from The Peddler's Daughter. Your location is not stored or shared.",
+    allowLocationAccess: '📍 Allow Location Access',
+    browserWillAsk: 'Your browser will ask to share your location — tap',
+    allowWord: 'Allow',
+    enterCodeInstead: '🔑 Enter access code instead',
+    askBarStaffCode: "Ask bar staff for today's code",
+    tryLocationAgain: '📍 Try location again',
+    atPubTap: 'At the pub? Tap',
+    inBrowserSettings: 'on the location prompt, or enable Location for this site in your browser settings, then:',
+    notCloseEnough: "Not close enough to the pub? Ask bar staff for today's access code.",
+    enterFullName: 'Enter your full first and last name',
+    enter10DigitPhone: 'Enter a 10-digit US phone number',
+    predictScore: '🎯 Predict the score',
+    scoreOptional: 'Optional — +2 bonus raffle tickets if exact',
+    skipNoScore: 'Skip — no score prediction',
+    addScorePrediction: '🎯 Add score prediction (+2 bonus tickets)',
+    correctResultLabel: 'correct result',
+    exactScoreLabel: 'exact score',
+    pleaseEnterNamePhone: 'Please enter your name and phone number.',
+
+    // Footer
+    facebookHaverhill: 'Facebook · Haverhill',
+    facebookNashua: 'Facebook · Nashua',
+    feedbackLink: '🐛 Feedback',
+
     // Language
     language: 'Language',
     changeLanguage: 'Change language',
@@ -530,6 +704,180 @@ export const translations = {
     wrong: 'Incorrecto',
     yourPick: 'Tu pick',
     result: 'Resultado',
+
+    // Home - discovery strip & onboarding
+    leaderboardDesc: 'Clasificación de boletos',
+    worldCupHubDesc: 'Plantillas, tabla, cuadro',
+    goldenBootDesc: '+10 boletos extra',
+    newHereTitle: '✨ ¿Nuevo aquí? Cómo funciona',
+    onboardStep1: 'Predice victoria local, empate o visitante antes del pitido',
+    onboardStep2: 'Resultado correcto = 1 boleto · Marcador exacto = 3 boletos',
+    onboardStep3: 'Elige el ganador de la Bota de Oro = +10 boletos extra',
+    onboardStep4: '¡Más boletos = más chances en el sorteo del televisor el 19 de julio!',
+    gotIt: '¡Entendido!',
+    winnerPickCalloutLabel: 'Boletos Extra',
+    winnerPickCalloutTitle: 'Elige al Campeón del Mundial',
+    winnerPickCalloutDesc: 'Elección correcta = +15 boletos de rifa',
+    goldenBootCalloutTitle: 'Elige al Ganador de la Bota de Oro',
+    goldenBootCalloutDesc: 'Elección correcta = +10 boletos de rifa',
+    allMatches104: 'Los 104 Partidos',
+    allMatches104Desc: 'Fase de grupos hasta la Final',
+    goldenBootPlus10: 'Bota de Oro +10',
+    pickTopScorerShort: 'Elige al máximo goleador',
+    backToMatches: '← Volver a Partidos',
+    makePredictions: '⚽ Haz Tus Predicciones',
+    pickedBadge: '✓ Elegido',
+    pickArrow: 'Elegir →',
+    changeLocation: '📍 Cambiar Ubicación',
+    detectingPub: 'Detectando pub más cercano…',
+    pctHome: '% local',
+    pctDraw: '% empate',
+    pctAway: '% visitante',
+
+    // Leaderboard
+    leaderboardSub: 'Clasificación de boletos — más boletos = más chances, pero cualquiera puede ganar',
+    matchSingular: 'partido',
+    matchPlural: 'partidos',
+
+    // Schedule
+    filterPlaceholder: 'Filtrar por equipo, estadio o fase…',
+    matchesFound: '{count} {matches} encontrado(s)',
+    noMatchesFound: 'No se encontraron partidos para "{filter}"',
+    clearFilter: 'Borrar filtro',
+    venueTba: '📍 Estadio por confirmar',
+
+    // My Picks
+    searchByPhone: 'Buscar por teléfono →',
+    ifCorrect: 'si aciertas',
+    correctExclaim: '¡correcto!',
+    wrongLower: 'incorrecto',
+    usesSameNumber: 'Usa el mismo número cada vez para mantener tus predicciones juntas.',
+
+    // Overall Picks
+    overallPicksTitle: 'Picks Generales',
+    overallPicksSub: 'Cómo todos predicen los partidos del Mundial 2026.',
+    totalPicksSoFar: 'picks en total hasta ahora',
+    allMatches: 'Todos los partidos',
+    upcoming: 'Próximos',
+    completed: 'Completados',
+    noMatchesToShow: 'No hay partidos para mostrar.',
+    noPicksYet: 'Sin picks aún',
+    pctDrawLabel: '% Empate',
+    pickSingular: 'pick',
+    pickPlural: 'picks',
+    crowdRight: '✓ el público acertó',
+    crowdWrong: '✗ el público falló',
+    homeArrow: '← Inicio',
+
+    // World Cup hub
+    groupsNavLabel: 'Grupos',
+    groupsNavDesc: '12 grupos · quién avanza',
+    pickChampionLabel: 'Elige al Campeón',
+    pickChampionDesc: '+15 boletos extra si aciertas',
+    communityPicksLabel: 'Picks del Público',
+    communityPicksDesc: '¿A quién apoya el pub?',
+    fifaWC2026: 'FIFA Mundial 2026',
+
+    // Groups page
+    wc2026: 'Mundial 2026',
+    groupsTitle: 'Grupos',
+    allGroupsSub: 'Los 12 grupos · 48 equipos',
+    groupDrawUnavailable: 'El sorteo de grupos aún no está disponible',
+    checkBackJune11: 'Vuelve antes del 11 de junio',
+    groupLabel: 'Grupo',
+    advancesToR32: 'Avanza a Octavos de Final',
+    fullStandingsTable: 'Tabla de Posiciones Completa',
+
+    // Standings page
+    checkBackAfterJune11: 'Vuelve después del 11 de junio',
+    standingsUnavailable: 'La tabla no está disponible aún',
+
+    // Results page
+    couldNotLoadResults: 'No se pudieron cargar los resultados. Vuelve pronto.',
+    allFilter: 'Todos',
+
+    // Scorers page
+    goldenBootRace: '🥇 Carrera por la Bota de Oro',
+    noGoalsYet: 'Aún no se han marcado goles',
+
+    // Bracket page
+    noMatchesRound: 'No se encontraron partidos para esta ronda.',
+    matchNumber: 'Partido {n}',
+    thirdPlace: 'Tercer Lugar',
+
+    // Team page
+    playerProfilesUnavailable: 'Los perfiles de jugadores no están disponibles temporalmente — vuelve en unas horas a medida que se acerca el torneo.',
+    squadNotAnnounced: 'Plantilla aún no anunciada',
+
+    // Top scorer pick
+    searchPlayerCountry: 'Buscar por nombre de jugador o país…',
+    tournamentLeaders: 'Líderes del Torneo',
+    goalsLower: 'goles',
+    topContenders: 'Principales Candidatos',
+    notInList: '¿No está en la lista?',
+    pickQuoted: 'Elegir "{name}"',
+    teamCountryPlaceholder: 'Su país o club (ej. France / Bayern Munich)',
+    selectPlayer: 'Seleccionar {name}',
+
+    // Winner pick
+    pickLocked: '¡Elección confirmada!',
+    yourChampionPick: 'Tu elección de campeón',
+    correctBonus: '🎉 ¡Correcto! +15 boletos de rifa extra añadidos!',
+    wrongKeepStacking: '¡Mala suerte — sigue acumulando boletos de partido!',
+    bonusIfTrophy: '+15 boletos extra si levantan el trofeo el 19 de julio',
+    yourWCChampionPick: 'Tu Elección de Campeón del Mundial',
+    correctPlus15: '✓ ¡Correcto — +15 boletos!',
+    didntWin: '✗ No lo logró',
+    seeCommunityPicks: '📊 Ver a quién apoya el pub',
+    bonusPickLabel: '🏆 Pick Extra',
+    predictChampion: 'Predice al Campeón',
+    whichTeamLifts: '¿Qué equipo levanta el trofeo el 19 de julio?',
+    correctPick15: 'Elección correcta = +15 boletos de rifa extra.',
+    onceSubmitted: 'Un pick por persona — no se puede cambiar una vez enviado.',
+    seeCommunityPicksArrow: '📊 Ver picks del público →',
+    searchTeams: 'Buscar equipos…',
+    noTeamsFound: 'No se encontraron equipos para "{search}"',
+    lockingIn: 'Confirmando…',
+    backTeamToWin: '🏆 Apostar por {name} para ganar todo',
+
+    // Winner picks community page
+    communityPicksTitle: '¿A Quién Apoya el Pub?',
+    communityPicksSectionLabel: '🏆 Picks del Público',
+    patronHas: 'participante ha',
+    patronsHave: 'participantes han',
+    pickedChampion: 'elegido su campeón del Mundial',
+    noChampionPicksYet: 'Sin picks aún',
+    beFirstChampion: '¡Sé el primero en elegir tu campeón del Mundial!',
+    makeYourPickArrow: 'Haz tu elección →',
+    yourPickAnnotation: '← tu elección',
+    backToWCHub: '← Centro del Mundial',
+
+    // Entry Form
+    verifyAtPub: 'Verifica que estás en el pub',
+    locationExplanation: "Verificamos tu GPS para confirmar que juegas desde The Peddler's Daughter. Tu ubicación no se almacena ni comparte.",
+    allowLocationAccess: '📍 Permitir Acceso de Ubicación',
+    browserWillAsk: 'Tu navegador pedirá compartir tu ubicación — toca',
+    allowWord: 'Permitir',
+    enterCodeInstead: '🔑 Ingresar código de acceso',
+    askBarStaffCode: 'Pide el código de hoy en la barra',
+    tryLocationAgain: '📍 Intentar ubicación de nuevo',
+    atPubTap: '¿En el pub? Toca',
+    inBrowserSettings: 'en el aviso de ubicación, o activa la Ubicación para este sitio en la configuración del navegador, luego:',
+    notCloseEnough: '¿No estás lo suficientemente cerca? Pide el código de acceso en la barra.',
+    enterFullName: 'Ingresa tu nombre y apellido completos',
+    enter10DigitPhone: 'Ingresa un número de teléfono de EE.UU. de 10 dígitos',
+    predictScore: '🎯 Predice el marcador',
+    scoreOptional: 'Opcional — +2 boletos de rifa extra si aciertas',
+    skipNoScore: 'Omitir — sin predicción de marcador',
+    addScorePrediction: '🎯 Agregar predicción de marcador (+2 boletos extra)',
+    correctResultLabel: 'resultado correcto',
+    exactScoreLabel: 'marcador exacto',
+    pleaseEnterNamePhone: 'Por favor ingresa tu nombre y número de teléfono.',
+
+    // Footer
+    facebookHaverhill: 'Facebook · Haverhill',
+    facebookNashua: 'Facebook · Nashua',
+    feedbackLink: '🐛 Comentarios',
 
     // Language
     language: 'Idioma',

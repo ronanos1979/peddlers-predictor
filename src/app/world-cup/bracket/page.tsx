@@ -77,7 +77,7 @@ export default function BracketPage() {
     <div className="container">
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>
-          World Cup 2026
+          {t.wc2026}
         </div>
         <h1>{t.bracketTitle}</h1>
         <p className="muted">{t.bracketSub}</p>
@@ -112,7 +112,7 @@ export default function BracketPage() {
 
       {!loading && staged.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
-          <p className="muted">No matches found for this round.</p>
+          <p className="muted">{t.noMatchesRound}</p>
         </div>
       )}
 
@@ -142,7 +142,7 @@ export default function BracketPage() {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               }}>
                 <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                  Match {i + 1}
+                  {t.matchNumber.replace('{n}', String(i + 1))}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>
                   {fmtDate(m.kickoff_at)}

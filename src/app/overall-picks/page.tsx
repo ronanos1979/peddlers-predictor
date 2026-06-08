@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, type Match } from '@/lib/supabase'
+import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 import Flag from '@/components/Flag'
 
@@ -15,15 +16,16 @@ function fmtKickoff(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 }
 
-function PickBar({ tally, result, homeTeam, awayTeam }: {
+function PickBar({ tally, result, homeTeam, awayTeam, t }: {
   tally: PickTally | undefined
   result: string | null
   homeTeam: string
   awayTeam: string
+  t: ReturnType<typeof useLocale>['t']
 }) {
   const total = tally ? tally.home + tally.draw + tally.away : 0
   if (total === 0) {
-    return <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>No picks yet</div>
+    return <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>{t.noPicksYet}</div>
   }
 
   const hp = Math.round(tally!.home / total * 100)
@@ -42,20 +44,21 @@ function PickBar({ tally, result, homeTeam, awayTeam }: {
           {hp}% {homeTeam}
         </span>
         <span style={{ color: result === 'draw' ? 'var(--gold)' : 'var(--text-muted)', fontWeight: result === 'draw' ? 700 : 400 }}>
-          {dp}% Draw
+          {dp}{t.pctDrawLabel}
         </span>
         <span style={{ color: result === 'away' ? 'var(--amber)' : 'var(--text-muted)', fontWeight: result === 'away' ? 700 : 400 }}>
           {ap}% {awayTeam}
         </span>
       </div>
       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3, textAlign: 'right' }}>
-        {total} {total === 1 ? 'pick' : 'picks'}
+        {total} {total === 1 ? t.pickSingular : t.pickPlural}
       </div>
     </div>
   )
 }
 
 export default function OverallPicksPage() {
+  const { t } = useLocale()
   const [matches, setMatches] = useState<Match[]>([])
   const [stats, setStats] = useState<StatsMap>({})
   const [loading, setLoading] = useState(true)
@@ -107,11 +110,11 @@ export default function OverallPicksPage() {
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
           📊 Community
         </div>
-        <h1>Overall Picks</h1>
-        <p className="muted">How everyone is predicting every World Cup 2026 match.</p>
+        <h1>{t.overallPicksTitle}</h1>
+        <p className="muted">{t.overallPicksSub}</p>
         {totalPicks > 0 && (
           <div style={{ display: 'inline-block', marginTop: 8, background: 'rgba(0,200,122,0.08)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 20, padding: '4px 14px', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>
-            {totalPicks.toLocaleString()} total picks so far
+            {totalPicks.toLocaleString()} {t.totalPicksSoFar}
           </div>
         )}
       </div>
@@ -136,18 +139,18 @@ export default function OverallPicksPage() {
               cursor: 'pointer',
             }}
           >
-            {f === 'all' ? 'All matches' : f === 'upcoming' ? 'Upcoming' : 'Completed'}
+            {f === 'all' ? t.allMatches : f === 'upcoming' ? t.upcoming : t.completed}
           </button>
         ))}
       </div>
 
       {loading && (
-        <p className="muted" style={{ textAlign: 'center', padding: 40 }}>Loading…</p>
+        <p className="muted" style={{ textAlign: 'center', padding: 40 }}>{t.loading}</p>
       )}
 
       {!loading && days.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
-          <p className="muted">No matches to show.</p>
+          <p className="muted">{t.noMatchesToShow}</p>
         </div>
       )}
 
@@ -156,7 +159,7 @@ export default function OverallPicksPage() {
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
             {label}
             {new Date(dayMatches[0].kickoff_at).toDateString() === now.toDateString() && (
-              <span className="badge badge-live" style={{ marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>TODAY</span>
+              <span className="badge badge-live" style={{ marginLeft: 8, fontSize: 9, padding: '2px 8px' }}>{t.today}</span>
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -192,11 +195,11 @@ export default function OverallPicksPage() {
                           display: 'block',
                           marginBottom: 2,
                         }}>
-                          {m.result === 'home' ? `${m.home_team} won` : m.result === 'away' ? `${m.away_team} won` : 'Draw'}
+                          {m.result === 'home' ? `${m.home_team} ${t.won}` : m.result === 'away' ? `${m.away_team} ${t.won}` : t.draw}
                         </span>
                         {total > 0 && (
                           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: majorityCorrect ? 'var(--green)' : 'var(--text-muted)' }}>
-                            {majorityCorrect ? '✓ crowd was right' : '✗ crowd was wrong'}
+                            {majorityCorrect ? t.crowdRight : t.crowdWrong}
                           </span>
                         )}
                       </div>
@@ -209,7 +212,7 @@ export default function OverallPicksPage() {
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)' }}>
                     {m.stage}
                   </div>
-                  <PickBar tally={tally} result={m.result} homeTeam={m.home_team} awayTeam={m.away_team} />
+                  <PickBar tally={tally} result={m.result} homeTeam={m.home_team} awayTeam={m.away_team} t={t} />
                 </div>
               )
             })}
@@ -218,7 +221,7 @@ export default function OverallPicksPage() {
       ))}
 
       <Link href="/" className="btn btn-secondary" style={{ textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: 12 }}>
-        ← Home
+        {t.homeArrow}
       </Link>
     </div>
   )

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type TeamRow = {
@@ -11,6 +12,7 @@ type TeamRow = {
 }
 
 export default function GroupsPage() {
+  const { t } = useLocale()
   const [groups, setGroups] = useState<TeamRow[][]>([])
   const [loading, setLoading] = useState(true)
 
@@ -33,24 +35,24 @@ export default function GroupsPage() {
     <div className="container">
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>
-          World Cup 2026
+          {t.wc2026}
         </div>
-        <h1>Groups</h1>
-        <p className="muted">All 12 groups · 48 teams</p>
+        <h1>{t.groupsTitle}</h1>
+        <p className="muted">{t.allGroupsSub}</p>
       </div>
 
       {loading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>
-          Loading…
+          {t.loading}
         </div>
       )}
 
       {!loading && groups.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
           <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Group draw not available yet
+            {t.groupDrawUnavailable}
           </p>
-          <p className="muted" style={{ marginTop: 6 }}>Check back closer to June 11</p>
+          <p className="muted" style={{ marginTop: 6 }}>{t.checkBackJune11}</p>
         </div>
       )}
 
@@ -74,7 +76,7 @@ export default function GroupsPage() {
                 {groupLabels[gi]}
               </span>
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Group
+                {t.groupLabel}
               </span>
             </div>
 
@@ -131,7 +133,7 @@ export default function GroupsPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} />
             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Advances to Round of 32
+              {t.advancesToR32}
             </span>
           </div>
         </div>
@@ -139,10 +141,10 @@ export default function GroupsPage() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
         <Link href="/world-cup/standings" className="btn btn-secondary" style={{ textDecoration: 'none', textAlign: 'center' }}>
-          📊 Full Standings Table
+          📊 {t.fullStandingsTable}
         </Link>
         <Link href="/" className="btn btn-secondary" style={{ textDecoration: 'none', textAlign: 'center' }}>
-          ← Home
+          {t.homeArrow}
         </Link>
       </div>
     </div>

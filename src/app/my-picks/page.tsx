@@ -118,7 +118,7 @@ function MyPicksContent() {
             onClick={() => { setFromCookie(false); setSearched(false); setEntries([]); setStats(null); setScorerPick(null); setWinnerPick(null); setPhone('') }}
             style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 0' }}
           >
-            {t.notYou} Search by phone →
+            {t.notYou} {t.searchByPhone}
           </button>
         </div>
       ) : (
@@ -171,7 +171,7 @@ function MyPicksContent() {
               <div style={{ fontSize: 32, flexShrink: 0 }}>🥇</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 3 }}>
-                  Golden Boot Pick
+                  {t.yourTopScorerPick}
                 </div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: 'var(--gold)', lineHeight: 1.1 }}>
                   {scorerPick.player_name}
@@ -182,7 +182,7 @@ function MyPicksContent() {
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)' }}>+10</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>if correct</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
               </div>
             </div>
           )}
@@ -198,7 +198,7 @@ function MyPicksContent() {
               <div style={{ fontSize: 32, flexShrink: 0 }}>🏆</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 3 }}>
-                  World Cup Champion Pick
+                  {t.yourWCChampionPick}
                 </div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: winnerPick.is_correct === true ? 'var(--green)' : winnerPick.is_correct === false ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.1, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Flag emoji={winnerPick.team_flag} size={22} />
@@ -209,17 +209,17 @@ function MyPicksContent() {
                 {winnerPick.is_correct === true ? (
                   <>
                     <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>+15 ✓</div>
-                    <div style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)' }}>correct!</div>
+                    <div style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)' }}>{t.correctExclaim}</div>
                   </>
                 ) : winnerPick.is_correct === false ? (
                   <>
                     <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)' }}>+0</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>wrong</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.wrongLower}</div>
                   </>
                 ) : (
                   <>
                     <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>+15</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>if correct</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
                   </>
                 )}
               </div>

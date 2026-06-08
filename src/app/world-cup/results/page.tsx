@@ -30,7 +30,7 @@ export default function ResultsPage() {
         const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
         setStages(uniqueStages)
       } catch {
-        setError('Could not load results. Check back soon.')
+        setError(t.couldNotLoadResults)
       }
       setLoading(false)
     }
@@ -46,7 +46,7 @@ export default function ResultsPage() {
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>World Cup 2026</div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>{t.wc2026}</div>
         <h1>{t.matchResults}</h1>
         <p className="muted">{t.resultsSub}</p>
       </div>
@@ -68,7 +68,7 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>Loading…</div>}
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.loading}</div>}
       {error && <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{error}</div>}
 
       {!loading && filtered.length === 0 && (

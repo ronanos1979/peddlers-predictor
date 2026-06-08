@@ -29,19 +29,19 @@ export default function ScorersPage() {
     <div className="container">
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
-          🥇 Golden Boot Race
+          {t.goldenBootRace}
         </div>
         <h1>{t.topScorers}</h1>
         <p className="muted">{t.scorersSub}</p>
       </div>
 
-      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>Loading…</div>}
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.loading}</div>}
 
       {!loading && scorers.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
           <div style={{ fontSize: 36, marginBottom: 10 }}>🥇</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>No goals scored yet</p>
-          <p className="muted" style={{ marginTop: 6 }}>Check back after June 11</p>
+          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{t.noGoalsYet}</p>
+          <p className="muted" style={{ marginTop: 6 }}>{t.noResultsSub}</p>
         </div>
       )}
 

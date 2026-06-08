@@ -54,7 +54,7 @@ export default function StandingsPage() {
   return (
     <div className="container">
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>World Cup 2026</div>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>{t.wc2026}</div>
         <h1>{t.groupStandings}</h1>
         <p className="muted">{t.standingsSub}</p>
       </div>
@@ -70,18 +70,18 @@ export default function StandingsPage() {
               fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11,
               letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
             }}>
-              {g === 'all' ? 'All' : g.replace('Group ', '')}
+              {g === 'all' ? t.allFilter : g.replace('Group ', '')}
             </button>
           ))}
         </div>
       )}
 
-      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>Loading…</div>}
+      {loading && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.loading}</div>}
 
       {!loading && groups.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Standings not available yet</p>
-          <p className="muted" style={{ marginTop: 6 }}>Check back after June 11</p>
+          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{t.standingsUnavailable}</p>
+          <p className="muted" style={{ marginTop: 6 }}>{t.checkBackAfterJune11}</p>
         </div>
       )}
 

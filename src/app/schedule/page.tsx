@@ -98,7 +98,7 @@ function ScheduleContent() {
         <input
           value={filter}
           onChange={e => setFilter(e.target.value)}
-          placeholder="Filter by team, venue, or stage…"
+          placeholder={t.filterPlaceholder}
           style={{
             width: '100%', boxSizing: 'border-box',
             background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -118,7 +118,7 @@ function ScheduleContent() {
       {/* Result count when filtering */}
       {norm && !loading && (
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: filtered.length ? 'var(--green)' : 'var(--text-muted)', marginBottom: 16 }}>
-          {filtered.length} {filtered.length === 1 ? 'match' : 'matches'} found
+          {t.matchesFound.replace('{count}', String(filtered.length)).replace('{matches}', filtered.length === 1 ? t.matchSingular : t.matchPlural)}
         </div>
       )}
 
@@ -126,9 +126,9 @@ function ScheduleContent() {
 
       {!loading && filtered.length === 0 && norm && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
-          <p className="muted">No matches found for &ldquo;{filter}&rdquo;</p>
+          <p className="muted">{t.noMatchesFound.replace('{filter}', filter)}</p>
           <button onClick={() => setFilter('')} className="btn btn-secondary" style={{ marginTop: 12, display: 'inline-block' }}>
-            Clear filter
+            {t.clearFilter}
           </button>
         </div>
       )}
@@ -189,7 +189,7 @@ function ScheduleContent() {
                 </div>
               ) : (
                 <div style={{ marginTop: 8, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--border)', letterSpacing: 0.5 }}>
-                  📍 Venue TBA
+                  {t.venueTba}
                 </div>
               )}
             </div>

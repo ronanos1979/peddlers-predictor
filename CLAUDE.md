@@ -264,7 +264,18 @@ Fully automatic based on datetime — no admin needed:
 - Stored in `peddlers_lang` cookie (1 year)
 - `useLocale()` hook returns `{ locale, setLocale, t }` where `t` is the translations object
 - LangSwitcher component in header on every page
-- All user-facing strings should use `t.keyName` from i18n.ts
+- **Every user-facing string must use `t.keyName` from i18n.ts — no exceptions**
+- This is a standing requirement: any UI change, new page, new component, new button, label, heading, error message, or placeholder must have translation keys added to BOTH `en` and `es` in `src/lib/i18n.ts` before shipping
+- Add new keys to the bottom of each section, with a comment grouping them logically
+- Never hard-code English (or any language) directly in JSX — always go through `t.`
+- **Excluded from i18n**: admin panel (`src/app/admin/`), team/player/country names from APIs, date/time format strings passed to `Intl` functions, stage names that come verbatim from the database
+
+#### i18n checklist for every UI change
+1. Identify every new string shown to patrons
+2. Add a key to `en` in `i18n.ts`
+3. Add the Spanish translation to `es` in `i18n.ts`
+4. Use `{t.keyName}` in JSX
+5. For dynamic strings: `t.someKey.replace('{placeholder}', value)`
 
 ---
 
