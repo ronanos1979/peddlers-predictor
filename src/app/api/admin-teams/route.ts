@@ -271,42 +271,11 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
     }
   }
 
-  const numbersFromFd = fdData.squad.filter(p => p.number != null && p.number > 0).length
-  let numbersFromAf   = 0
-
-  // FD free tier often omits shirtNumber entirely — fall back to AF automatically.
-  // Cost: ~3 AF calls (WC list + squads). Only runs when FD returns no numbers.
-  if (numbersFromFd === 0 && AF_KEY && fdData.squad.length > 0) {
-    try {
-      const afTeamId = await resolveAfTeamId(scheduleName)
-      if (afTeamId) {
-        const squadData = await afFetch('players/squads', { team: String(afTeamId) })
-        const afPlayers = (squadData.response?.[0]?.players || []) as AfPlayerBasic[]
-        if (afPlayers.length > 0) {
-          const matched = matchAfSquad(fdData.squad, afPlayers)
-          const now = new Date().toISOString()
-          const matchedEntries = Array.from(matched.entries())
-          for (const [fdId, af] of matchedEntries) {
-            if (af.number && af.number > 0) {
-              await supabaseAdmin
-                .from('player_cache')
-                .update({ number: af.number, cached_at: now })
-                .eq('fd_id', fdId)
-              numbersFromAf++
-            }
-          }
-        }
-      }
-    } catch { /* AF fallback is best-effort — don't fail the whole load */ }
-  }
-
   return NextResponse.json({
-    success:         true,
-    fd_id:           fdId,
-    player_count:    fdData.squad.length,
-    numbers_from_fd: numbersFromFd,
-    numbers_from_af: numbersFromAf,
-    coach:           fdData.coach?.name || null,
+    success:      true,
+    fd_id:        fdId,
+    player_count: fdData.squad.length,
+    coach:        fdData.coach?.name || null,
   })
 }
 
@@ -330,13 +299,14 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
   }
 
   let photosAdded   = 0
+  let numbersAdded  = 0
   let afRateLimited = false
   let afTeamFound: string | null = null
   let afPlayersFound = 0
   let photoError: string | null = null
 
-  // Delta: process players with missing photos even if previously marked photo_enriched
-  const needsPhotos = doPhotos && (force || players.some(p => !p.photo_enriched || !p.photo))
+  // Delta: process players with missing photos OR missing shirt numbers
+  const needsPhotos = doPhotos && (force || players.some(p => !p.photo_enriched || !p.photo || p.number == null))
 
   // Check if coach photo needs fetching
   const { data: teamRow } = await supabaseAdmin
@@ -381,6 +351,7 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
                 ? (af?.photo || player.photo || '')
                 : (af?.photo && !player.photo ? af.photo : player.photo || '')
               if (newPhoto && !player.photo) photosAdded++
+              if (af?.number && af.number > 0 && !player.number) numbersAdded++
               return {
                 fd_id:          player.fd_id,
                 team_name:      scheduleName,
@@ -498,6 +469,7 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
   return NextResponse.json({
     success:           true,
     photos_added:      photosAdded,
+    numbers_added:     numbersAdded,
     clubs_added:       clubsAdded,
     rate_limited:      afRateLimited,
     af_team_found:     afTeamFound,

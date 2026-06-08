@@ -313,10 +313,7 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (data.success) {
-        const numMsg = data.numbers_from_fd > 0
-          ? `${data.numbers_from_fd}/${data.player_count} shirt numbers`
-          : `⚠️ no shirt numbers in FD yet — run Delta photos to get numbers from AF`
-        flash(`✅ ${teamName}: ${data.player_count} players · ${numMsg}`, data.numbers_from_fd > 0 ? 'success' : 'error')
+        flash(`✅ ${teamName}: ${data.player_count} players loaded from FD`, 'success')
         loadTeams()
       } else {
         flash(`❌ ${teamName}: ${data.error}`, 'error')
@@ -348,12 +345,23 @@ export default function AdminPage() {
           } : t))
         }
         if (data.rate_limited) {
-          flash(`⚠️ ${teamName}: rate limited — ${data.photos_added} photos, ${data.clubs_added} clubs saved`, 'error')
+          const saved = [
+            data.numbers_added > 0 ? `${data.numbers_added} shirt numbers` : '',
+            data.photos_added  > 0 ? `${data.photos_added} photos`         : '',
+            data.clubs_added   > 0 ? `${data.clubs_added} clubs`           : '',
+          ].filter(Boolean).join(', ') || 'nothing'
+          flash(`⚠️ ${teamName}: AF rate limited — ${saved} saved before limit`, 'error')
         } else if (data.photo_error) {
           flash(`⚠️ ${teamName}: ${data.photo_error}`, 'error')
         } else {
           const verb = action === 'force_enrich_af' ? 'reloaded' : 'loaded'
-          flash(`✅ ${teamName}: ${data.photos_added} photos, ${data.clubs_added} clubs ${verb}`, 'success')
+          const parts = [
+            data.numbers_added > 0 ? `${data.numbers_added} shirt numbers` : '',
+            data.photos_added  > 0 ? `${data.photos_added} photos`         : '',
+            data.clubs_added   > 0 ? `${data.clubs_added} clubs`           : '',
+          ].filter(Boolean)
+          const summary = parts.length > 0 ? parts.join(', ') + ` ${verb}` : 'already up to date'
+          flash(`✅ ${teamName}: ${summary}`, 'success')
         }
       } else {
         flash(`❌ ${teamName}: ${data.error}`, 'error')
@@ -388,8 +396,8 @@ export default function AdminPage() {
   }
 
   async function loadAllShirts() {
-    // Only teams that have players loaded but are missing some shirt numbers
-    const missing = teams.filter(t => t.fd_loaded && t.player_count > 0 && t.number_count < t.player_count)
+    // Teams with FD loaded but missing shirt numbers or photos — use AF enrichment
+    const missing = teams.filter(t => t.fd_loaded && t.player_count > 0 && (t.number_count < t.player_count || t.photo_count < t.player_count))
     if (!missing.length) return
     setLoadAllShirtsRunning(true)
     for (let i = 0; i < missing.length; i++) {
@@ -398,13 +406,18 @@ export default function AdminPage() {
       try {
         const res = await fetch('/api/admin-teams', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password, action: 'load_fd', team_name: team.name }),
+          body: JSON.stringify({ password, action: 'enrich_af', team_name: team.name, steps: 'photos' }),
         })
         const data = await res.json()
         if (data.success) {
           setTeams(prev => prev.map(t => t.name === team.name
-            ? { ...t, player_count: data.player_count, coach_name: data.coach }
+            ? { ...t, number_count: t.number_count + (data.numbers_added || 0), photo_count: t.photo_count + (data.photos_added || 0) }
             : t))
+          // Stop bulk run if AF rate limit hit
+          if (data.rate_limited) {
+            flash(`⚠️ AF rate limited at team ${i + 1}/${missing.length} — resume tomorrow`, 'error')
+            break
+          }
         }
       } catch { /* continue on network error */ }
       if (i < missing.length - 1) await new Promise(r => setTimeout(r, 7000))
@@ -1198,8 +1211,8 @@ export default function AdminPage() {
                       {teams.reduce((s, t) => s + t.club_count, 0)} clubs
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      FD: 10 req/min — ~2 calls per team. Load all takes ~10 min.
-                      AF: 100 req/day — ~28 calls per team. "Load photos & clubs" loads player photos AND club names in one go.
+                      FD: 10 req/min — ~2 calls per team (names, ages, positions only — no numbers/photos).
+                      AF: 100 req/day — "Delta shirts + photos" costs ~4 calls per team (shirt numbers + photos in one squad fetch). Clubs cost ~2 calls per player.
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1215,12 +1228,12 @@ export default function AdminPage() {
                     </button>
                     <button className="btn btn-secondary"
                       style={{ width: 'auto', padding: '7px 12px', fontSize: 12 }}
-                      disabled={loadAllFdRunning || loadAllShirtsRunning || !!teamAction || teams.every(t => t.number_count >= t.player_count && t.player_count > 0)}
+                      disabled={loadAllFdRunning || loadAllShirtsRunning || !!teamAction || teams.every(t => t.number_count >= t.player_count && t.photo_count >= t.player_count && t.player_count > 0)}
                       onClick={loadAllShirts}
-                      title="Reload FD squad for all teams with missing shirt numbers. Won't overwrite numbers already set.">
+                      title="Fill missing shirt numbers and photos from API-Football for all teams. Won't overwrite complete data.">
                       {loadAllShirtsRunning
-                        ? `Reloading shirts ${loadAllShirtsProgress}…`
-                        : `Reload all shirts (${teams.filter(t => t.fd_loaded && t.player_count > 0 && t.number_count < t.player_count).length} teams missing)`}
+                        ? `Loading shirts + photos ${loadAllShirtsProgress}…`
+                        : `Load all shirts + photos (${teams.filter(t => t.fd_loaded && t.player_count > 0 && (t.number_count < t.player_count || t.photo_count < t.player_count)).length} teams incomplete)`}
                     </button>
                     <button className="btn btn-primary"
                       style={{ width: 'auto', padding: '7px 12px', fontSize: 12 }}
@@ -1298,31 +1311,24 @@ export default function AdminPage() {
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
-                          disabled={isAnyBusy || (team.number_count === team.player_count && team.player_count > 0)}
-                          onClick={() => loadTeamFd(team.name)}
-                          title="Reload shirt numbers only for players missing them (skips if all have numbers)">
-                          {isFdLoading ? '…' : 'Delta shirts'}
-                        </button>
-                        <button className="btn btn-secondary"
-                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy}
                           onClick={() => loadTeamFd(team.name)}
-                          title="Force reload full squad + shirt numbers from football-data.org">
-                          {isFdLoading ? '…' : 'Reload shirts'}
+                          title="Load squad structure (names, ages, positions) from football-data.org">
+                          {isFdLoading ? '…' : 'Load FD'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
-                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
+                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0 || (team.number_count === team.player_count && team.photo_count === team.player_count)}
                           onClick={() => loadTeamAf(team.name, 'enrich_af', 'photos')}
-                          title="Fetch photos only for players currently missing them">
-                          {isPhotosLoading ? '…' : 'Delta photos'}
+                          title="Fill missing shirt numbers and photos from API-Football (skips players already complete)">
+                          {isPhotosLoading ? '…' : 'Delta shirts + photos'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
                           onClick={() => loadTeamAf(team.name, 'force_enrich_af', 'photos')}
-                          title="Force re-fetch all player photos from API-Football">
-                          {isForcePhotosLoading ? '…' : 'Reload photos'}
+                          title="Force re-fetch all shirt numbers and photos from API-Football">
+                          {isForcePhotosLoading ? '…' : 'Reload shirts + photos'}
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
