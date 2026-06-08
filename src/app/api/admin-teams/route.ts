@@ -104,8 +104,9 @@ export async function POST(req: NextRequest) {
   if (!auth(body.password || null)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!body.team_name) return NextResponse.json({ error: 'team_name required' }, { status: 400 })
 
-  if (body.action === 'load_fd')    return handleLoadFd(body.team_name)
-  if (body.action === 'enrich_af') return handleEnrichAf(body.team_name)
+  if (body.action === 'load_fd')          return handleLoadFd(body.team_name)
+  if (body.action === 'enrich_af')        return handleEnrichAf(body.team_name)
+  if (body.action === 'force_enrich_af')  return handleEnrichAf(body.team_name, true)
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
 
@@ -182,8 +183,9 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
 }
 
 // ── enrich_af: add photos + clubs from API-Football, respects 100/day limit ──
+// force=true: re-fetch and overwrite all players even if already enriched
 
-async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
+async function handleEnrichAf(scheduleName: string, force = false): Promise<NextResponse> {
   if (!AF_KEY) return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
 
   const { data: players, error } = await supabaseAdmin
@@ -196,22 +198,31 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
     return NextResponse.json({ error: 'No players found — load FD data first' }, { status: 404 })
   }
 
-  let photosAdded  = 0
+  let photosAdded   = 0
   let afRateLimited = false
   let afTeamFound: string | null = null
   let afPlayersFound = 0
   let photoError: string | null = null
 
-  // ── Step 1: Photo enrichment — 2 AF calls total ────────────────────────────
-  const needsPhotos = players.some(p => !p.photo_enriched)
-  if (needsPhotos) {
+  // Delta: process players with missing photos even if previously marked photo_enriched
+  const needsPhotos = force || players.some(p => !p.photo_enriched || !p.photo)
+
+  // Check if coach photo needs fetching
+  const { data: teamRow } = await supabaseAdmin
+    .from('team_cache')
+    .select('data')
+    .ilike('team_name', scheduleName)
+    .single()
+  const needsCoachPhoto = force || !!(teamRow?.data?.coach && !(teamRow.data.coach as Record<string, unknown>).photo)
+
+  // ── Step 1: Photo enrichment ───────────────────────────────────────────────
+  if (needsPhotos || needsCoachPhoto) {
     try {
       const norm    = scheduleName.toLowerCase().trim()
       const aliased = NAME_ALIASES[norm] || norm
 
       // Try WC 2026 first (most accurate for current tournament squads + photos).
       // Fall back to WC 2022 if 2026 data is unavailable on the current API plan.
-      // Team IDs are stable across tournaments so either season works for squad lookups.
       let wcTeams: Array<{ team: { id: number; name: string } }> = []
       try {
         const wcData2026 = await afFetch('teams', { league: '1', season: '2026' })
@@ -247,73 +258,105 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
         photoError = `No AF team found for "${scheduleName}" (tried WC list + search for "${aliased}")`
       } else {
         afTeamFound = afTeam.team.name
-        const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
-        const afPlayers = (squadData.response?.[0]?.players || []) as Array<{
-          id: number; name: string; photo: string
-          age?: number; number?: number; position?: string
-        }>
-        afPlayersFound = afPlayers.length
 
-        if (afPlayers.length === 0) {
-          photoError = `AF returned 0 players for ${afTeam.team.name} (id ${afTeam.team.id})`
-        } else {
-          // Build three lookup maps for progressive name matching:
-          // FD and AF use different name formats, so exact match alone misses many players.
-          type AfPlayer = { id: number; photo: string; name: string; age?: number; number?: number; position?: string }
-          const normStr = (s: string) => s.toLowerCase()
-            .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
-            .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+        // ── 1a: Player photos ────────────────────────────────────────────────
+        if (needsPhotos) {
+          const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
+          const afPlayers = (squadData.response?.[0]?.players || []) as Array<{
+            id: number; name: string; photo: string
+            age?: number; number?: number; position?: string
+          }>
+          afPlayersFound = afPlayers.length
 
-          const afByExact = new Map<string, AfPlayer>()
-          const afByNorm  = new Map<string, AfPlayer>()
-          const afByLast  = new Map<string, AfPlayer[]>()
+          if (afPlayers.length === 0) {
+            photoError = `AF returned 0 players for ${afTeam.team.name} (id ${afTeam.team.id})`
+          } else {
+            // Build lookup maps for progressive name matching.
+            // FD and AF use different name formats so exact match alone misses many players.
+            type AfPlayer = { id: number; photo: string; name: string; age?: number; number?: number; position?: string }
+            const normStr = (s: string) => s.toLowerCase()
+              .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
+              .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
 
-          afPlayers.forEach(p => {
-            if (!p.name) return
-            const val: AfPlayer = { id: p.id, photo: p.photo || '', name: p.name, age: p.age, number: p.number, position: p.position }
-            const norm = normStr(p.name)
-            const last = norm.split(' ').pop()!
-            afByExact.set(p.name.toLowerCase(), val)
-            afByNorm.set(norm, val)
-            if (!afByLast.has(last)) afByLast.set(last, [])
-            afByLast.get(last)!.push(val)
-          })
+            const afByExact = new Map<string, AfPlayer>()
+            const afByNorm  = new Map<string, AfPlayer>()
+            const afByLast  = new Map<string, AfPlayer[]>()
 
-          const now = new Date().toISOString()
-          const upserts = players.map(player => {
-            const fdNorm = normStr(player.name)
-            const fdLast = fdNorm.split(' ').pop()!
-            // 1. Exact lowercase match
-            let af: AfPlayer | undefined = afByExact.get(player.name.toLowerCase())
-            // 2. Accent/punctuation-normalised match
-            if (!af) af = afByNorm.get(fdNorm)
-            // 3. Unique last-name match (handles "Timothy" vs "Tim" etc.)
-            if (!af) {
-              const lastMatches = afByLast.get(fdLast) || []
-              if (lastMatches.length === 1) af = lastMatches[0]
+            afPlayers.forEach(p => {
+              if (!p.name) return
+              const val: AfPlayer = { id: p.id, photo: p.photo || '', name: p.name, age: p.age, number: p.number, position: p.position }
+              const n = normStr(p.name)
+              const last = n.split(' ').pop()!
+              afByExact.set(p.name.toLowerCase(), val)
+              afByNorm.set(n, val)
+              if (!afByLast.has(last)) afByLast.set(last, [])
+              afByLast.get(last)!.push(val)
+            })
+
+            const now = new Date().toISOString()
+            const upserts = players.map(player => {
+              const fdNorm = normStr(player.name)
+              const fdLast = fdNorm.split(' ').pop()!
+              // 1. Exact lowercase match
+              let af: AfPlayer | undefined = afByExact.get(player.name.toLowerCase())
+              // 2. Accent/punctuation-normalised match
+              if (!af) af = afByNorm.get(fdNorm)
+              // 3. Unique last-name match (handles "Timothy" vs "Tim" etc.)
+              if (!af) {
+                const lastMatches = afByLast.get(fdLast) || []
+                if (lastMatches.length === 1) af = lastMatches[0]
+              }
+              // 4. First-initial + last-name when multiple players share a surname.
+              // Handles "Antonee Robinson" vs "Miles Robinson" when AF uses "A. Robinson" / "M. Robinson".
+              if (!af) {
+                const lastMatches = afByLast.get(fdLast) || []
+                if (lastMatches.length > 1) {
+                  const fdInitial = fdNorm.split(' ')[0][0]
+                  af = lastMatches.find(c => normStr(c.name).split(' ')[0] === fdInitial)
+                }
+              }
+              // Force mode overwrites existing photo; delta only fills empty ones
+              const newPhoto = force
+                ? (af?.photo || player.photo || '')
+                : (af?.photo && !player.photo ? af.photo : player.photo || '')
+              if (newPhoto && !player.photo) photosAdded++
+              return {
+                fd_id:          player.fd_id,
+                team_name:      scheduleName,
+                // AF is more accurate for player details — use AF values when we have a confident match
+                name:           af?.name     || player.name,
+                age:            af?.age      ?? player.age,
+                number:         af?.number   ?? player.number,
+                position:       af?.position || player.position,
+                photo:          newPhoto,
+                photo_enriched: true,
+                af_id:          af?.id || player.af_id || null,
+                cached_at:      now,
+              }
+            })
+            const { error: upsertErr } = await supabaseAdmin
+              .from('player_cache')
+              .upsert(upserts, { onConflict: 'fd_id' })
+            if (upsertErr) {
+              return NextResponse.json({ error: `DB write failed (photos): ${upsertErr.message}` }, { status: 500 })
             }
-            const newPhoto = af?.photo && !player.photo ? af.photo : player.photo || ''
-            if (newPhoto && !player.photo) photosAdded++
-            return {
-              fd_id:          player.fd_id,
-              team_name:      scheduleName,
-              // AF is more accurate for player details — use AF values when we have a confident match
-              name:           af?.name     || player.name,
-              age:            af?.age      ?? player.age,
-              number:         af?.number   ?? player.number,
-              position:       af?.position || player.position,
-              photo:          newPhoto,
-              photo_enriched: true,
-              af_id:          af?.id || player.af_id || null,
-              cached_at:      now,
-            }
-          })
-          const { error: upsertErr } = await supabaseAdmin
-            .from('player_cache')
-            .upsert(upserts, { onConflict: 'fd_id' })
-          if (upsertErr) {
-            return NextResponse.json({ error: `DB write failed (photos): ${upsertErr.message}` }, { status: 500 })
           }
+        }
+
+        // ── 1b: Coach photo (FD never provides this; fetch from AF) ──────────
+        if (needsCoachPhoto && !afRateLimited && teamRow?.data?.coach) {
+          try {
+            const coachData = await afFetch('coaches', { team: String(afTeam.team.id) })
+            const coachPhoto = coachData.response?.[0]?.photo as string | undefined
+            if (coachPhoto) {
+              const currentData = (teamRow.data ?? {}) as Record<string, unknown>
+              const currentCoach = (currentData.coach ?? {}) as Record<string, unknown>
+              await supabaseAdmin
+                .from('team_cache')
+                .update({ data: { ...currentData, coach: { ...currentCoach, photo: coachPhoto } } })
+                .ilike('team_name', scheduleName)
+            }
+          } catch { /* coach photo is best-effort */ }
         }
       }
     } catch (e) {
@@ -326,14 +369,21 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
   }
 
   // ── Step 2: Club enrichment — 1 AF call per player with af_id ─────────────
+  // Force mode re-fetches clubs even for already-enriched players
   let clubsAdded = 0
   if (!afRateLimited) {
-    const { data: unenriched } = await supabaseAdmin
-      .from('player_cache')
-      .select('fd_id,af_id')
-      .ilike('team_name', scheduleName)
-      .eq('club_enriched', false)
-      .not('af_id', 'is', null)
+    const { data: unenriched } = force
+      ? await supabaseAdmin
+          .from('player_cache')
+          .select('fd_id,af_id')
+          .ilike('team_name', scheduleName)
+          .not('af_id', 'is', null)
+      : await supabaseAdmin
+          .from('player_cache')
+          .select('fd_id,af_id')
+          .ilike('team_name', scheduleName)
+          .eq('club_enriched', false)
+          .not('af_id', 'is', null)
 
     const natLower = scheduleName.toLowerCase()
 
@@ -346,8 +396,8 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
         await supabaseAdmin
           .from('player_cache')
           .update({
-            club_name:    club?.team?.name  || null,
-            club_logo:    club?.team?.logo  || null,
+            club_name:     club?.team?.name || null,
+            club_logo:     club?.team?.logo || null,
             club_enriched: true,
           })
           .eq('fd_id', player.fd_id)

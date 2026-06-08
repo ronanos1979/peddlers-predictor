@@ -322,12 +322,13 @@ export default function AdminPage() {
     setTeamAction(null)
   }
 
-  async function loadTeamAf(teamName: string) {
-    setTeamAction(teamName + ':af')
+  async function loadTeamAf(teamName: string, action: 'enrich_af' | 'force_enrich_af' = 'enrich_af') {
+    const tag = action === 'force_enrich_af' ? ':force' : ':af'
+    setTeamAction(teamName + tag)
     try {
       const res  = await fetch('/api/admin-teams', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, action: 'enrich_af', team_name: teamName }),
+        body: JSON.stringify({ password, action, team_name: teamName }),
       })
       const data = await res.json()
       if (data.success) {
@@ -346,7 +347,8 @@ export default function AdminPage() {
         } else if (data.photo_error) {
           flash(`⚠️ ${teamName}: ${data.photo_error}`, 'error')
         } else {
-          flash(`✅ ${teamName}: ${data.photos_added} photos, ${data.clubs_added} clubs loaded`, 'success')
+          const verb = action === 'force_enrich_af' ? 'reloaded' : 'loaded'
+          flash(`✅ ${teamName}: ${data.photos_added} photos, ${data.clubs_added} clubs ${verb}`, 'success')
         }
       } else {
         flash(`❌ ${teamName}: ${data.error}`, 'error')
@@ -1192,12 +1194,10 @@ export default function AdminPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {teams.map(team => {
-                  const isFdLoading = teamAction === team.name + ':fd'
-                  const isAfLoading = teamAction === team.name + ':af'
-                  const isAnyBusy  = !!teamAction || loadAllFdRunning
-                  const fullyDone  = team.player_count > 0
-                    && team.photo_count === team.player_count
-                    && team.club_count  === team.player_count
+                  const isFdLoading    = teamAction === team.name + ':fd'
+                  const isAfLoading    = teamAction === team.name + ':af'
+                  const isForceLoading = teamAction === team.name + ':force'
+                  const isAnyBusy     = !!teamAction || loadAllFdRunning
                   return (
                     <div key={team.name} style={{
                       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -1250,7 +1250,7 @@ export default function AdminPage() {
                           <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>clubs</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy}
@@ -1259,9 +1259,15 @@ export default function AdminPage() {
                         </button>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
-                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0 || fullyDone}
+                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
                           onClick={() => loadTeamAf(team.name)}>
-                          {isAfLoading ? '…' : 'Load photos & clubs'}
+                          {isAfLoading ? '…' : 'Fill missing'}
+                        </button>
+                        <button className="btn btn-secondary"
+                          style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
+                          disabled={isAnyBusy || !team.fd_loaded || team.player_count === 0}
+                          onClick={() => loadTeamAf(team.name, 'force_enrich_af')}>
+                          {isForceLoading ? '…' : 'Force reload AF'}
                         </button>
                       </div>
                     </div>

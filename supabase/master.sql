@@ -166,7 +166,7 @@ create or replace view player_cache_stats as
 select
   team_name,
   count(*)                              as total,
-  count(*) filter (where photo_enriched) as photos,
+  count(*) filter (where photo is not null and photo != '') as photos,
   count(*) filter (where club_enriched)  as clubs
 from player_cache
 group by team_name;
