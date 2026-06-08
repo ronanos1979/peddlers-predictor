@@ -182,11 +182,14 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
     }
   }
 
+  const numbersFromFd = fdData.squad.filter(p => p.number != null && p.number > 0).length
+
   return NextResponse.json({
-    success:      true,
-    fd_id:        fdId,
-    player_count: fdData.squad.length,
-    coach:        fdData.coach?.name || null,
+    success:        true,
+    fd_id:          fdId,
+    player_count:   fdData.squad.length,
+    numbers_from_fd: numbersFromFd,
+    coach:          fdData.coach?.name || null,
   })
 }
 

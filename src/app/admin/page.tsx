@@ -313,7 +313,10 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (data.success) {
-        flash(`✅ ${teamName}: ${data.player_count} players loaded from FD`, 'success')
+        const numMsg = data.numbers_from_fd > 0
+          ? `${data.numbers_from_fd}/${data.player_count} shirt numbers`
+          : `⚠️ no shirt numbers in FD yet — run Delta photos to get numbers from AF`
+        flash(`✅ ${teamName}: ${data.player_count} players · ${numMsg}`, data.numbers_from_fd > 0 ? 'success' : 'error')
         loadTeams()
       } else {
         flash(`❌ ${teamName}: ${data.error}`, 'error')
