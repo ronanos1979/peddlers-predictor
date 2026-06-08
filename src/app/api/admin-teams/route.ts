@@ -231,7 +231,9 @@ async function handleEnrichAf(scheduleName: string): Promise<NextResponse> {
 
       // Fall back to name search for teams not found in either WC list
       if (!afTeam) {
-        const searchData = await afFetch('teams', { search: aliased })
+        // AF search only accepts alphanumeric + spaces — strip & and other punctuation
+        const searchTerm = aliased.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+        const searchData = await afFetch('teams', { search: searchTerm })
         const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
         let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
         if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
