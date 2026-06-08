@@ -1205,49 +1205,56 @@ export default function AdminPage() {
                     <div key={team.name} style={{
                       background: 'var(--surface)', border: '1px solid var(--border)',
                       borderRadius: 8, padding: '8px 12px',
-                      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                      display: 'flex', flexDirection: 'column', gap: 8,
                     }}>
-                      <a href={`/world-cup/team?name=${encodeURIComponent(team.name)}`}
-                        target="_blank" rel="noreferrer"
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'inherit', flexShrink: 0 }}>
-                        <Flag emoji={team.flag} size={22} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{team.name}</div>
-                          {team.coach_name && (
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{team.coach_name}</div>
-                          )}
-                          {team.cached_at && (
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-                              FD {new Date(team.cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
-                          )}
-                          {team.af_cached_at && (
-                            <div style={{ fontSize: 10, color: 'var(--amber)', marginTop: 1 }}>
-                              AF {new Date(team.af_cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
-                          )}
-                        </div>
-                      </a>
-                      <div style={{ flex: 1 }} />
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {[
-                          { label: 'players', val: team.player_count, total: team.player_count, alwaysGreen: true },
-                          { label: 'shirts',  val: team.number_count, total: team.player_count },
-                          { label: 'photos',  val: team.photo_count,  total: team.player_count },
-                          { label: 'clubs',   val: team.club_count,   total: team.player_count },
-                        ].map(({ label, val, total, alwaysGreen }) => (
-                          <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700,
-                              color: total === 0 ? 'var(--text-muted)'
-                                : (alwaysGreen || val === total) ? 'var(--green)'
-                                : val > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>
-                              {total > 0 ? (alwaysGreen ? val : `${val}/${total}`) : '—'}
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+                      {/* Top row: identity + stats */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <a href={`/world-cup/team?name=${encodeURIComponent(team.name)}`}
+                          target="_blank" rel="noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'inherit', flexShrink: 0 }}>
+                          <Flag emoji={team.flag} size={22} />
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{team.name}</div>
+                            {team.coach_name && (
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{team.coach_name}</div>
+                            )}
+                            {team.cached_at && (
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                                FD {new Date(team.cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </div>
+                            )}
+                            {team.af_cached_at && (
+                              <div style={{ fontSize: 10, color: 'var(--amber)', marginTop: 1 }}>
+                                AF {new Date(team.af_cached_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        </a>
+                        <div style={{ flex: 1 }} />
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                          {[
+                            { label: 'players', val: team.player_count, max: 26 },
+                            { label: 'shirts',  val: team.number_count, max: team.player_count },
+                            { label: 'photos',  val: team.photo_count,  max: team.player_count },
+                            { label: 'clubs',   val: team.club_count,   max: team.player_count },
+                          ].map(({ label, val, max }) => {
+                            const color = max === 0   ? 'var(--text-muted)'
+                                        : val === 0   ? 'var(--red)'
+                                        : val < max   ? 'var(--amber)'
+                                        :               'var(--green)'
+                            return (
+                              <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color }}>
+                                  {max === 0 ? '—' : label === 'players' ? `${val}` : `${val}/${max}`}
+                                </div>
+                                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {/* Bottom row: action buttons */}
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary"
                           style={{ width: 'auto', padding: '4px 9px', fontSize: 11 }}
                           disabled={isAnyBusy || (team.number_count === team.player_count && team.player_count > 0)}
