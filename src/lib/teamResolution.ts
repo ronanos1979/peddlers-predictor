@@ -3,11 +3,12 @@
 
 // Common/local names (Supabase schedule data) → API-Football official names
 export const NAME_ALIASES: Record<string, string> = {
-  'usa':         'united states',
-  'south korea': 'korea republic',
-  'ivory coast': "côte d'ivoire",
-  'türkiye':     'turkey',
-  'czechia':     'czech republic',
+  'usa':                   'united states',
+  'south korea':           'korea republic',
+  'ivory coast':           "côte d'ivoire",
+  'türkiye':               'turkey',
+  'czechia':               'czech republic',
+  'bosnia & herzegovina':  'bosnia-herzegovina',
 }
 
 // API-Football official name → local Supabase schedule name (reverse of NAME_ALIASES)
