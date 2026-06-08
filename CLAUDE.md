@@ -288,6 +288,16 @@ The app uses **football-data.org (FD) as primary** and **API-Football (AF) for p
 - Both are optional — the app degrades gracefully if either key is missing
 - The `footballData.ts` adapter converts FD responses to AF-format so frontend code doesn't change
 
+### Known FD free-tier data gaps (always use AF for these)
+| Field | FD free tier | AF |
+|-------|-------------|-----|
+| `shirtNumber` | ❌ Null pre-tournament (may be paid) | ✅ `players/squads` reliable |
+| Player photos | ❌ Not provided | ✅ `players/squads` |
+| Coach photo | ❌ Not provided | ✅ `coaches?team=ID` |
+| Player club | ❌ Not provided | ✅ `players?id=X&season=YYYY` |
+
+**Rule**: If FD returns `shirtNumber: null` for all squad members, that means FD doesn't have it yet — NOT that no numbers exist. Auto-fall back to AF `players/squads`. This is implemented in `handleLoadFd` in `src/app/api/admin-teams/route.ts`. Never store `0` as a shirt number; use `null` for unknown.
+
 ### Proxy route: `/api/football`
 - Keeps both API keys server-side
 - 5-minute in-memory cache (shared, caches adapted response regardless of source)

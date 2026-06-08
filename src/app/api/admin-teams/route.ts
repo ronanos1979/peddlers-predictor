@@ -113,7 +113,96 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
 
+// ── Shared name-normaliser (used by both photo enrichment and number fallback) ──
+
+function normName(s: string): string {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+// ── Resolve AF team ID from schedule name (WC list → search fallback) ────────
+
+async function resolveAfTeamId(scheduleName: string): Promise<number | null> {
+  const norm    = scheduleName.toLowerCase().trim()
+  const aliased = NAME_ALIASES[norm] || norm
+
+  let wcTeams: Array<{ team: { id: number; name: string; national?: boolean } }> = []
+  try {
+    const d = await afFetch('teams', { league: '1', season: '2026' })
+    wcTeams = d.response || []
+  } catch { /* season not available */ }
+  if (wcTeams.length === 0) {
+    const d = await afFetch('teams', { league: '1', season: '2022' })
+    wcTeams = d.response || []
+  }
+
+  let found = wcTeams.find(t => {
+    const n = t.team.name.toLowerCase()
+    return n === aliased || n === norm
+  })
+  if (found) return found.team.id
+
+  const searchTerm = aliased.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+  const sd = await afFetch('teams', { search: searchTerm })
+  const candidates = (sd.response || []) as typeof wcTeams
+  let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+  if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
+  found = pool.find(t => {
+    const n = t.team.name.toLowerCase()
+    return n === aliased || n === norm
+  }) || pool[0]
+  return found?.team.id ?? null
+}
+
+// ── Match FD player list against AF squad by name (4 strategies) ─────────────
+// Returns a map of fd_id → AF player data for matched players.
+
+type AfPlayerBasic = { id: number; name: string; number?: number | null; photo?: string; age?: number; position?: string }
+
+function matchAfSquad(
+  fdPlayers: Array<{ id: number; name: string }>,
+  afPlayers: AfPlayerBasic[]
+): Map<number, AfPlayerBasic> {
+  const byExact = new Map<string, AfPlayerBasic>()
+  const byNorm  = new Map<string, AfPlayerBasic>()
+  const byLast  = new Map<string, AfPlayerBasic[]>()
+
+  for (const p of afPlayers) {
+    if (!p.name) continue
+    const n    = normName(p.name)
+    const last = n.split(' ').pop()!
+    byExact.set(p.name.toLowerCase(), p)
+    byNorm.set(n, p)
+    if (!byLast.has(last)) byLast.set(last, [])
+    byLast.get(last)!.push(p)
+  }
+
+  const result = new Map<number, AfPlayerBasic>()
+  for (const player of fdPlayers) {
+    const fdNorm    = normName(player.name)
+    const fdLast    = fdNorm.split(' ').pop()!
+    let af: AfPlayerBasic | undefined = byExact.get(player.name.toLowerCase())
+    if (!af) af = byNorm.get(fdNorm)
+    if (!af) {
+      const hits = byLast.get(fdLast) || []
+      if (hits.length === 1) af = hits[0]
+    }
+    if (!af) {
+      const hits = byLast.get(fdLast) || []
+      if (hits.length > 1) {
+        const init = fdNorm.split(' ')[0][0]
+        af = hits.find(c => normName(c.name).split(' ')[0] === init)
+      }
+    }
+    if (af) result.set(player.id, af)
+  }
+  return result
+}
+
 // ── load_fd: fetch from football-data.org, populate team_cache + player_cache ─
+// Falls back to AF for shirt numbers when FD doesn't provide them (common on
+// the free tier pre-tournament — FD often omits shirtNumber until post-kickoff).
 
 async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
   let fdId: number | null
@@ -183,13 +272,41 @@ async function handleLoadFd(scheduleName: string): Promise<NextResponse> {
   }
 
   const numbersFromFd = fdData.squad.filter(p => p.number != null && p.number > 0).length
+  let numbersFromAf   = 0
+
+  // FD free tier often omits shirtNumber entirely — fall back to AF automatically.
+  // Cost: ~3 AF calls (WC list + squads). Only runs when FD returns no numbers.
+  if (numbersFromFd === 0 && AF_KEY && fdData.squad.length > 0) {
+    try {
+      const afTeamId = await resolveAfTeamId(scheduleName)
+      if (afTeamId) {
+        const squadData = await afFetch('players/squads', { team: String(afTeamId) })
+        const afPlayers = (squadData.response?.[0]?.players || []) as AfPlayerBasic[]
+        if (afPlayers.length > 0) {
+          const matched = matchAfSquad(fdData.squad, afPlayers)
+          const now = new Date().toISOString()
+          const matchedEntries = Array.from(matched.entries())
+          for (const [fdId, af] of matchedEntries) {
+            if (af.number && af.number > 0) {
+              await supabaseAdmin
+                .from('player_cache')
+                .update({ number: af.number, cached_at: now })
+                .eq('fd_id', fdId)
+              numbersFromAf++
+            }
+          }
+        }
+      }
+    } catch { /* AF fallback is best-effort — don't fail the whole load */ }
+  }
 
   return NextResponse.json({
-    success:        true,
-    fd_id:          fdId,
-    player_count:   fdData.squad.length,
+    success:         true,
+    fd_id:           fdId,
+    player_count:    fdData.squad.length,
     numbers_from_fd: numbersFromFd,
-    coach:          fdData.coach?.name || null,
+    numbers_from_af: numbersFromAf,
+    coach:           fdData.coach?.name || null,
   })
 }
 
@@ -235,100 +352,30 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
       const norm    = scheduleName.toLowerCase().trim()
       const aliased = NAME_ALIASES[norm] || norm
 
-      // Try WC 2026 first (most accurate for current tournament squads + photos).
-      // Fall back to WC 2022 if 2026 data is unavailable on the current API plan.
-      let wcTeams: Array<{ team: { id: number; name: string } }> = []
-      try {
-        const wcData2026 = await afFetch('teams', { league: '1', season: '2026' })
-        wcTeams = (wcData2026.response || []) as Array<{ team: { id: number; name: string } }>
-      } catch {
-        // season=2026 not available on this API plan
-      }
-      if (wcTeams.length === 0) {
-        const wcData2022 = await afFetch('teams', { league: '1', season: '2022' })
-        wcTeams = (wcData2022.response || []) as Array<{ team: { id: number; name: string } }>
-      }
+      const afTeamId = await resolveAfTeamId(scheduleName)
 
-      let afTeam = wcTeams.find(t => {
-        const n = t.team.name.toLowerCase()
-        return n === aliased || n === norm
-      })
-
-      // Fall back to name search for teams not found in either WC list
-      if (!afTeam) {
-        // AF search only accepts alphanumeric + spaces — strip & and other punctuation
-        const searchTerm = aliased.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
-        const searchData = await afFetch('teams', { search: searchTerm })
-        const candidates = (searchData.response || []) as Array<{ team: { id: number; name: string; national?: boolean } }>
-        let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
-        if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
-        afTeam = pool.find(t => {
-          const n = t.team.name.toLowerCase()
-          return n === aliased || n === norm
-        }) || pool[0]
-      }
-
-      if (!afTeam) {
+      if (!afTeamId) {
         photoError = `No AF team found for "${scheduleName}" (tried WC list + search for "${aliased}")`
       } else {
-        afTeamFound = afTeam.team.name
+        // Resolve the display name from the WC list for messaging
+        afTeamFound = scheduleName
 
         // ── 1a: Player photos ────────────────────────────────────────────────
         if (needsPhotos) {
-          const squadData = await afFetch('players/squads', { team: String(afTeam.team.id) })
-          const afPlayers = (squadData.response?.[0]?.players || []) as Array<{
-            id: number; name: string; photo: string
-            age?: number; number?: number; position?: string
-          }>
+          const squadData = await afFetch('players/squads', { team: String(afTeamId) })
+          const afPlayers = (squadData.response?.[0]?.players || []) as AfPlayerBasic[]
           afPlayersFound = afPlayers.length
 
           if (afPlayers.length === 0) {
-            photoError = `AF returned 0 players for ${afTeam.team.name} (id ${afTeam.team.id})`
+            photoError = `AF returned 0 players for "${scheduleName}" (team id ${afTeamId})`
           } else {
-            // Build lookup maps for progressive name matching.
-            // FD and AF use different name formats so exact match alone misses many players.
-            type AfPlayer = { id: number; photo: string; name: string; age?: number; number?: number; position?: string }
-            const normStr = (s: string) => s.toLowerCase()
-              .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
-              .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
-
-            const afByExact = new Map<string, AfPlayer>()
-            const afByNorm  = new Map<string, AfPlayer>()
-            const afByLast  = new Map<string, AfPlayer[]>()
-
-            afPlayers.forEach(p => {
-              if (!p.name) return
-              const val: AfPlayer = { id: p.id, photo: p.photo || '', name: p.name, age: p.age, number: p.number, position: p.position }
-              const n = normStr(p.name)
-              const last = n.split(' ').pop()!
-              afByExact.set(p.name.toLowerCase(), val)
-              afByNorm.set(n, val)
-              if (!afByLast.has(last)) afByLast.set(last, [])
-              afByLast.get(last)!.push(val)
-            })
-
+            const matched = matchAfSquad(
+              players.map(p => ({ id: p.fd_id, name: p.name })),
+              afPlayers
+            )
             const now = new Date().toISOString()
             const upserts = players.map(player => {
-              const fdNorm = normStr(player.name)
-              const fdLast = fdNorm.split(' ').pop()!
-              // 1. Exact lowercase match
-              let af: AfPlayer | undefined = afByExact.get(player.name.toLowerCase())
-              // 2. Accent/punctuation-normalised match
-              if (!af) af = afByNorm.get(fdNorm)
-              // 3. Unique last-name match (handles "Timothy" vs "Tim" etc.)
-              if (!af) {
-                const lastMatches = afByLast.get(fdLast) || []
-                if (lastMatches.length === 1) af = lastMatches[0]
-              }
-              // 4. First-initial + last-name when multiple players share a surname.
-              // Handles "Antonee Robinson" vs "Miles Robinson" when AF uses "A. Robinson" / "M. Robinson".
-              if (!af) {
-                const lastMatches = afByLast.get(fdLast) || []
-                if (lastMatches.length > 1) {
-                  const fdInitial = fdNorm.split(' ')[0][0]
-                  af = lastMatches.find(c => normStr(c.name).split(' ')[0] === fdInitial)
-                }
-              }
+              const af = matched.get(player.fd_id)
               // Force mode overwrites existing photo; delta only fills empty ones
               const newPhoto = force
                 ? (af?.photo || player.photo || '')
@@ -337,7 +384,6 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
               return {
                 fd_id:          player.fd_id,
                 team_name:      scheduleName,
-                // AF is more accurate for player details — use AF values when we have a confident match
                 name:           af?.name     || player.name,
                 age:            af?.age      ?? player.age,
                 number:         af?.number   ?? player.number,
@@ -360,7 +406,7 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
         // ── 1b: Coach photo (FD never provides this; fetch from AF) ──────────
         if (needsCoachPhoto && !afRateLimited && teamRow?.data?.coach) {
           try {
-            const coachData = await afFetch('coaches', { team: String(afTeam.team.id) })
+            const coachData = await afFetch('coaches', { team: String(afTeamId) })
             const coachPhoto = coachData.response?.[0]?.photo as string | undefined
             if (coachPhoto) {
               const currentData = (teamRow.data ?? {}) as Record<string, unknown>
