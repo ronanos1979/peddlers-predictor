@@ -876,8 +876,11 @@ function HomeContent() {
 
         return (
           <div style={{ marginBottom: 4 }}>
-            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 14 }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>
               {t.makePredictions}
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+              {t.tapTeamTip}
             </div>
             {days.map(({ label, matches }) => (
               <div key={label} style={{ marginBottom: 20 }}>
