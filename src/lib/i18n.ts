@@ -240,6 +240,8 @@ export const translations = {
     semiFinals: 'Semi Finals',
     final: 'Final',
     tbd: 'TBD',
+    seeGroups: 'See groups',
+    hideGroups: 'Hide groups',
 
     // Top scorer pick
     pickTopScorer: 'Pick the Golden Boot',
@@ -680,6 +682,8 @@ export const translations = {
     semiFinals: 'Semifinales',
     final: 'Final',
     tbd: 'Por definir',
+    seeGroups: 'Ver grupos',
+    hideGroups: 'Ocultar',
 
     // Top scorer pick
     pickTopScorer: 'Elige la Bota de Oro',
