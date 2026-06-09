@@ -159,13 +159,13 @@ function ScheduleContent() {
               {/* Teams row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>
-                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                      <Flag emoji={m.home_flag} size={20} style={{ marginRight: 5 }} /> {m.home_team}
+                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
+                      <Flag emoji={m.home_flag} size={18} />{m.home_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
                     </Link>
-                    {' '}vs{' '}
-                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                      <Flag emoji={m.away_flag} size={20} style={{ marginRight: 5 }} /> {m.away_team}
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>vs</span>
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
+                      <Flag emoji={m.away_flag} size={18} />{m.away_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
                     </Link>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>

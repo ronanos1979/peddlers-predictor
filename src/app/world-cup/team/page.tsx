@@ -490,20 +490,53 @@ function TeamContent() {
           )}
 
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-            {(['squad', 'fixtures'] as const).map(tab_option => (
-              <button key={tab_option} onClick={() => setTab(tab_option)} style={{
-                padding: '8px 16px', borderRadius: 20,
-                border: `1px solid ${tab === tab_option ? 'var(--green)' : 'var(--border)'}`,
-                background: tab === tab_option ? 'rgba(0,200,122,0.12)' : 'transparent',
-                color: tab === tab_option ? 'var(--green)' : 'var(--text-muted)',
-                fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
-                letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
-              }}>
-                {tab_option === 'squad' ? t.squad : t.pathToFinal}
-              </button>
-            ))}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button onClick={() => setTab('squad')} style={{
+              flex: 1, padding: '11px 8px', borderRadius: 10,
+              border: `1px solid ${tab === 'squad' ? 'var(--green)' : 'var(--border)'}`,
+              background: tab === 'squad' ? 'rgba(0,200,122,0.12)' : 'var(--surface)',
+              color: tab === 'squad' ? 'var(--green)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
+              letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
+            }}>
+              👤 {t.squad}
+            </button>
+            <button onClick={() => setTab('fixtures')} style={{
+              flex: 1, padding: '11px 8px', borderRadius: 10,
+              border: `1px solid ${tab === 'fixtures' ? 'var(--green)' : 'rgba(0,200,122,0.3)'}`,
+              background: tab === 'fixtures'
+                ? 'rgba(0,200,122,0.15)'
+                : 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.05))',
+              color: tab === 'fixtures' ? 'var(--green)' : 'var(--green)',
+              fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
+              letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
+            }}>
+              🏆 {t.pathToFinal}
+            </button>
           </div>
+
+          {/* Path to Final promo — shown when on Squad tab to surface the feature */}
+          {tab === 'squad' && (
+            <button onClick={() => setTab('fixtures')} style={{
+              width: '100%', marginBottom: 16,
+              padding: '13px 16px',
+              background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))',
+              border: '1px solid rgba(0,200,122,0.25)',
+              borderRadius: 10, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left'
+            }}>
+              <span style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>🗺️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--green)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  {t.pathToFinal}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                  {t.pathToFinalSub}
+                </div>
+              </div>
+              <span style={{ color: 'var(--green)', fontSize: 16, flexShrink: 0 }}>→</span>
+            </button>
+          )}
 
           {/* Squad */}
           {tab === 'squad' && (
@@ -612,9 +645,7 @@ function TeamContent() {
                                   {resultLabel}
                                 </div>
                               </>
-                            ) : (
-                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>TBD</div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       )
