@@ -1,4 +1,25 @@
-import { parseGroupLetters, formatPlaceholder, isPlaceholder } from '../bracketHelpers'
+import { parseGroupLetters, formatPlaceholder, isPlaceholder, parseMatchNumber } from '../bracketHelpers'
+
+describe('parseMatchNumber', () => {
+  it('extracts match number from R32 reference', () => {
+    expect(parseMatchNumber('R32 M73 Winner')).toBe(73)
+    expect(parseMatchNumber('R32 M87 Winner')).toBe(87)
+    expect(parseMatchNumber('R32 M88 Winner')).toBe(88)
+  })
+  it('returns null for group-based placeholders', () => {
+    expect(parseMatchNumber('Group A Winner')).toBeNull()
+    expect(parseMatchNumber('Group B Runner-up')).toBeNull()
+    expect(parseMatchNumber('3rd Place (A/B/C/D/F)')).toBeNull()
+  })
+  it('returns null for QF/SF placeholders that have no match number', () => {
+    expect(parseMatchNumber('QF1 TBD')).toBeNull()
+    expect(parseMatchNumber('SF1 TBD')).toBeNull()
+  })
+  it('returns null for real team names', () => {
+    expect(parseMatchNumber('USA')).toBeNull()
+    expect(parseMatchNumber('Brazil')).toBeNull()
+  })
+})
 
 describe('isPlaceholder', () => {
   it('identifies group winner placeholders', () => {

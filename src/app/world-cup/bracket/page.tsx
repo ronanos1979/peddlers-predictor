@@ -4,7 +4,7 @@ import { supabase, type Match } from '@/lib/supabase'
 import { useLocale } from '@/lib/useLocale'
 import Flag from '@/components/Flag'
 import Link from 'next/link'
-import { isPlaceholder, parseGroupLetters, formatPlaceholder } from './bracketHelpers'
+import { isPlaceholder, parseGroupLetters, formatPlaceholder, parseMatchNumber } from './bracketHelpers'
 
 const KNOCKOUT_STAGES = [
   'Round of 32',
@@ -34,6 +34,126 @@ type Standing = {
 
 type GroupMap = Record<string, Standing[]>
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+// Expandable standings table for a single group letter
+function GroupTable({
+  letter, groupMap, t,
+}: { letter: string; groupMap: GroupMap; t: Record<string, string> }) {
+  const [open, setOpen] = useState(false)
+  const rows = groupMap[letter]
+  return (
+    <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 4 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', padding: '6px 10px',
+          background: open ? 'rgba(0,200,122,0.08)' : 'var(--surface2)',
+          border: 'none', cursor: 'pointer',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: 1, color: open ? 'var(--green)' : 'var(--text-muted)' }}>
+          Group {letter}
+        </span>
+        <span style={{ fontSize: 9, color: 'var(--green)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        !rows || rows.length === 0 ? (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', padding: '8px 10px', margin: 0 }}>
+            {t.standingsUnavailable}
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead>
+                <tr>
+                  {[t.pos, t.team, t.played, t.won, t.drawn, t.lost, t.points].map((h, hi) => (
+                    <th key={hi} style={{
+                      padding: '4px 5px', textAlign: hi <= 1 ? 'left' : 'center',
+                      fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 9,
+                      letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((s, ri) => (
+                  <tr key={s.team.id} style={{ background: ri < 2 ? 'rgba(0,200,122,0.05)' : 'transparent' }}>
+                    <td style={{ padding: '5px 5px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: ri < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{s.rank}</td>
+                    <td style={{ padding: '5px 5px' }}>
+                      <Link href={`/world-cup/team?id=${s.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {s.team.logo && <img src={s.team.logo} alt="" style={{ width: 12, height: 12, objectFit: 'contain', flexShrink: 0 }} />}
+                        {s.team.name}
+                      </Link>
+                    </td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.played}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.win}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.draw}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.lose}</td>
+                    <td style={{ padding: '5px 7px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--green)' }}>{s.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+// Panel showing one source R32 match (used inside R16 drill-down)
+function SourceMatchPanel({
+  name, matchByNum, groupMap, fmtDate, t,
+}: {
+  name: string
+  matchByNum: Record<number, Match>
+  groupMap: GroupMap
+  fmtDate: (s: string) => string
+  t: Record<string, string>
+}) {
+  const matchNum = parseMatchNumber(name)
+  if (!matchNum) return null
+  const src = matchByNum[matchNum]
+  if (!src) return null
+
+  const homeLabel = isPlaceholder(src.home_team) ? formatPlaceholder(src.home_team) : src.home_team
+  const awayLabel = isPlaceholder(src.away_team) ? formatPlaceholder(src.away_team) : src.away_team
+  const allGroups = [
+    ...parseGroupLetters(src.home_team),
+    ...parseGroupLetters(src.away_team),
+  ].filter((g, i, a) => a.indexOf(g) === i).sort()
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+        R32 {t.matchNumber.replace('{n}', String(matchNum))} · {fmtDate(src.kickoff_at)}
+        {src.result && <span style={{ marginLeft: 6, color: 'var(--green)' }}>✓</span>}
+      </div>
+      {src.result ? (
+        // Match played — show real teams with result
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+          <span style={{ color: src.result === 'home' ? 'var(--green)' : 'var(--text-muted)' }}>{src.home_team}</span>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> vs </span>
+          <span style={{ color: src.result === 'away' ? 'var(--green)' : 'var(--text-muted)' }}>{src.away_team}</span>
+        </div>
+      ) : (
+        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+          <span style={{ color: 'var(--text)' }}>{homeLabel}</span>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> vs </span>
+          <span style={{ color: 'var(--text)' }}>{awayLabel}</span>
+        </div>
+      )}
+      {allGroups.map(letter => (
+        <GroupTable key={letter} letter={letter} groupMap={groupMap} t={t} />
+      ))}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 function resultLabel(m: Match, side: 'home' | 'away') {
   if (!m.result) return null
   if (m.result === 'draw') return 'D'
@@ -46,8 +166,10 @@ export default function BracketPage() {
   const [loading, setLoading] = useState(true)
   const [activeStage, setActiveStage] = useState('Round of 32')
   const [groupMap, setGroupMap] = useState<GroupMap>({})
+  const [matchByNum, setMatchByNum] = useState<Record<number, Match>>({})
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
 
+  // Load knockout matches for the bracket display
   useEffect(() => {
     async function load() {
       const { data } = await supabase
@@ -61,7 +183,23 @@ export default function BracketPage() {
     load()
   }, [])
 
-  // Fetch standings once — used to populate inline group widget
+  // Load ALL matches (excl. demo) to build match-number → match lookup for R16 drill-down
+  // M73 = the 73rd real match by kickoff order (group stage is matches 1–72)
+  useEffect(() => {
+    async function loadAll() {
+      const { data } = await supabase
+        .from('matches')
+        .select('*')
+        .neq('stage', 'Demo Match')
+        .order('kickoff_at', { ascending: true })
+      const map: Record<number, Match> = {}
+      ;(data || []).forEach((m, i) => { map[i + 1] = m as Match })
+      setMatchByNum(map)
+    }
+    loadAll()
+  }, [])
+
+  // Fetch group standings (5-min server cache) for inline group tables
   useEffect(() => {
     async function loadStandings() {
       try {
@@ -69,11 +207,9 @@ export default function BracketPage() {
         const data = await res.json()
         const raw: Standing[][] = data.response?.[0]?.league?.standings || []
         const map: GroupMap = {}
-        raw.forEach((group, i) => {
-          map[String.fromCharCode(65 + i)] = group // index 0 → "A", 1 → "B" …
-        })
+        raw.forEach((group, i) => { map[String.fromCharCode(65 + i)] = group })
         setGroupMap(map)
-      } catch { /* standings unavailable — widget shows empty state */ }
+      } catch { /* standings unavailable — GroupTable shows empty state */ }
     }
     loadStandings()
   }, [])
@@ -84,21 +220,19 @@ export default function BracketPage() {
     })
   }
 
-  // Auto-advance to the first stage that has any real teams or results
+  // Auto-advance to the first stage with real teams or results
   useEffect(() => {
     if (!matches.length) return
-    const stageWithAction = KNOCKOUT_STAGES.find(stage => {
-      const ms = matches.filter(m => m.stage === stage)
-      return ms.some(m => !isPlaceholder(m.home_team) || m.result)
-    })
+    const stageWithAction = KNOCKOUT_STAGES.find(stage =>
+      matches.filter(m => m.stage === stage).some(m => !isPlaceholder(m.home_team) || m.result)
+    )
     if (stageWithAction) setActiveStage(stageWithAction)
   }, [matches])
 
   function toggleCard(id: string) {
     setExpandedCards(prev => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }
@@ -161,13 +295,26 @@ export default function BracketPage() {
           const homeLabel = homePH ? formatPlaceholder(m.home_team) : m.home_team
           const awayLabel = awayPH ? formatPlaceholder(m.away_team) : m.away_team
 
-          // Collect unique group letters from placeholder slots in this match
+          // R32: extract group letters from placeholder slots
           const involvedGroups = [
             ...(homePH ? parseGroupLetters(m.home_team) : []),
             ...(awayPH ? parseGroupLetters(m.away_team) : []),
           ].filter((g, idx, arr) => arr.indexOf(g) === idx).sort()
 
-          const showWidget = involvedGroups.length > 0
+          // R16: check if slots reference R32 match numbers
+          const homeMatchNum = homePH ? parseMatchNumber(m.home_team) : null
+          const awayMatchNum = awayPH ? parseMatchNumber(m.away_team) : null
+
+          const showGroupWidget   = involvedGroups.length > 0
+          const showR16Widget     = !showGroupWidget && (homeMatchNum !== null || awayMatchNum !== null)
+          const hasWidget         = showGroupWidget || showR16Widget
+
+          // Widget button label
+          const widgetLabel = showGroupWidget
+            ? `${expanded ? t.hideGroups : t.seeGroups} ${involvedGroups.map(g => `Group ${g}`).join(' · ')}`
+            : showR16Widget
+            ? `${expanded ? t.hideGroups : t.seeGroups} ${[homeMatchNum, awayMatchNum].filter(Boolean).map(n => `R32 #${n}`).join(' · ')}`
+            : ''
 
           return (
             <div
@@ -184,152 +331,105 @@ export default function BracketPage() {
                 padding: '6px 14px',
                 background: 'var(--surface2)',
                 borderBottom: '1px solid var(--border)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
               }}>
-                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                   {t.matchNumber.replace('{n}', String(i + 1))}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>
-                  {fmtDate(m.kickoff_at)}
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', textAlign: 'right' }}>
+                  {m.venue ? `${m.venue} · ` : ''}{fmtDate(m.kickoff_at)}
                 </span>
               </div>
 
               {/* Teams */}
               <div style={{ padding: '0 14px' }}>
                 {/* Home */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '11px 0',
-                  borderBottom: '1px solid var(--border)',
-                  opacity: homePH ? 0.7 : 1,
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: '1px solid var(--border)', opacity: homePH ? 0.7 : 1 }}>
                   <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                     {homePH ? <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span> : <Flag emoji={m.home_flag} size={22} />}
                   </span>
                   <span style={{
                     flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700,
-                    fontSize: homePH ? 13 : 15,
-                    fontStyle: homePH ? 'italic' : 'normal',
+                    fontSize: homePH ? 13 : 15, fontStyle: homePH ? 'italic' : 'normal',
                     color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--text-muted)' : homePH ? 'var(--text-muted)' : 'var(--text)',
                   }}>
                     {homeLabel}
                   </span>
                   {homeRes && (
-                    <span style={{
-                      fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1,
-                      color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--red)' : 'var(--text-muted)',
-                    }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
                       {homeRes}
                     </span>
                   )}
                 </div>
 
                 {/* Away */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '11px 0',
-                  opacity: awayPH ? 0.7 : 1,
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', opacity: awayPH ? 0.7 : 1 }}>
                   <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                     {awayPH ? <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span> : <Flag emoji={m.away_flag} size={22} />}
                   </span>
                   <span style={{
                     flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700,
-                    fontSize: awayPH ? 13 : 15,
-                    fontStyle: awayPH ? 'italic' : 'normal',
+                    fontSize: awayPH ? 13 : 15, fontStyle: awayPH ? 'italic' : 'normal',
                     color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--text-muted)' : awayPH ? 'var(--text-muted)' : 'var(--text)',
                   }}>
                     {awayLabel}
                   </span>
                   {awayRes && (
-                    <span style={{
-                      fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1,
-                      color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--red)' : 'var(--text-muted)',
-                    }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
                       {awayRes}
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Group standings widget */}
-              {showWidget && (
+              {/* Expandable drill-down widget (R32: groups · R16: source R32 matches) */}
+              {hasWidget && (
                 <>
                   <button
                     onClick={() => toggleCard(m.id)}
                     style={{
-                      width: '100%',
-                      padding: '8px 14px',
+                      width: '100%', padding: '8px 14px',
                       background: expanded ? 'rgba(0,200,122,0.06)' : 'var(--surface2)',
-                      border: 'none',
-                      borderTop: '1px solid var(--border)',
+                      border: 'none', borderTop: '1px solid var(--border)',
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       cursor: 'pointer',
                     }}
                   >
                     <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: expanded ? 'var(--green)' : 'var(--text-muted)' }}>
-                      {expanded ? t.hideGroups : t.seeGroups}{' '}
-                      {involvedGroups.map(g => `Group ${g}`).join(' · ')}
+                      {widgetLabel}
                     </span>
                     <span style={{ fontSize: 10, color: 'var(--green)' }}>{expanded ? '▲' : '▼'}</span>
                   </button>
 
                   {expanded && (
-                    <div style={{ borderTop: '1px solid var(--border)', background: 'rgba(0,200,122,0.02)' }}>
-                      {involvedGroups.map(letter => {
-                        const rows = groupMap[letter]
-                        return (
-                          <div key={letter} style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-                            <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, letterSpacing: 1, marginBottom: 8, color: 'var(--green)' }}>
-                              Group {letter}
-                            </div>
-                            {!rows || rows.length === 0 ? (
-                              <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t.standingsUnavailable}</p>
-                            ) : (
-                              <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                                  <thead>
-                                    <tr>
-                                      {[t.pos, t.team, t.played, t.won, t.drawn, t.lost, t.points].map((h, hi) => (
-                                        <th key={hi} style={{
-                                          padding: '4px 6px',
-                                          textAlign: hi <= 1 ? 'left' : 'center',
-                                          fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 10,
-                                          letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-muted)',
-                                          whiteSpace: 'nowrap',
-                                        }}>
-                                          {h}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {rows.map((s, ri) => (
-                                      <tr key={s.team.id} style={{ background: ri < 2 ? 'rgba(0,200,122,0.06)' : 'transparent' }}>
-                                        <td style={{ padding: '7px 6px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: ri < 2 ? 'var(--green)' : 'var(--text-muted)' }}>
-                                          {s.rank}
-                                        </td>
-                                        <td style={{ padding: '7px 6px' }}>
-                                          <Link href={`/world-cup/team?id=${s.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                            {s.team.logo && <img src={s.team.logo} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
-                                            {s.team.name}
-                                          </Link>
-                                        </td>
-                                        <td style={{ padding: '7px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.played}</td>
-                                        <td style={{ padding: '7px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.win}</td>
-                                        <td style={{ padding: '7px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.draw}</td>
-                                        <td style={{ padding: '7px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{s.all.lose}</td>
-                                        <td style={{ padding: '7px 8px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--green)' }}>{s.points}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                    <div style={{ borderTop: '1px solid var(--border)', background: 'rgba(0,200,122,0.02)', padding: '12px 14px' }}>
+                      {/* R32 match: expandable group tables */}
+                      {showGroupWidget && involvedGroups.map(letter => (
+                        <GroupTable key={letter} letter={letter} groupMap={groupMap} t={t as Record<string, string>} />
+                      ))}
+
+                      {/* R16 match: source R32 match panels (each with their own expandable group tables) */}
+                      {showR16Widget && (
+                        <>
+                          {[m.home_team, m.away_team].map((slot, si) => {
+                            const num = parseMatchNumber(slot)
+                            if (!num) return null
+                            return (
+                              <div key={si} style={si === 0 ? { paddingBottom: 12, marginBottom: 12, borderBottom: '1px solid var(--border)' } : {}}>
+                                <SourceMatchPanel
+                                  name={slot}
+                                  matchByNum={matchByNum}
+                                  groupMap={groupMap}
+                                  fmtDate={fmtDate}
+                                  t={t as Record<string, string>}
+                                />
                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                      <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'flex-end' }}>
+                            )
+                          })}
+                        </>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
                         <Link href="/world-cup/groups" style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', textDecoration: 'none', textTransform: 'uppercase' }}>
                           {t.fullStandingsTable} →
                         </Link>

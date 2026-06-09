@@ -1,3 +1,9 @@
+// "R32 M73 Winner" → 73,  "R32 M87 Winner" → 87,  anything else → null
+export function parseMatchNumber(name: string): number | null {
+  const m = name.match(/M(\d+)\s*Winner/i)
+  return m ? parseInt(m[1], 10) : null
+}
+
 export function isPlaceholder(name: string) {
   return /\b(TBD|Winner|Runner-up|3rd Place|R32|QF|SF|Group)\b/i.test(name)
 }
