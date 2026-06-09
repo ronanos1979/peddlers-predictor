@@ -244,6 +244,13 @@ export const translations = {
     pathBlockedBadge: 'No longer possible',
     pathLinkHowToQualify: 'How do third-placed teams qualify? →',
 
+    // Breadcrumb labels
+    crumbFeedback: 'Feedback',
+    crumbDemo: 'Demo',
+    crumbTeam: 'Team',
+    crumbWinnerPick: 'Pick Winner',
+    crumbWinnerPicks: 'Community Picks',
+
     // How to Qualify page
     howToQualifyTitle: 'How to Qualify',
     howToQualifySub: '48 teams · 12 groups · one trophy',
@@ -730,6 +737,13 @@ export const translations = {
     pathUpcomingBadge: 'Próximo',
     pathBlockedBadge: 'Ya no es posible',
     pathLinkHowToQualify: '¿Cómo clasifican los terceros? →',
+
+    // Breadcrumb labels
+    crumbFeedback: 'Comentarios',
+    crumbDemo: 'Demo',
+    crumbTeam: 'Equipo',
+    crumbWinnerPick: 'Elegir Ganador',
+    crumbWinnerPicks: 'Picks del Público',
 
     // How to Qualify page
     howToQualifyTitle: 'Cómo Clasificar',

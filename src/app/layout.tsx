@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import LangSwitcher from '@/components/LangSwitcher'
 import HeaderLocation from '@/components/HeaderLocation'
+import Breadcrumb from '@/components/Breadcrumb'
 import SiteFooter from '@/components/SiteFooter'
 import './globals.css'
 
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               />
             </div>
           </div>
+          <Breadcrumb />
         </header>
 
         <main>{children}</main>
