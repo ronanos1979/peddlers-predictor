@@ -9,6 +9,8 @@ export interface MatchRecord {
   stage: string
   result: 'home' | 'draw' | 'away' | null
   venue: string | null
+  home_score?: number | null
+  away_score?: number | null
 }
 
 export type PathPosition = '1st' | '2nd' | 'best_3rd'

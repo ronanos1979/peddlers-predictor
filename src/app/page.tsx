@@ -344,6 +344,7 @@ function FirstTimeCard() {
     t.onboardStep2,
     t.onboardStep3,
     t.onboardStep4,
+    t.onboardStep5,
   ]
 
   return (
@@ -812,6 +813,9 @@ function HomeContent() {
       {/* Countdown */}
       <Countdown t={t} />
 
+      {/* Winner pick callout — shown before matches so it's the first thing seen */}
+      {selectedPub && <WinnerPickCallout selectedPub={selectedPub} />}
+
       {/* ── MATCHES — shown first, prominently ── */}
       {selectedPub && loading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
@@ -949,12 +953,9 @@ function HomeContent() {
         )
       })()}
 
-      {/* Bonus pick callouts — shown after matches if patron hasn't picked yet */}
+      {/* Golden Boot callout — shown after matches if patron hasn't picked yet */}
       {selectedPub && !loading && !selectedMatch && (
-        <>
-          <GoldenBootCallout selectedPub={selectedPub} />
-          <WinnerPickCallout selectedPub={selectedPub} />
-        </>
+        <GoldenBootCallout selectedPub={selectedPub} />
       )}
 
       {/* Nav grid — moved up so features are discoverable */}
