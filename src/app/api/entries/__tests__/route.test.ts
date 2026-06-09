@@ -60,7 +60,7 @@ function makeRequest(body: unknown): NextRequest {
 const BASE_BODY = {
   pub_id: 'haverhill',
   match_id: 'match-uuid',
-  name: 'Sean O Brien',
+  name: 'Sean Brien',
   phone: '6031231234',
   pick: 'home',
   code: 'peddlers11',

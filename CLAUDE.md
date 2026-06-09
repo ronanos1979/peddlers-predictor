@@ -166,7 +166,7 @@ src/
 │   │   ├── results/page.tsx        # Completed match results
 │   │   ├── scorers/page.tsx        # Top scorers / Golden Boot race
 │   │   ├── bracket/page.tsx        # Knockout bracket (R32→R16→QF→SF→Final) — includes inline group standings widget
-│   │   ├── bracket/bracketHelpers.ts # Pure functions: isPlaceholder, parseGroupLetters, formatPlaceholder
+│   │   ├── bracket/bracketHelpers.ts # Pure functions: isPlaceholder, parseGroupLetters, formatPlaceholder, parseMatchNumber
 │   │   ├── team/page.tsx           # Team profile — squad, manager, fixtures
 │   │   ├── top-scorer-pick/page.tsx # Patron picks Golden Boot winner (+10 bonus tickets)
 │   │   ├── winner-pick/page.tsx    # Patron picks World Cup Champion (+15 bonus tickets, locked once submitted)
@@ -457,11 +457,27 @@ Print and laminate for tables:
 ## Bracket Page UX (`/world-cup/bracket`)
 
 - Stage tabs: R32 → R16 → QF → SF → 3rd → Final; auto-advances to the first stage with real team names or a result
-- **Placeholder labels**: DB stores `"Group A Winner"`, `"Group B Runner-up"`, `"3rd Place (A/B/C/D/F)"` etc. for unfilled knockout slots. These are formatted as `"1st · Group A"`, `"2nd · Group B"`, `"Best 3rd · A / B / C / D / F"` rather than "TBD"
-- **Inline group standings widget**: each R32/R16 match card that has placeholder slots shows a "See groups — Group A · Group B" toggle button. Tapping it expands a compact P/W/D/L/Pts standings table for each relevant group, with top-2 rows highlighted green. Country names link to `/world-cup/team`
-- Standings fetched once on page load from `/api/football?endpoint=standings` (5-min server cache). Pre-tournament the table shows "Standings not available yet"
-- A "Full standings table →" link at the bottom of the widget goes to `/world-cup/groups`
-- Helper functions (`bracketHelpers.ts`): `isPlaceholder()`, `parseGroupLetters()`, `formatPlaceholder()` — pure, tested, no Supabase dependency
+- **Placeholder labels**: DB stores `"Group A Winner"`, `"Group B Runner-up"`, `"3rd Place (A/B/C/D/F)"` for R32; `"Match 73 Winner"` / `"Match 101 Loser"` for R16 onward. Formatted as `"1st · Group A"`, `"2nd · Group B"`, `"Best 3rd · A / B / C / D / F"`; match-number references kept as-is (fall-through)
+- **Inline group standings widget (R32)**: each R32 match card shows a "See groups — Group A · Group B" toggle. Expands a compact P/W/D/L/Pts table per group with top-2 rows highlighted green. Country names link to `/world-cup/team`
+- **Drill-down for R16**: each R16 match card shows a `SourceMatchPanel` for each slot — expands to show the relevant R32 match with labels and, if those R32 teams are still placeholders, nested group widgets
+- **QF/SF/Final**: no automatic drill-down (placeholders are `"Match N Winner"` with no group reference)
+- **Venue display**: shown in match card header when `match.venue` is non-null
+- Standings fetched once on page load from `/api/football?endpoint=standings` (5-min server cache). Pre-tournament shows "Standings not available yet"
+- Helper functions (`bracketHelpers.ts`): `parseMatchNumber(name)` → number|null (handles `Match N Winner/Loser` and legacy `R32 M73 Winner`); `isPlaceholder(name)` (matches Winner/Loser/Runner-up/3rd Place/TBD/Group/Match/R32/QF/SF); `parseGroupLetters(name)` → string[]; `formatPlaceholder(name)` → readable label
+
+### Match numbering (global, by kickoff_at ascending, excl. Demo Match)
+- Matches 1–72: group stage
+- Matches 73–88: Round of 32
+- Matches 89–96: Round of 16
+- Matches 97–100: Quarter Finals
+- Matches 101–102: Semi Finals
+- Match 103: Third Place
+- Match 104: Final
+
+### Schedule data quality (master.sql / venue_updates.sql)
+- All 104 matches have `venue` populated (from official FIFA WC 2026 schedule)
+- All UTC kickoff times verified against official schedule; corrections applied June 2026
+- `supabase/venue_updates.sql` — safe UPDATE script for the live DB (no TRUNCATE); corrects kickoff times, team order, venues for group stage, and replaces knockout matches with correct data
 
 ---
 
@@ -473,7 +489,7 @@ npm run test:watch    # watch mode during development
 npm run test:coverage # coverage report
 ```
 
-### Test files (171 tests total across 10 suites)
+### Test files (177 tests total across 10 suites)
 | File | What it covers |
 |------|---------------|
 | `src/lib/__tests__/matchSchedule.test.ts` | Rolling 4-day window, isMatchLive, getDailyCode prefix/fallback, isValidOverrideCode |
@@ -485,7 +501,7 @@ npm run test:coverage # coverage report
 | `src/app/api/feedback/__tests__/route.test.ts` | Feedback POST validation, Supabase insert |
 | `src/app/api/admin/__tests__/auth.test.ts` | Admin password auth, mark_feedback_read |
 | `src/app/api/my-picks/__tests__/route.test.ts` | Entries + stats + scorerPick + winnerPick response; mock dispatches by table name (not call order) |
-| `src/app/world-cup/bracket/__tests__/helpers.test.ts` | isPlaceholder, parseGroupLetters (Group X Winner / Runner-up / 3rd Place / R32), formatPlaceholder output |
+| `src/app/world-cup/bracket/__tests__/helpers.test.ts` | parseMatchNumber (Match N Winner/Loser, legacy R32 M73), isPlaceholder, parseGroupLetters, formatPlaceholder |
 
 ### Run tests before pushing
 Always run `npm test` before `git push`. The build (`npm run build`) catches TypeScript errors; tests catch logic regressions.
