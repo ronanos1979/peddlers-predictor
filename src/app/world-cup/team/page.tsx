@@ -568,8 +568,60 @@ function TeamContent() {
               s === 'eliminated' ? t.pathEliminatedBadge :
               s === 'blocked' ? t.pathBlockedBadge : t.pathUpcomingBadge
 
+            const groupStageMatches = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage))
+
             return (
               <>
+                {/* Group stage results */}
+                {groupStageMatches.length > 0 && (
+                  <div style={{ marginBottom: 22 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                      {t.groupStage}
+                    </div>
+                    {groupStageMatches.map(match => {
+                      const isHome = match.home_team === localScheduleTeamName
+                      const opponent = isHome ? match.away_team : match.home_team
+                      const opponentFlag = isHome ? match.away_flag : match.home_flag
+                      const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
+                      const resultLabel = match.result ? resultMap[match.result] : null
+                      const borderColor = resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
+                      const resultColor = resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
+                      return (
+                        <div key={match.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '12px 14px', background: 'var(--surface)',
+                          border: `1px solid ${borderColor}`,
+                          borderRadius: 8, marginBottom: 6
+                        }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
+                              {match.stage}
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} />{opponent}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            {match.result ? (
+                              <>
+                                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
+                                  {isHome ? match.home_score : match.away_score} – {isHome ? match.away_score : match.home_score}
+                                </div>
+                                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor }}>
+                                  {resultLabel}
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>TBD</div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, marginTop: 0 }}>
                   {t.pathToFinalSub}
                 </p>
