@@ -1,11 +1,11 @@
-// "R32 M73 Winner" → 73,  "R32 M87 Winner" → 87,  anything else → null
+// "Match 73 Winner" → 73,  "Match 101 Loser" → 101,  "R32 M73 Winner" → 73 (legacy),  anything else → null
 export function parseMatchNumber(name: string): number | null {
-  const m = name.match(/M(\d+)\s*Winner/i)
+  const m = name.match(/(?:Match\s+|M)(\d+)\s+(?:Winner|Loser)/i)
   return m ? parseInt(m[1], 10) : null
 }
 
 export function isPlaceholder(name: string) {
-  return /\b(TBD|Winner|Runner-up|3rd Place|R32|QF|SF|Group)\b/i.test(name)
+  return /\b(TBD|Winner|Loser|Runner-up|3rd Place|R32|QF|SF|Group|Match)\b/i.test(name)
 }
 
 // Parse group letters out of a placeholder string

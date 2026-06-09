@@ -1,19 +1,23 @@
 import { parseGroupLetters, formatPlaceholder, isPlaceholder, parseMatchNumber } from '../bracketHelpers'
 
 describe('parseMatchNumber', () => {
-  it('extracts match number from R32 reference', () => {
+  it('extracts match number from Match N Winner format', () => {
+    expect(parseMatchNumber('Match 73 Winner')).toBe(73)
+    expect(parseMatchNumber('Match 87 Winner')).toBe(87)
+    expect(parseMatchNumber('Match 88 Winner')).toBe(88)
+  })
+  it('extracts match number from Match N Loser format (third place)', () => {
+    expect(parseMatchNumber('Match 101 Loser')).toBe(101)
+    expect(parseMatchNumber('Match 102 Loser')).toBe(102)
+  })
+  it('extracts match number from legacy R32 M73 format', () => {
     expect(parseMatchNumber('R32 M73 Winner')).toBe(73)
-    expect(parseMatchNumber('R32 M87 Winner')).toBe(87)
     expect(parseMatchNumber('R32 M88 Winner')).toBe(88)
   })
   it('returns null for group-based placeholders', () => {
     expect(parseMatchNumber('Group A Winner')).toBeNull()
     expect(parseMatchNumber('Group B Runner-up')).toBeNull()
     expect(parseMatchNumber('3rd Place (A/B/C/D/F)')).toBeNull()
-  })
-  it('returns null for QF/SF placeholders that have no match number', () => {
-    expect(parseMatchNumber('QF1 TBD')).toBeNull()
-    expect(parseMatchNumber('SF1 TBD')).toBeNull()
   })
   it('returns null for real team names', () => {
     expect(parseMatchNumber('USA')).toBeNull()
@@ -29,7 +33,11 @@ describe('isPlaceholder', () => {
   it('identifies 3rd place placeholders', () => {
     expect(isPlaceholder('3rd Place (A/B/C/D/F)')).toBe(true)
   })
-  it('identifies R32 cross-reference placeholders', () => {
+  it('identifies Match N Winner/Loser cross-reference placeholders', () => {
+    expect(isPlaceholder('Match 73 Winner')).toBe(true)
+    expect(isPlaceholder('Match 101 Loser')).toBe(true)
+  })
+  it('identifies legacy R32 cross-reference placeholders', () => {
     expect(isPlaceholder('R32 M73 Winner')).toBe(true)
   })
   it('does not flag real team names', () => {
@@ -52,9 +60,9 @@ describe('parseGroupLetters', () => {
     expect(parseGroupLetters('3rd Place (A/B/C/D/F)')).toEqual(['A', 'B', 'C', 'D', 'F'])
     expect(parseGroupLetters('3rd Place (E/H/I/J/K)')).toEqual(['E', 'H', 'I', 'J', 'K'])
   })
-  it('returns empty array for R32 cross-references', () => {
-    expect(parseGroupLetters('R32 M73 Winner')).toEqual([])
-    expect(parseGroupLetters('R32 M74 Winner')).toEqual([])
+  it('returns empty array for Match N cross-references', () => {
+    expect(parseGroupLetters('Match 73 Winner')).toEqual([])
+    expect(parseGroupLetters('Match 74 Winner')).toEqual([])
   })
   it('returns empty array for real team names', () => {
     expect(parseGroupLetters('USA')).toEqual([])
@@ -75,8 +83,9 @@ describe('formatPlaceholder', () => {
     expect(formatPlaceholder('3rd Place (A/B/C/D/F)')).toBe('Best 3rd · A / B / C / D / F')
     expect(formatPlaceholder('3rd Place (E/H/I/J/K)')).toBe('Best 3rd · E / H / I / J / K')
   })
-  it('returns R32 cross-references unchanged', () => {
-    expect(formatPlaceholder('R32 M73 Winner')).toBe('R32 M73 Winner')
+  it('returns Match N cross-references unchanged', () => {
+    expect(formatPlaceholder('Match 73 Winner')).toBe('Match 73 Winner')
+    expect(formatPlaceholder('Match 101 Loser')).toBe('Match 101 Loser')
   })
   it('is case-insensitive for group letters', () => {
     expect(formatPlaceholder('Group a Winner')).toBe('1st · Group A')
