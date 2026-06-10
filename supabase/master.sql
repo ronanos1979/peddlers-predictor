@@ -230,8 +230,8 @@ create policy "Public read player_cache"
 -- =============================================================
 
 insert into pubs (id, name, city, lat, lng, radius_m, daily_code) values
-  ('haverhill', 'The Peddler''s Daughter', 'Haverhill, MA', 42.7762, -71.0773, 300, 'PEDDLER1'),
-  ('nashua',    'The Peddler''s Daughter', 'Nashua, NH',    42.7654, -71.4676, 300, 'PEDDLER1')
+  ('haverhill', 'The Peddler''s Daughter', 'Haverhill, MA', 42.7762, -71.0773, 20, 'PEDDLER1'),
+  ('nashua',    'The Peddler''s Daughter', 'Nashua, NH',    42.7654, -71.4676, 20, 'PEDDLER1')
 on conflict (id) do nothing;
 
 -- =============================================================

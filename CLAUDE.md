@@ -240,7 +240,7 @@ Fully automatic based on datetime — no admin needed:
 - **Tournament Winner bonus**: 15 extra raffle entries if patron's World Cup Champion pick is correct — auto-scored when admin sets the Final result (see admin `set_result` action)
 
 ### Geolocation
-- Browser GPS check against pub lat/lng + radius_m (300m — must essentially be at the pub)
+- Browser GPS check against pub lat/lng + radius_m (20m — must essentially be at the pub)
 - If GPS is denied or unavailable: form shows a large prominent access code card — patron must enter today's code to proceed
   - Validated client-side via `isValidOverrideCode()` in `src/lib/matchSchedule.ts` (case-insensitive, accepts today's or yesterday's code)
   - On success: `geoStatus` advances to `'ok'` and the form unlocks

@@ -120,6 +120,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
         setGeoStatus('ok')
         setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(dist)}m from pub`)
         trackEvent('geo_verified', { pub_id: pubId, distance_m: Math.round(dist) })
+        try {
+          sessionStorage.setItem('peddlers_geo_ok', JSON.stringify({ type: 'geo', pubId: pub.id, lat, lng, dist, ts: Date.now() }))
+        } catch {}
       } else {
         setGeoStatus('fail')
         setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist))))
@@ -132,8 +135,45 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
     }
   }, [pub, isDemo, t.demoMode, t.locationVerified, t.locationDistanceFail, t.pubCodeRequired])
 
-  // Auto-verify for demo or when no pub (no location check needed)
-  useEffect(() => { if (isDemo || !pub) checkGeo() }, [isDemo, pub]) // eslint-disable-line
+  // Geo verification on mount — restore session cache, auto-check if permission granted, or show prompt
+  useEffect(() => {
+    if (isDemo || !pub) { checkGeo(); return }
+
+    // Restore a valid cached result from this session (TTL: 30 min)
+    try {
+      const raw = sessionStorage.getItem('peddlers_geo_ok')
+      if (raw) {
+        const cached = JSON.parse(raw)
+        if (Date.now() - cached.ts < 30 * 60 * 1000) {
+          setGeoStatus('ok')
+          if (cached.type === 'geo' && cached.dist != null) {
+            setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(cached.dist)}m from pub`)
+            if (cached.lat != null) setUserCoords({ lat: cached.lat, lng: cached.lng })
+            if (cached.dist != null) setUserDistance(cached.dist)
+          } else {
+            setGeoMessage(`📍 ${t.locationVerified}`)
+          }
+          return
+        }
+      }
+    } catch {}
+
+    // If permission already granted, skip the prompt and check silently
+    if (typeof navigator !== 'undefined' && navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' as PermissionName }).then(result => {
+        if (result.state === 'granted') {
+          setGeoStatus('checking')
+          setGeoMessage(t.checkingLocation)
+          checkGeo()
+        } else if (result.state === 'denied') {
+          setGeoStatus('geo_blocked')
+          setGeoMessage(t.geoUnavailable)
+          trackEvent('geo_blocked', { pub_id: pubId })
+        }
+        // 'prompt' → leave as 'prompt', show location card
+      }).catch(() => { /* Permissions API unavailable — show prompt card */ })
+    }
+  }, [isDemo, pub]) // eslint-disable-line
 
   const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
@@ -146,6 +186,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       setGeoMessage(`📍 ${t.locationVerified}`)
       setOverrideError('')
       trackEvent('code_verified', { pub_id: pubId })
+      try {
+        sessionStorage.setItem('peddlers_geo_ok', JSON.stringify({ type: 'code', ts: Date.now() }))
+      } catch {}
     } else {
       setOverrideError(t.invalidAccessCode)
       trackEvent('code_failed', { pub_id: pubId })

@@ -22,7 +22,21 @@
       "Bash(TMPDIR=/tmp npx jest *)",
       "Bash(TMPDIR=/tmp npm test)",
       "Bash(export CLAUDE_CODE_TMPDIR=/tmp)",
-      "Bash(grep -n \"Bracket page\\\\|bracket page\\\\|noMatchesRound\\\\|bracketTitle\" /Users/ronanosullivan/git/peddlers-predictor/CLAUDE.md)"
+      "Bash(grep -n \"Bracket page\\\\|bracket page\\\\|noMatchesRound\\\\|bracketTitle\" /Users/ronanosullivan/git/peddlers-predictor/CLAUDE.md)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=2048\" npx jest src/app/world-cup/team/__tests__/pathHelpers.test.ts --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPattern=\"pathHelpers\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"pathHelpers\" --no-coverage)",
+      "Bash(npx ts-node *)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"bracketHelpers\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"world-cup/bracket/__tests__\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"world-cup/team/__tests__\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- \"src/app/world-cup/team/__tests__/pathHelpers.test.ts\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"pathToFinalHelpers\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/matchSchedule\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/pathToFinal\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/\\(matchSchedule|pathToFinal\\)\" --no-coverage)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test *)"
     ]
   }
 }
