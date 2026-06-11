@@ -4,6 +4,7 @@ import { type Match } from '@/lib/supabase'
 import { isValidOverrideCode } from '@/lib/matchSchedule'
 import { loadPatron } from '@/lib/patron'
 import Flag from '@/components/Flag'
+import { useLocale } from '@/lib/useLocale'
 
 type Props = { pubId: string; match: Match; pubCity: string }
 
@@ -20,6 +21,7 @@ function normalizePhone(raw: string): string {
 }
 
 export default function CheckInCard({ pubId, match, pubCity }: Props) {
+  const { t } = useLocale()
   const [step, setStep] = useState<'idle' | 'form' | 'done'>('idle')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -45,7 +47,8 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
       .catch(() => {})
   }, [match.id, step])
 
-  const shareText = `🍺 Watching ${match.home_team} vs ${match.away_team} LIVE at The Peddler's Daughter in ${pubCity}!\n\nPlay the World Cup 2026 Predictor — predict every match and win! 🏆\nhttps://peddlers-predictor.vercel.app/?pub=${pubId}\n#WorldCup2026 #PeddlersDaughter`
+  const matchLabel = `${match.home_team} vs ${match.away_team}`
+  const shareText = `🍺 Watching ${matchLabel} LIVE at The Peddler's Daughter in ${pubCity}!\n\nPlay the World Cup 2026 Predictor — predict every match and win! 🏆\nhttps://peddlers-predictor.vercel.app/?pub=${pubId}\n#WorldCup2026 #PeddlersDaughter`
   const shareUrl = `https://peddlers-predictor.vercel.app/?pub=${pubId}`
 
   async function doShare(platform: string) {
@@ -69,13 +72,13 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
   async function handleSubmit() {
     setError('')
     if (!isValidOverrideCode(code)) {
-      setCodeError('Wrong pub code — ask your bartender')
+      setCodeError(t.checkInCodeError)
       return
     }
     setCodeError('')
     const digits = normalizePhone(phone)
-    if (digits.length !== 10) { setError('Enter a valid 10-digit US phone number'); return }
-    if (!name.trim()) { setError('Please enter your name'); return }
+    if (digits.length !== 10) { setError(t.enter10DigitPhone); return }
+    if (!name.trim()) { setError(t.checkInNameError); return }
 
     setSubmitting(true)
     try {
@@ -91,10 +94,10 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
         })
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Something went wrong'); setSubmitting(false); return }
+      if (!res.ok) { setError(data.error || t.networkError); setSubmitting(false); return }
       setStep('done')
     } catch {
-      setError('Network error — please try again')
+      setError(t.networkError)
       setSubmitting(false)
     }
   }
@@ -107,11 +110,11 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 6px var(--red)' }} />
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--red)' }}>
-            Live Now
+            {t.checkInLiveNow}
           </span>
           {checkinCount !== null && checkinCount > 0 && (
             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-              {checkinCount} checked in
+              {t.checkInCheckedCount.replace('{count}', String(checkinCount))}
             </span>
           )}
         </div>
@@ -128,10 +131,10 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
           style={{ background: 'var(--red)', borderColor: 'transparent', fontSize: 15 }}
           onClick={() => setStep('form')}
         >
-          🍺 Check In — Win a Prize!
+          {t.checkInCTA}
         </button>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
-          Present during the match? Check in for the attendance draw!
+          {t.checkInSubtext}
         </div>
       </div>
     )
@@ -142,16 +145,16 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
       <div className="card" style={{ marginBottom: 16, textAlign: 'center', border: '1px solid rgba(255,59,59,0.3)' }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>🍺</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 1, marginBottom: 6 }}>
-          You&apos;re checked in!
+          {t.checkInSuccessTitle}
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-          You&apos;re entered in the {match.home_team} vs {match.away_team} attendance draw.
-          {checkinCount !== null && checkinCount > 0 && ` ${checkinCount} total check-ins.`}
+          {t.checkInSuccessDetail.replace('{match}', matchLabel)}
+          {checkinCount !== null && checkinCount > 0 && ` ${t.checkInSuccessCount.replace('{count}', String(checkinCount))}`}
         </div>
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-            Share the match — spread the word!
+            {t.checkInShareTitle}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {'share' in navigator && (
@@ -160,7 +163,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
                 className="btn btn-primary"
                 style={{ fontSize: 15 }}
               >
-                {sharedVia === 'native' ? '✅ Shared!' : '📲 Share via Phone'}
+                {sharedVia === 'native' ? t.checkInShared : t.checkInSharePhone}
               </button>
             )}
             <div style={{ display: 'flex', gap: 8 }}>
@@ -168,7 +171,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
                 onClick={() => doShare('x')}
                 style={{ flex: 1, padding: '10px 8px', borderRadius: 8, border: '1px solid #333', background: '#000', color: '#fff', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
               >
-                𝕏 Post on X
+                {t.checkInShareX}
                 {sharedVia === 'x' && <span style={{ color: 'var(--green)' }}>✓</span>}
               </button>
               <button
@@ -183,7 +186,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
               onClick={() => doShare('copy')}
               style={{ padding: '10px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, cursor: 'pointer' }}
             >
-              {sharedVia === 'copy' ? '✅ Copied!' : '📋 Copy text for Instagram'}
+              {sharedVia === 'copy' ? t.checkInCopied : t.checkInCopyInsta}
             </button>
           </div>
         </div>
@@ -200,34 +203,34 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
     <div className="card" style={{ marginBottom: 16, border: '1px solid rgba(255,59,59,0.3)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 6px var(--red)' }} />
-        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--red)' }}>Check In</span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--red)' }}>{t.checkInTitle}</span>
         <button
           onClick={() => setStep('idle')}
           style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0 }}
         >✕</button>
       </div>
       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
-        Enter your details to join the attendance draw for <strong style={{ color: 'var(--text)' }}>{match.home_team} vs {match.away_team}</strong>.
+        {t.checkInFormIntro.replace('{match}', matchLabel)}
       </div>
 
       <div className="field">
-        <label>Your Name</label>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" />
+        <label>{t.checkInNameLabel}</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder={t.checkInNamePlaceholder} />
       </div>
       <div className="field">
-        <label>Phone <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(for prize contact)</span></label>
-        <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))} type="tel" placeholder="(555) 867-5309" inputMode="numeric" />
+        <label>{t.phoneNumber} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInPhoneNote}</span></label>
+        <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))} type="tel" placeholder={t.phonePlaceholder} inputMode="numeric" />
       </div>
       <div className="field">
-        <label>Email <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional — to email you if you win)</span></label>
-        <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="your@email.com" />
+        <label>{t.email} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInEmailNote}</span></label>
+        <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder={t.emailPlaceholder} />
       </div>
       <div className="field">
-        <label>Today&apos;s Pub Code <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(ask bar staff)</span></label>
+        <label>{t.checkInCodeLabel} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInCodeNote}</span></label>
         <input
           value={code}
           onChange={e => { setCode(e.target.value); setCodeError('') }}
-          placeholder="e.g. peddlers12"
+          placeholder={t.checkInCodePlaceholder}
           autoComplete="off"
           style={{ fontSize: 18, letterSpacing: 2, textTransform: 'lowercase' }}
         />
@@ -242,7 +245,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
         onClick={handleSubmit}
         style={{ background: canSubmit ? 'var(--red)' : undefined, borderColor: canSubmit ? 'transparent' : undefined }}
       >
-        {submitting ? 'Checking in…' : '🍺 Check In!'}
+        {submitting ? t.checkInSubmitting : t.checkInSubmitBtn}
       </button>
     </div>
   )

@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
           .from('matches').select('checkin_winner_name').eq('id', match_id).single()
         if (!match?.checkin_winner_name) {
           const { data: checkins } = await supabaseAdmin
-            .from('check_ins').select('name, phone, email').eq('match_id', match_id)
+            .from('check_ins').select('name, phone, email, pub_id').eq('match_id', match_id)
           if (checkins && checkins.length >= minDraw) {
             const winner = checkins[Math.floor(Math.random() * checkins.length)]
             await supabaseAdmin.from('matches').update({
@@ -82,24 +82,30 @@ export async function POST(req: NextRequest) {
               checkin_draw_at: new Date().toISOString(),
             }).eq('id', match_id)
             checkinDraw = { winner_name: winner.name, winner_phone: winner.phone }
-            // Email winner if they provided address
-            if (winner.email && process.env.RESEND_API_KEY) {
+            if (process.env.RESEND_API_KEY) {
               const { data: matchData } = await supabaseAdmin
                 .from('matches').select('home_team, away_team').eq('id', match_id).single()
               const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
+              const matchLabel = matchData ? `${matchData.home_team} vs ${matchData.away_team}` : 'tonight\'s match'
+              const pubLabel = winner.pub_id === 'haverhill' ? 'Haverhill' : winner.pub_id === 'nashua' ? 'Nashua' : winner.pub_id || 'Unknown'
               await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  from, to: winner.email,
-                  subject: `🏆 You won the attendance draw at The Peddler's Daughter!`,
+                  from,
+                  to: ['ronan.osullivan@ronanos.com', 'mike@thepeddlersdaughter.com'],
+                  subject: `🏆 Attendance Draw Winner — ${matchLabel}`,
                   html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
                     <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
-                    <div style="font-size:28px;font-weight:900;color:#FF9500;margin-bottom:16px;">🏆 You Won!</div>
-                    <p style="font-size:15px;margin:0 0 12px;">Hi ${winner.name.split(' ')[0]},</p>
-                    <p style="font-size:14px;color:#aaa;margin:0 0 16px;line-height:1.6;">Congratulations — you've been drawn as the <strong style="color:#f0ede8;">attendance draw winner</strong> for${matchData ? ` <strong>${matchData.home_team} vs ${matchData.away_team}</strong>` : ' tonight\'s match'}!</p>
-                    <p style="font-size:14px;color:#aaa;margin:0 0 24px;line-height:1.6;">Please visit the bar to claim your prize. 🍺</p>
-                    <p style="font-size:12px;color:#555;">The Peddler's Daughter · Haverhill MA &amp; Nashua NH</p>
+                    <div style="font-size:24px;font-weight:900;color:#FF9500;margin-bottom:4px;">🏆 Attendance Draw Winner</div>
+                    <div style="font-size:14px;color:#aaa;margin-bottom:20px;">${matchLabel} · ${pubLabel}</div>
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;width:70px;">Name</td><td style="padding:8px 0;font-size:15px;font-weight:700;">${winner.name}</td></tr>
+                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Phone</td><td style="padding:8px 0;font-size:14px;">${winner.phone}</td></tr>
+                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Email</td><td style="padding:8px 0;font-size:14px;">${winner.email || 'Not provided'}</td></tr>
+                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Pub</td><td style="padding:8px 0;font-size:14px;">${pubLabel}</td></tr>
+                    </table>
+                    <p style="font-size:12px;color:#555;">Auto-draw triggered by check-in threshold · The Peddler's Daughter</p>
                   </div>`
                 })
               }).catch(() => {})
@@ -210,7 +216,7 @@ export async function POST(req: NextRequest) {
     if (action === 'draw_checkin_winner') {
       const { match_id } = payload
       const { data: checkins } = await supabaseAdmin
-        .from('check_ins').select('name, phone, email').eq('match_id', match_id)
+        .from('check_ins').select('name, phone, email, pub_id').eq('match_id', match_id)
       if (!checkins?.length) {
         return NextResponse.json({ error: 'No check-ins for this match' }, { status: 400 })
       }
@@ -220,29 +226,37 @@ export async function POST(req: NextRequest) {
         checkin_winner_phone: winner.phone,
         checkin_draw_at: new Date().toISOString(),
       }).eq('id', match_id)
-      // Email winner if provided
-      if (winner.email && process.env.RESEND_API_KEY) {
+      let emailed = false
+      if (process.env.RESEND_API_KEY) {
         const { data: matchData } = await supabaseAdmin
           .from('matches').select('home_team, away_team').eq('id', match_id).single()
         const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
+        const matchLabel = matchData ? `${matchData.home_team} vs ${matchData.away_team}` : 'tonight\'s match'
+        const pubLabel = winner.pub_id === 'haverhill' ? 'Haverhill' : winner.pub_id === 'nashua' ? 'Nashua' : winner.pub_id || 'Unknown'
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from, to: winner.email,
-            subject: `🏆 You won the attendance draw at The Peddler's Daughter!`,
+            from,
+            to: ['ronan.osullivan@ronanos.com', 'mike@thepeddlersdaughter.com'],
+            subject: `🏆 Attendance Draw Winner — ${matchLabel}`,
             html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
               <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
-              <div style="font-size:28px;font-weight:900;color:#FF9500;margin-bottom:16px;">🏆 You Won!</div>
-              <p style="font-size:15px;margin:0 0 12px;">Hi ${winner.name.split(' ')[0]},</p>
-              <p style="font-size:14px;color:#aaa;margin:0 0 16px;line-height:1.6;">You've been drawn as the <strong style="color:#f0ede8;">attendance draw winner</strong> for${matchData ? ` <strong>${matchData.home_team} vs ${matchData.away_team}</strong>` : ' tonight\'s match'}!</p>
-              <p style="font-size:14px;color:#aaa;margin:0 0 24px;line-height:1.6;">Please visit the bar to claim your prize. 🍺</p>
-              <p style="font-size:12px;color:#555;">The Peddler's Daughter · Haverhill MA &amp; Nashua NH</p>
+              <div style="font-size:24px;font-weight:900;color:#FF9500;margin-bottom:4px;">🏆 Attendance Draw Winner</div>
+              <div style="font-size:14px;color:#aaa;margin-bottom:20px;">${matchLabel} · ${pubLabel}</div>
+              <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                <tr><td style="padding:8px 0;color:#777770;font-size:13px;width:70px;">Name</td><td style="padding:8px 0;font-size:15px;font-weight:700;">${winner.name}</td></tr>
+                <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Phone</td><td style="padding:8px 0;font-size:14px;">${winner.phone}</td></tr>
+                <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Email</td><td style="padding:8px 0;font-size:14px;">${winner.email || 'Not provided'}</td></tr>
+                <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Pub</td><td style="padding:8px 0;font-size:14px;">${pubLabel}</td></tr>
+              </table>
+              <p style="font-size:12px;color:#555;">Manual draw · The Peddler's Daughter</p>
             </div>`
           })
         }).catch(() => {})
+        emailed = true
       }
-      return NextResponse.json({ success: true, winner_name: winner.name, winner_phone: winner.phone, emailed: !!winner.email })
+      return NextResponse.json({ success: true, winner_name: winner.name, winner_phone: winner.phone, emailed })
     }
 
     if (action === 'delete_entry') {
