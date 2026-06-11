@@ -126,6 +126,9 @@ function normName(s: string): string {
 async function resolveAfTeamId(scheduleName: string): Promise<number | null> {
   const norm    = scheduleName.toLowerCase().trim()
   const aliased = NAME_ALIASES[norm] || norm
+  // Use normName (NFD accent-strip) so e.g. "Curaçao"→"curacao", "Côte d'Ivoire"→"cote d ivoire"
+  const normN   = normName(norm)
+  const normA   = normName(aliased)
 
   let wcTeams: Array<{ team: { id: number; name: string; national?: boolean } }> = []
   try {
@@ -138,21 +141,26 @@ async function resolveAfTeamId(scheduleName: string): Promise<number | null> {
   }
 
   let found = wcTeams.find(t => {
-    const n = t.team.name.toLowerCase()
-    return n === aliased || n === norm
+    const n = normName(t.team.name)
+    return n === normA || n === normN
   })
   if (found) return found.team.id
 
-  const searchTerm = aliased.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
-  const sd = await afFetch('teams', { search: searchTerm })
-  const candidates = (sd.response || []) as typeof wcTeams
-  let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
-  if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
-  found = pool.find(t => {
-    const n = t.team.name.toLowerCase()
-    return n === aliased || n === norm
-  }) || pool[0]
-  return found?.team.id ?? null
+  // Search with aliased name first, then original schedule name if different (e.g. "ivory coast"
+  // alias is "côte d'ivoire" for FD but AF lists them as "Ivory Coast")
+  const searchTerms = Array.from(new Set([normA, normN]))
+  for (let i = 0; i < searchTerms.length; i++) {
+    const sd = await afFetch('teams', { search: searchTerms[i] })
+    const candidates = (sd.response || []) as typeof wcTeams
+    let pool = candidates.filter(t => t.team.national === true && !YOUTH_RE.test(t.team.name))
+    if (pool.length === 0) pool = candidates.filter(t => !YOUTH_RE.test(t.team.name))
+    found = pool.find(t => {
+      const n = normName(t.team.name)
+      return n === normA || n === normN
+    }) || (i === searchTerms.length - 1 ? pool[0] : undefined)
+    if (found) return found.team.id
+  }
+  return null
 }
 
 // ── Match FD player list against AF squad by name (4 strategies) ─────────────
