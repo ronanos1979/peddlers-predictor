@@ -118,14 +118,14 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       setUserDistance(dist)
       if (dist <= pub.radius_m) {
         setGeoStatus('ok')
-        setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(dist)}m from pub`)
+        setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(dist * 3.28084)}ft from pub`)
         trackEvent('geo_verified', { pub_id: pubId, distance_m: Math.round(dist) })
         try {
           sessionStorage.setItem('peddlers_geo_ok', JSON.stringify({ type: 'geo', pubId: pub.id, lat, lng, dist, ts: Date.now() }))
         } catch {}
       } else {
         setGeoStatus('fail')
-        setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist))))
+        setGeoMessage(t.locationDistanceFail.replace('{distance}', String(Math.round(dist * 3.28084))))
         trackEvent('geo_too_far', { pub_id: pubId, distance_m: Math.round(dist) })
       }
     } catch {
@@ -147,7 +147,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
         if (Date.now() - cached.ts < 30 * 60 * 1000) {
           setGeoStatus('ok')
           if (cached.type === 'geo' && cached.dist != null) {
-            setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(cached.dist)}m from pub`)
+            setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(cached.dist * 3.28084)}ft from pub`)
             if (cached.lat != null) setUserCoords({ lat: cached.lat, lng: cached.lng })
             if (cached.dist != null) setUserDistance(cached.dist)
           } else {
@@ -557,14 +557,20 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               {overrideError && (
                 <p className="error" style={{ marginBottom: 0, marginTop: 8 }}>{overrideError}</p>
               )}
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  {t.atPubTap} <strong>{t.allowWord}</strong> {t.inBrowserSettings}
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', fontWeight: 700, marginBottom: 8, letterSpacing: 0.3 }}>
+                  {t.enableLocationTitle}
                 </div>
+                <ul style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px 0', padding: '0 0 0 16px', lineHeight: 1.8 }}>
+                  <li>{t.locationStepIphone}</li>
+                  <li>{t.locationStepIphoneChrome}</li>
+                  <li>{t.locationStepAndroid}</li>
+                  <li>{t.locationStepOther}</li>
+                </ul>
                 <button
                   type="button"
                   onClick={() => { setGeoStatus('checking'); setGeoMessage(t.checkingLocation); checkGeo() }}
-                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 14px' }}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 14px', display: 'block', margin: '0 auto' }}
                 >
                   {t.tryLocationAgain}
                 </button>
