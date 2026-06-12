@@ -7,8 +7,8 @@ type Fixture = {
   fixture: { id: number; date: string; venue: { name: string; city: string } | null }
   league: { round: string }
   teams: { home: { name: string; logo: string }; away: { name: string; logo: string } }
-  goals: { home: number | null; away: number | null }
-  score: { fulltime: { home: number | null; away: number | null } }
+  goals: { home: number | null; away: number | null } | null
+  score: { fulltime: { home: number | null; away: number | null } | null } | null
 }
 
 export default function ResultsPage() {
@@ -80,8 +80,8 @@ export default function ResultsPage() {
       )}
 
       {filtered.map(f => {
-        const home = f.score.fulltime.home ?? f.goals.home
-        const away = f.score.fulltime.away ?? f.goals.away
+        const home = f.score?.fulltime?.home ?? f.goals?.home ?? null
+        const away = f.score?.fulltime?.away ?? f.goals?.away ?? null
         const homeWon = home !== null && away !== null && home > away
         const awayWon = home !== null && away !== null && away > home
         return (

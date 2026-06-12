@@ -480,6 +480,25 @@ export const translations = {
     yourPickAnnotation: '← your pick',
     backToWCHub: '← World Cup Hub',
 
+    // Golden Boot community picks page
+    goldenBootCommunityNavLabel: 'Golden Boot Picks',
+    goldenBootCommunityNavDesc: 'Who does the pub back?',
+    goldenBootCommunityTitle: "Who's Getting the Golden Boot?",
+    goldenBootCommunitySectionLabel: '🎯 Community Picks',
+    pickedTopScorer: 'picked a Golden Boot winner',
+    noScorerPicksYet: 'No Golden Boot picks yet',
+    beFirstScorerPick: 'Be the first to pick the top scorer!',
+    makeYourScorerPickBtn: '🎯 Pick Your Golden Boot →',
+
+    // Leaderboard community picks section
+    communityBonusPicks: 'Community Bonus Picks',
+    bonusPicksSub: 'See what the pub is backing — and earn bonus tickets',
+    champPicksLabel: '🏆 Champion',
+    goldenBootPicksLabel: '🎯 Golden Boot',
+    seeAllPicks: 'See all →',
+    vote: 'vote',
+    votes: 'votes',
+
     // Entry Form
     verifyAtPub: "Verify you're at the pub",
     locationExplanation: "We check your GPS to confirm you're playing from The Peddler's Daughter. Your location is not stored or shared.",
@@ -1018,6 +1037,25 @@ export const translations = {
     makeYourPickArrow: 'Haz tu elección →',
     yourPickAnnotation: '← tu elección',
     backToWCHub: '← Centro del Mundial',
+
+    // Golden Boot community picks page
+    goldenBootCommunityNavLabel: 'Picks Bota de Oro',
+    goldenBootCommunityNavDesc: '¿A quién apoya el pub?',
+    goldenBootCommunityTitle: '¿Quién Ganará la Bota de Oro?',
+    goldenBootCommunitySectionLabel: '🎯 Picks del Público',
+    pickedTopScorer: 'han elegido un ganador de la Bota de Oro',
+    noScorerPicksYet: 'Sin picks de Bota de Oro aún',
+    beFirstScorerPick: '¡Sé el primero en elegir al máximo goleador!',
+    makeYourScorerPickBtn: '🎯 Elegir tu Bota de Oro →',
+
+    // Leaderboard community picks section
+    communityBonusPicks: 'Picks de Bonus de la Comunidad',
+    bonusPicksSub: 'Ve qué apoya el pub — y gana boletos de bonus',
+    champPicksLabel: '🏆 Campeón',
+    goldenBootPicksLabel: '🎯 Bota de Oro',
+    seeAllPicks: 'Ver todo →',
+    vote: 'voto',
+    votes: 'votos',
 
     // Entry Form
     verifyAtPub: 'Verifica que estás en el pub',

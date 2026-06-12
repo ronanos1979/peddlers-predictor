@@ -13,6 +13,7 @@ type LeaderEntry = {
 }
 
 type AttendanceEntry = { name: string; pub_id: string; match_count: number }
+type TopPick = { label: string; flag?: string; count: number }
 
 function LeaderboardContent() {
   const { t } = useLocale()
@@ -26,12 +27,16 @@ function LeaderboardContent() {
   const [loading, setLoading] = useState(true)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState('')
+  const [topChampion, setTopChampion] = useState<TopPick | null>(null)
+  const [topScorer, setTopScorer] = useState<TopPick | null>(null)
 
   async function load() {
-    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }] = await Promise.all([
+    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
       supabase.from('matches').select('*').eq('is_active', true).single(),
       supabase.from('entries').select('*').order('created_at', { ascending: false }),
       supabase.from('winner_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
+      supabase.from('winner_picks').select('team_name, team_flag'),
+      supabase.from('scorer_picks').select('player_name, player_team'),
     ])
     setMatch(matchData)
     if (rawEntries) {
@@ -51,6 +56,29 @@ function LeaderboardContent() {
       setEntries(sorted)
       setLastUpdated(new Date().toLocaleTimeString())
     }
+
+    // Aggregate top champion pick
+    if (winnerPicksData && winnerPicksData.length > 0) {
+      const wCounts: Record<string, { flag: string; count: number }> = {}
+      winnerPicksData.forEach((p: { team_name: string; team_flag: string }) => {
+        if (!wCounts[p.team_name]) wCounts[p.team_name] = { flag: p.team_flag, count: 0 }
+        wCounts[p.team_name].count++
+      })
+      const topW = Object.entries(wCounts).sort((a, b) => b[1].count - a[1].count)[0]
+      if (topW) setTopChampion({ label: topW[0], flag: topW[1].flag, count: topW[1].count })
+    }
+
+    // Aggregate top scorer pick
+    if (scorerPicksData && scorerPicksData.length > 0) {
+      const sCounts: Record<string, { team: string; count: number }> = {}
+      scorerPicksData.forEach((p: { player_name: string; player_team: string }) => {
+        if (!sCounts[p.player_name]) sCounts[p.player_name] = { team: p.player_team || '', count: 0 }
+        sCounts[p.player_name].count++
+      })
+      const topS = Object.entries(sCounts).sort((a, b) => b[1].count - a[1].count)[0]
+      if (topS) setTopScorer({ label: topS[0], count: topS[1].count })
+    }
+
     setLoading(false)
   }
 
@@ -209,6 +237,44 @@ function LeaderboardContent() {
             ))
           )}
         </>
+      )}
+
+      {/* Community Bonus Picks */}
+      {view === 'predictions' && (topChampion || topScorer) && (
+        <div style={{ marginTop: 20, padding: '16px', background: 'linear-gradient(135deg, #0f1a00, #1a1200)', borderRadius: 'var(--radius)', border: '1px solid rgba(245,197,24,0.2)' }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
+            {t.communityBonusPicks}
+          </div>
+          <p style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t.bonusPicksSub}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {topChampion && (
+              <Link href="/world-cup/winner-picks" style={{ textDecoration: 'none', background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: '10px 12px', border: '1px solid rgba(245,197,24,0.15)', display: 'block' }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 4 }}>{t.champPicksLabel}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {topChampion.flag && <span style={{ fontSize: 20 }}>{topChampion.flag}</span>}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--gold)' }}>{topChampion.label}</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)' }}>{topChampion.count} {topChampion.count === 1 ? t.vote : t.votes}</div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--green)', marginTop: 6 }}>{t.seeAllPicks}</div>
+              </Link>
+            )}
+            {topScorer && (
+              <Link href="/world-cup/scorer-picks" style={{ textDecoration: 'none', background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: '10px 12px', border: '1px solid rgba(245,197,24,0.15)', display: 'block' }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 4 }}>{t.goldenBootPicksLabel}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 20 }}>⚽</span>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--gold)' }}>{topScorer.label}</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)' }}>{topScorer.count} {topScorer.count === 1 ? t.vote : t.votes}</div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--green)', marginTop: 6 }}>{t.seeAllPicks}</div>
+              </Link>
+            )}
+          </div>
+        </div>
       )}
 
       {view === 'predictions' && (
