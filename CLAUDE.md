@@ -170,7 +170,11 @@ src/
 │   │   ├── team/page.tsx           # Team profile — squad, manager, fixtures
 │   │   ├── top-scorer-pick/page.tsx # Patron picks Golden Boot winner (+10 bonus tickets)
 │   │   ├── winner-pick/page.tsx    # Patron picks World Cup Champion (+15 bonus tickets, locked once submitted)
-│   │   └── winner-picks/page.tsx  # Community champion picks — team vote counts, progress bars, pub breakdown
+│   │   ├── winner-picks/page.tsx   # Community champion picks — team vote counts, progress bars, pub breakdown
+│   │   └── scorer-picks/page.tsx   # Community Golden Boot picks — player vote tally, progress bars, your pick highlight
+│   ├── admin/
+│   │   ├── page.tsx                # Admin panel — set results, view entrants, stats, feedback, check-ins
+│   │   └── checkins/page.tsx       # Admin check-ins page — filter by date/pub, by-match list, most attended leaderboard
 │   └── api/
 │       ├── entries/route.ts        # POST — validate and save match prediction
 │       ├── matches/route.ts        # GET — active match
@@ -179,13 +183,15 @@ src/
 │       ├── admin-data/route.ts     # GET — stats, entrants, feedback, CSV export (auth)
 │       ├── admin-teams/route.ts    # GET — 48-team cache status; POST — load_fd, enrich_af (auth)
 │       ├── analytics/route.ts      # POST — log analytics event (public, rate-limited); GET — admin read (password header)
+│       ├── checkin-leaders/route.ts # GET — public aggregated check-in leaderboard (name, pub, match_count — no phone/email)
 │       ├── feedback/route.ts       # POST — public feedback/bug report submission
 │       ├── my-picks/route.ts       # GET — patron's picks by phone
-│       ├── football/route.ts       # GET — football data proxy (FD primary, AF fallback, 5min cache)
+│       ├── football/route.ts       # GET — football data proxy (FD primary, AF fallback, 5min cache); ?bust=1 skips cache
 │       ├── team/route.ts           # GET — team data with 60-day Supabase cache
 │       └── send-reminder/route.ts  # POST — email reminder to all patrons via Resend (admin auth)
 ├── components/
-│   ├── EntryForm.tsx               # Match prediction form — geo check, access-code override, score steppers
+│   ├── CheckInCard.tsx             # Live match check-in card — fully i18n'd (all strings via t.checkInXxx keys)
+│   ├── EntryForm.tsx               # Match prediction form — geo check (200m/656ft), feet display, location instructions, report link
 │   ├── Flag.tsx                    # Renders flag emoji via flagcdn.com PNG (fixes Windows text fallback)
 │   ├── HeaderLocation.tsx          # Pub switcher in sticky header — both pubs shown, active highlighted, clickable
 │   ├── LangSwitcher.tsx            # EN/ES toggle buttons in header
@@ -240,13 +246,16 @@ Fully automatic based on datetime — no admin needed:
 - **Tournament Winner bonus**: 15 extra raffle entries if patron's World Cup Champion pick is correct — auto-scored when admin sets the Final result (see admin `set_result` action)
 
 ### Geolocation
-- Browser GPS check against pub lat/lng + radius_m (20m — must essentially be at the pub)
+- Browser GPS check against pub lat/lng + `radius_m` — currently **200m (~656ft)** in `pubData.ts` (expanded from 20m to accommodate GPS variance)
+- Distance is displayed to the patron in **feet** (not metres) — `distanceMetres() * 3.28084`
 - If GPS is denied or unavailable: form shows a large prominent access code card — patron must enter today's code to proceed
   - Validated client-side via `isValidOverrideCode()` in `src/lib/matchSchedule.ts` (case-insensitive, accepts today's or yesterday's code)
   - On success: `geoStatus` advances to `'ok'` and the form unlocks
   - The code prefix is controlled by `NEXT_PUBLIC_DAILY_CODE_PREFIX` env var — must be set in `.env.local` and Vercel
 - `geoStatus` type: `'checking' | 'ok' | 'fail' | 'geo_blocked'` — submit is only enabled when status is `'ok'`
+- On `geo_blocked` or `fail` states: "Report a location problem" link pre-fills the feedback form with distance, pub ID, and browser user agent
 - Demo page skips geo check entirely
+- **Location instructions**: `geo_blocked` card shows step-by-step instructions for enabling location on iPhone Safari, iPhone Chrome, Android, and Other — keys: `locationStepIphone`, `locationStepIphoneChrome`, `locationStepAndroid`, `locationStepOther`
 
 ### Pub selection
 - On first visit (no `?pub=` param, no saved preference): GPS auto-detects nearest pub using `distanceMetres()` from `geo.ts`
@@ -302,8 +311,10 @@ The app uses **football-data.org (FD) as primary** and **API-Football (AF) for p
 ### Proxy route: `/api/football`
 - Keeps both API keys server-side
 - 5-minute in-memory cache (shared, caches adapted response regardless of source)
+- `?bust=1` query param skips the cache — used by the admin "Reload results page cache" button
 - For `standings`, `fixtures`, `players/topscorers`, `teams` (list) — tries FD first, falls back to AF
 - For `players/squads`, `coaches`, `players` — AF only (FD free tier doesn't cover these)
+- **`endpoint=match&team={fdMatchId}`** — fetches `/v4/matches/{id}` for a single match's full event data (goals + bookings). The competition batch endpoint returns empty `goals`/`bookings` arrays even for finished matches; always use this single-match endpoint for scorers and cards.
 
 ### Team data route: `/api/team` (cache-only)
 - Reads squad from `player_cache`, teamInfo/coach/fixtures from `team_cache.data`, local schedule from `matches`
@@ -366,11 +377,12 @@ Before June 11, 2026:
 | Query param | Primary source | Fallback | Returns |
 |-------------|---------------|---------|---------|
 | `endpoint=standings` | FD | AF | Group tables |
-| `endpoint=fixtures&status=FT` | FD | AF | Completed matches |
+| `endpoint=fixtures&status=FT` | FD | AF | Completed matches (score only — no events) |
 | `endpoint=fixtures&team=ID` | FD | AF | Team's matches |
 | `endpoint=players/topscorers` | FD | AF | Golden Boot |
 | `endpoint=teams` (list) | FD only | — | WC team list (AF IDs incompatible with team_cache) |
 | `endpoint=teams&team=ID` | AF only | — | Single team info |
+| `endpoint=match&team={matchId}` | FD only | — | Single match full events (goals + bookings) |
 | `endpoint=players/squads&team=ID` | AF only | — | Squad |
 | `endpoint=coaches&team=ID` | AF only | — | Manager info |
 
@@ -422,15 +434,18 @@ Print and laminate for tables:
 ### Admin panel features
 - **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
   - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp, sets result + score, and scores all entries automatically. Reports how many matches updated and entries scored.
+  - **"⟳ Reload results page cache"** button — busts the 5-minute server cache so the public Results page shows fresh data (goal scorers, cards) immediately after a match finishes.
   - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming
   - **Auto-scores `winner_picks` when stage is 'Final'**: after setting the Final result, the `set_result` action automatically sets `is_correct=true, raffle_entries=15` for the champion pick and `is_correct=false, raffle_entries=0` for all other pending winner_picks
   - Email reminders: select upcoming matches and send match-day emails to all patrons who provided an email
+  - **Winner draw email**: when the raffle winner is drawn (auto or manual), an email is sent to `ronan.osullivan@ronanos.com` and `mike@thepeddlersdaughter.com` with the winner's name, phone, email, and pub — NOT emailed to the winner directly
 - **Entrants tab**: filterable by date, shows name/phone/email/pick/result, CSV export button
 - **Stats tab**: total entries, unique players, emails collected, bar chart by day split by pub
 - **Feedback tab**: bug reports and feedback from patrons, unread count badge, mark-as-read per item
 - **Raffle tab**: weighted draw — 1 ticket per correct result, 3 tickets if exact score also correct; filterable by pub
 - **Teams tab**: 48-team cache status — fd_loaded flag, player/photo/club counts; "Load FD" and "Load photos & clubs" (AF enrichment) buttons per team; "Load all from FD" sequential bulk loader
 - **Analytics tab**: patron behaviour dashboard — geo funnel (verified/too_far/blocked/code), engagement (returning visits, leaderboard views, my-picks views), conversions (submissions vs abandoned), prediction detail (new vs returning, score guesses, email rate, pick distribution); time range selector (7d/30d/90d); Haverhill vs Nashua column split
+- **Check-ins page** (`/admin/checkins`): separate page — filter by date and pub; "📋 By Match" view shows all check-ins per match (expandable); "🏆 Most Attended" shows patron attendance leaderboard with phone/email visible (admin only)
 
 ### Admin session persistence
 - Password and auth state saved in `sessionStorage` (`admin_pw`, `admin_authed`) — survives page refresh but clears when the tab is closed
@@ -450,9 +465,33 @@ Print and laminate for tables:
 - **GoldenBootCallout**: gold card after matches, prompts patron to pick a Golden Boot scorer — disappears once they have a scorer_pick
 - **WinnerPickCallout**: green card after matches, prompts patron to pick the World Cup Champion — disappears once they have a winner_pick
 - **Match predictions** appear before the callouts and nav grid
-- **Access code card** (`EntryForm.tsx`, `geoStatus === 'geo_blocked'`): large prominent card with gold border, key icon, "Ask bar staff for today's code" instruction, full-width verify button — shown when GPS is unavailable
+- **Access code card** (`EntryForm.tsx`, `geoStatus === 'geo_blocked'`): large prominent card with gold border, key icon, "Ask bar staff for today's code" instruction, full-width verify button — shown when GPS is unavailable. Also shows step-by-step location enable instructions (iPhone Safari, iPhone Chrome, Android, Other) and a "Report a location problem" link that pre-fills the feedback form.
+- **Geo fail state**: shows distance in feet, "Report a location problem" link pre-filled with distance, pub, and browser info
 
 ---
+
+## Leaderboard UX (`/leaderboard`)
+
+- **Predictions tab**: ranked by total raffle tickets (match entries + winner pick bonus); shows last pick result per patron
+- **🍺 Most Attended tab**: ranked by number of match check-ins; data from `/api/checkin-leaders` (public, no private data); lazy-loaded on first tab switch
+- **"What the Pub is Backing" section**: shown at the bottom of the predictions tab when at least one bonus pick exists — two cards showing the leading World Cup Winner pick and Golden Boot pick, with vote counts and links to the full community pages (`/world-cup/winner-picks` and `/world-cup/scorer-picks`)
+- Pub filter ("All locations" / "This pub") applies to both tabs
+
+## Results Page UX (`/world-cup/results`)
+
+- Shows all completed matches from football-data.org, newest first, filterable by stage
+- Each match card shows team logos, score, and venue
+- **"Show scorers & cards" button** per match: lazy-fetches events from `/api/football?endpoint=match&team={id}&bust=1` (single match endpoint — the competition batch does not return events)
+- Events shown split home/away: goals with minute, own goal and penalty markers; yellow and red card rows below
+- Reload button is **admin-only** (in Results tab) — not shown to patrons
+
+## Scorer Picks Page UX (`/world-cup/scorer-picks`)
+
+- Shows community Golden Boot vote tally — ranked player list with progress bars
+- Matches player names against `GOLDEN_BOOT_CONTENDERS` for flag emoji (falls back to 🌍)
+- Highlights "your pick" if patron's cookie matches a pick
+- CTA to `/world-cup/top-scorer-pick` for patrons who haven't picked yet
+- Linked from WC hub nav and leaderboard community section
 
 ## Bracket Page UX (`/world-cup/bracket`)
 
@@ -489,12 +528,13 @@ npm run test:watch    # watch mode during development
 npm run test:coverage # coverage report
 ```
 
-### Test files (177 tests total across 10 suites)
+### Test files (194 tests total across 11 suites)
 | File | What it covers |
 |------|---------------|
 | `src/lib/__tests__/matchSchedule.test.ts` | Rolling 4-day window, isMatchLive, getDailyCode prefix/fallback, isValidOverrideCode |
 | `src/lib/__tests__/teamResolution.test.ts` | Name aliases, youth team filter, WC list resolution, search resolution, cache validation |
 | `src/lib/__tests__/goldenBootContenders.test.ts` | Contender list — 10 players, required fields, no duplicates, WC nations |
+| `src/lib/__tests__/pathToFinalHelpers.test.ts` | Path to Final helper functions |
 | `src/app/api/team/__tests__/resolution.test.ts` | Regression tests for USA/France/Israel bugs |
 | `src/app/api/team/__tests__/route.test.ts` | Team route integration tests |
 | `src/app/api/entries/__tests__/route.test.ts` | Entry submission validation, duplicate detection, geo/code checks |
