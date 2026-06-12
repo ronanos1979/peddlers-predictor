@@ -282,28 +282,52 @@ export async function POST(req: NextRequest) {
         s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
 
       const date = match.kickoff_at.slice(0, 10)
+      const kickoffMs = new Date(match.kickoff_at).getTime()
+      const normHome = normEvt(match.home_team)
+      const normAway = normEvt(match.away_team)
+
+      type AfFixture = {
+        fixture: { id: number; date: string }
+        teams: { home: { name: string }; away: { name: string } }
+      }
+
+      const matchByNames = (fixtures: AfFixture[], kickoffFilter = false) =>
+        fixtures.find(f => {
+          const fh = normEvt(f.teams.home.name)
+          const fa = normEvt(f.teams.away.name)
+          const namesMatch =
+            (fh.includes(normHome) || normHome.includes(fh)) &&
+            (fa.includes(normAway) || normAway.includes(fa))
+          if (!namesMatch) return false
+          if (!kickoffFilter) return true
+          const diff = Math.abs(new Date(f.fixture.date).getTime() - kickoffMs)
+          return diff <= 2 * 60 * 60 * 1000 // ±2 hours
+        })
+
+      // Attempt 1: date-filtered call
+      let found: AfFixture | undefined
       const afFixRes = await fetch(
         `https://v3.football.api-sports.io/fixtures?league=1&season=2026&date=${date}`,
         { headers: { 'x-apisports-key': AF_KEY } }
       )
       const afFixData = await afFixRes.json()
       if (afFixData?.errors?.requests) return NextResponse.json({ error: 'AF rate limit reached' }, { status: 429 })
+      found = matchByNames((afFixData.response || []) as AfFixture[])
 
-      const fixtures = afFixData.response || []
-      const normHome = normEvt(match.home_team)
-      const normAway = normEvt(match.away_team)
-
-      type AfFixture = { fixture: { id: number }; teams: { home: { name: string }; away: { name: string } } }
-      const found = (fixtures as AfFixture[]).find(f => {
-        const fh = normEvt(f.teams.home.name)
-        const fa = normEvt(f.teams.away.name)
-        return (fh.includes(normHome) || normHome.includes(fh)) &&
-               (fa.includes(normAway) || normAway.includes(fa))
-      })
+      // Attempt 2: no date filter — get all WC 2026 fixtures and match by team+kickoff
+      if (!found) {
+        const allRes = await fetch(
+          `https://v3.football.api-sports.io/fixtures?league=1&season=2026`,
+          { headers: { 'x-apisports-key': AF_KEY } }
+        )
+        const allData = await allRes.json()
+        if (allData?.errors?.requests) return NextResponse.json({ error: 'AF rate limit reached' }, { status: 429 })
+        found = matchByNames((allData.response || []) as AfFixture[], true)
+      }
 
       if (!found) {
         return NextResponse.json({
-          error: `No AF fixture found for ${match.home_team} vs ${match.away_team} on ${date}. AF returned ${fixtures.length} fixtures for that date.`
+          error: `No AF fixture found for ${match.home_team} vs ${match.away_team} on ${date}. Check that the WC 2026 is indexed in API-Football under league=1&season=2026.`
         }, { status: 404 })
       }
 
