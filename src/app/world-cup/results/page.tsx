@@ -50,7 +50,7 @@ export default function ResultsPage() {
   }, [])
 
   async function loadEvents(fixtureId: number) {
-    if (matchEvents[fixtureId]) return
+    if (matchEvents[fixtureId] === 'loading') return
     setMatchEvents(prev => ({ ...prev, [fixtureId]: 'loading' }))
     try {
       const res = await fetch(`/api/football?endpoint=match&team=${fixtureId}&bust=1`)
@@ -124,12 +124,12 @@ export default function ResultsPage() {
         const homeWon = home !== null && away !== null && home > away
         const awayWon = home !== null && away !== null && away > home
         const eventsState = matchEvents[f.fixture.id]
-        const isLoading = eventsState === 'loading'
+        const isLoadingEvents = eventsState === 'loading'
         const events: MatchEvent[] = Array.isArray(eventsState) ? eventsState : []
         const hasEvents = events.length > 0
+        const loadedEmpty = Array.isArray(eventsState) && eventsState.length === 0
         const homeEvents = events.filter(e => e.team.name === f.teams.home.name)
         const awayEvents = events.filter(e => e.team.name === f.teams.away.name)
-        const goalsLoaded = eventsState !== undefined
 
         return (
           <div key={f.fixture.id} className="card" style={{ padding: '14px 16px', marginBottom: 10 }}>
@@ -157,7 +157,7 @@ export default function ResultsPage() {
               <>
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
                   {/* Goals side by side */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: goalsLoaded ? 8 : 0 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: hasEvents ? 8 : 0 }}>
                     <div style={{ textAlign: 'right', paddingRight: 8 }}>
                       {homeEvents.filter(e => e.type === 'Goal').map((e, i) => (
                         <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
@@ -197,19 +197,31 @@ export default function ResultsPage() {
               </>
             )}
 
-            {/* Load scorers button */}
-            {home !== null && !goalsLoaded && (
-              <button onClick={() => loadEvents(f.fixture.id)} style={{
-                marginTop: 10, background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
-                letterSpacing: 0.5, color: 'var(--text-dim)', padding: '2px 0',
-                textTransform: 'uppercase',
-              }}>
-                ▼ Show scorers &amp; cards
-              </button>
-            )}
-            {isLoading && (
-              <div style={{ marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)' }}>Loading…</div>
+            {/* Load scorers button / state feedback */}
+            {home !== null && !hasEvents && (
+              <div style={{ marginTop: 10 }}>
+                {isLoadingEvents ? (
+                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)' }}>Loading…</span>
+                ) : loadedEmpty ? (
+                  <button onClick={() => loadEvents(f.fixture.id)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
+                    letterSpacing: 0.5, color: 'var(--text-dim)', padding: 0,
+                    textTransform: 'uppercase',
+                  }}>
+                    ⟳ Scorer data not yet available — tap to retry
+                  </button>
+                ) : (
+                  <button onClick={() => loadEvents(f.fixture.id)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
+                    letterSpacing: 0.5, color: 'var(--text-dim)', padding: 0,
+                    textTransform: 'uppercase',
+                  }}>
+                    ▼ Show scorers &amp; cards
+                  </button>
+                )}
+              </div>
             )}
 
             {f.fixture.venue && (

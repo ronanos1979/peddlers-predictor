@@ -497,10 +497,43 @@ export default function AdminPage() {
     return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   }
 
+  type MatchEvent = { time: { elapsed: number; extra: number | null }; team: { name: string }; player: { name: string }; assist: { name: string } | null; type: string; detail: string }
+
   function MatchResultRow({ m }: { m: Match }) {
     const hasResult = !!m.result
     const isOpen = new Date(m.entries_close_at) > new Date()
     const matchScores = scores[m.id] || { home: '', away: '' }
+    const [matchEvents, setMatchEvents] = useState<MatchEvent[] | 'loading' | null>(null)
+
+    async function loadMatchEvents() {
+      if (matchEvents === 'loading') return
+      setMatchEvents('loading')
+      try {
+        // Step 1: get all FD finished matches (uses 5-min cache)
+        const fRes = await fetch('/api/football?endpoint=fixtures&status=FT')
+        const fData = await fRes.json()
+        const fdMatches: Array<{ fixture: { id: number; date: string } }> = fData.response || []
+        // Match by kickoff ±5 min
+        const kickoffMs = new Date(m.kickoff_at).getTime()
+        const fdMatch = fdMatches.find(f => Math.abs(new Date(f.fixture.date).getTime() - kickoffMs) <= 5 * 60 * 1000)
+        if (!fdMatch) { setMatchEvents([]); return }
+        // Step 2: fetch single match events
+        const eRes = await fetch(`/api/football?endpoint=match&team=${fdMatch.fixture.id}&bust=1`)
+        const eData = await eRes.json()
+        setMatchEvents(eData.events || [])
+      } catch {
+        setMatchEvents([])
+      }
+    }
+
+    function fmtMin(e: MatchEvent) {
+      return e.time.extra ? `${e.time.elapsed}+${e.time.extra}'` : `${e.time.elapsed}'`
+    }
+
+    const events = Array.isArray(matchEvents) ? matchEvents : []
+    const homeEvents = events.filter(e => e.team.name === m.home_team)
+    const awayEvents = events.filter(e => e.team.name === m.away_team)
+
     return (
       <div className="admin-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 160 }}>
@@ -519,6 +552,32 @@ export default function AdminPage() {
                   ({m.home_score}–{m.away_score})
                 </span>
               )}
+              {' '}
+              <button onClick={loadMatchEvents} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, padding: 0 }}>
+                {matchEvents === 'loading' ? '…' : matchEvents === null ? '⟳ scorers' : '⟳'}
+              </button>
+            </div>
+          )}
+          {/* Scorer/cards inline */}
+          {Array.isArray(matchEvents) && matchEvents.length === 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>No scorer data from API yet</div>
+          )}
+          {events.length > 0 && (
+            <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <div>
+                {homeEvents.map((e, i) => (
+                  <div key={i} style={{ fontSize: 11, color: e.type === 'Card' ? (e.detail === 'Yellow Card' ? '#c8a800' : 'var(--red)') : 'var(--text-muted)', lineHeight: 1.7 }}>
+                    {e.type === 'Goal' ? (e.detail === 'Own Goal' ? '⚽🔴' : e.detail === 'Penalty' ? '⚽(P)' : '⚽') : e.detail === 'Yellow Card' ? '🟨' : '🟥'} {e.player.name} {fmtMin(e)}
+                  </div>
+                ))}
+              </div>
+              <div>
+                {awayEvents.map((e, i) => (
+                  <div key={i} style={{ fontSize: 11, color: e.type === 'Card' ? (e.detail === 'Yellow Card' ? '#c8a800' : 'var(--red)') : 'var(--text-muted)', lineHeight: 1.7 }}>
+                    {e.type === 'Goal' ? (e.detail === 'Own Goal' ? '⚽🔴' : e.detail === 'Penalty' ? '⚽(P)' : '⚽') : e.detail === 'Yellow Card' ? '🟨' : '🟥'} {e.player.name} {fmtMin(e)}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -754,19 +813,6 @@ export default function AdminPage() {
                 {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored`}
               </div>
             )}
-          </div>
-
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Reload results page cache</div>
-                <div className="muted" style={{ fontSize: 12 }}>Forces the Results page to fetch fresh data from football-data.org, including goal scorers and cards</div>
-              </div>
-              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
-                disabled={reloadingResults} onClick={reloadResultsCache}>
-                {reloadingResults ? '…' : '⟳ Reload'}
-              </button>
-            </div>
           </div>
 
           <div className="card">
