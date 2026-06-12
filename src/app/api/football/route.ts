@@ -3,6 +3,7 @@ import {
   FdRateLimitError,
   getFdStandings,
   getFdFixtures,
+  getFdMatchEvents,
   getFdScorers,
   getFdTeamsList,
 } from '@/lib/footballData'
@@ -141,6 +142,19 @@ export async function GET(req: NextRequest) {
           } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD teams error:', e) }
         }
         return NextResponse.json({ response: [] })
+      }
+
+      // Single match events — FD /v4/matches/{id}, cached 5 min
+      case 'match': {
+        if (!team) return NextResponse.json({ error: 'id required' }, { status: 400 })
+        if (FD_KEY) {
+          try {
+            const data = await getFdMatchEvents(team)
+            setCached(cacheKey, data)
+            return NextResponse.json(data)
+          } catch (e) { if (!(e instanceof FdRateLimitError)) console.error('FD match events error:', e) }
+        }
+        return NextResponse.json({ events: [] })
       }
 
       // These endpoints are AF-only (no FD equivalent needed)

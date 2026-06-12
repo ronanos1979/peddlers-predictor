@@ -465,6 +465,43 @@ export async function getFdFixtures(opts: { status?: string; team?: string } = {
   return { response }
 }
 
+// ── Single match events ───────────────────────────────────────────────────────
+// Uses /v4/matches/{id} which reliably contains goals + bookings even when
+// the competition batch endpoint returns empty arrays.
+
+export async function getFdMatchEvents(matchId: string): Promise<unknown> {
+  const data = await fdFetch(`/matches/${matchId}`) as {
+    goals?: FdMatch['goals']
+    bookings?: FdMatch['bookings']
+    homeTeam?: { id: number; name: string }
+    awayTeam?: { id: number; name: string }
+  }
+
+  const goals    = data?.goals    || []
+  const bookings = data?.bookings || []
+
+  const events = [
+    ...goals.map(g => ({
+      time:   { elapsed: g.minute ?? 0, extra: g.injuryTime ?? null },
+      team:   { id: g.team.id, name: g.team.name },
+      player: { name: g.scorer.name },
+      assist: g.assist?.name ? { name: g.assist.name } : null,
+      type:   'Goal',
+      detail: g.type === 'OWN_GOAL' ? 'Own Goal' : g.type === 'PENALTY' ? 'Penalty' : 'Normal Goal',
+    })),
+    ...bookings.map(b => ({
+      time:   { elapsed: b.minute ?? 0, extra: null },
+      team:   { id: b.team.id, name: b.team.name },
+      player: { name: b.player.name },
+      assist: null,
+      type:   'Card',
+      detail: b.card === 'YELLOW_CARD' ? 'Yellow Card' : b.card === 'YELLOW_RED_CARD' ? 'Yellow Red Card' : 'Red Card',
+    })),
+  ].sort((a, b) => a.time.elapsed - b.time.elapsed)
+
+  return { events, homeTeam: data.homeTeam, awayTeam: data.awayTeam }
+}
+
 // ── Top scorers (API-Football format) ────────────────────────────────────────
 
 export async function getFdScorers(limit = 10): Promise<unknown> {

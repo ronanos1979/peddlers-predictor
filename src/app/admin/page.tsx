@@ -61,6 +61,7 @@ export default function AdminPage() {
   const [loadAllShirtsRunning, setLoadAllShirtsRunning] = useState(false)
   const [loadAllShirtsProgress, setLoadAllShirtsProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [reloadingResults, setReloadingResults] = useState(false)
   type AnalyticsEvent = { event: string; properties: Record<string, unknown>; created_at: string }
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[] | null>(null)
   const [analyticsDays, setAnalyticsDays] = useState(7)
@@ -450,6 +451,17 @@ export default function AdminPage() {
     setSyncing(false)
   }
 
+  async function reloadResultsCache() {
+    setReloadingResults(true)
+    try {
+      await fetch('/api/football?endpoint=fixtures&status=FT&bust=1')
+      flash('Results API cache refreshed', 'success')
+    } catch {
+      flash('Failed to refresh results cache', 'error')
+    }
+    setReloadingResults(false)
+  }
+
   async function markFeedbackRead(id: string) {
     await fetch('/api/admin', {
       method: 'POST',
@@ -742,6 +754,19 @@ export default function AdminPage() {
                 {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored`}
               </div>
             )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Reload results page cache</div>
+                <div className="muted" style={{ fontSize: 12 }}>Forces the Results page to fetch fresh data from football-data.org, including goal scorers and cards</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={reloadingResults} onClick={reloadResultsCache}>
+                {reloadingResults ? '…' : '⟳ Reload'}
+              </button>
+            </div>
           </div>
 
           <div className="card">

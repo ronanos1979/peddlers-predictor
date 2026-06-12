@@ -28,31 +28,38 @@ export default function ResultsPage() {
   const [error, setError] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [stages, setStages] = useState<string[]>([])
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
-  const [reloading, setReloading] = useState(false)
+  // Per-match event state: id → events array or 'loading'
+  const [matchEvents, setMatchEvents] = useState<Record<number, MatchEvent[] | 'loading'>>({})
 
-  async function load(bust = false) {
-    if (bust) setReloading(true)
-    try {
-      const url = bust
-        ? '/api/football?endpoint=fixtures&status=FT&bust=1'
-        : '/api/football?endpoint=fixtures&status=FT'
-      const res = await fetch(url)
-      const data = await res.json()
-      const results = (data.response || []) as Fixture[]
-      results.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime())
-      setFixtures(results)
-      const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
-      setStages(uniqueStages)
-      setError('')
-    } catch {
-      setError(t.couldNotLoadResults)
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/football?endpoint=fixtures&status=FT')
+        const data = await res.json()
+        const results = (data.response || []) as Fixture[]
+        results.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime())
+        setFixtures(results)
+        const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
+        setStages(uniqueStages)
+      } catch {
+        setError(t.couldNotLoadResults)
+      }
+      setLoading(false)
     }
-    setLoading(false)
-    setReloading(false)
-  }
+    load()
+  }, [])
 
-  useEffect(() => { load() }, [])
+  async function loadEvents(fixtureId: number) {
+    if (matchEvents[fixtureId]) return
+    setMatchEvents(prev => ({ ...prev, [fixtureId]: 'loading' }))
+    try {
+      const res = await fetch(`/api/football?endpoint=match&team=${fixtureId}&bust=1`)
+      const data = await res.json()
+      setMatchEvents(prev => ({ ...prev, [fixtureId]: data.events || [] }))
+    } catch {
+      setMatchEvents(prev => ({ ...prev, [fixtureId]: [] }))
+    }
+  }
 
   const filtered = stageFilter === 'all' ? fixtures : fixtures.filter(f => f.league.round === stageFilter)
 
@@ -66,46 +73,21 @@ export default function ResultsPage() {
   }
 
   function eventIcon(detail: string) {
-    if (detail === 'Own Goal') return '⚽🔴'
-    if (detail === 'Penalty') return '⚽(P)'
-    if (detail === 'Normal Goal') return '⚽'
-    if (detail === 'Yellow Card') return '🟨'
+    if (detail === 'Own Goal')       return '⚽🔴'
+    if (detail === 'Penalty')        return '⚽(P)'
+    if (detail === 'Normal Goal')    return '⚽'
+    if (detail === 'Yellow Card')    return '🟨'
     if (detail === 'Yellow Red Card') return '🟥'
-    if (detail === 'Red Card') return '🟥'
+    if (detail === 'Red Card')       return '🟥'
     return '⚽'
-  }
-
-  function toggleExpand(id: number) {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else { next.add(id) }
-      return next
-    })
   }
 
   return (
     <div className="container">
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>{t.wc2026}</div>
-          <h1 style={{ margin: 0 }}>{t.matchResults}</h1>
-          <p className="muted" style={{ marginTop: 4, marginBottom: 0 }}>{t.resultsSub}</p>
-        </div>
-        <button
-          onClick={() => load(true)}
-          disabled={reloading}
-          style={{
-            marginTop: 8, flexShrink: 0,
-            padding: '8px 14px', borderRadius: 8,
-            border: '1px solid var(--border)',
-            background: 'var(--surface)', cursor: reloading ? 'default' : 'pointer',
-            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
-            letterSpacing: 0.5, color: reloading ? 'var(--text-dim)' : 'var(--text-muted)',
-            opacity: reloading ? 0.6 : 1,
-          }}
-        >
-          {reloading ? '…' : '⟳ Reload'}
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>{t.wc2026}</div>
+        <h1>{t.matchResults}</h1>
+        <p className="muted">{t.resultsSub}</p>
       </div>
 
       {stages.length > 0 && (
@@ -141,10 +123,13 @@ export default function ResultsPage() {
         const away = f.score?.fulltime?.away ?? f.goals?.away ?? null
         const homeWon = home !== null && away !== null && home > away
         const awayWon = home !== null && away !== null && away > home
-        const isExpanded = expanded.has(f.fixture.id)
-        const hasEvents = f.events && f.events.length > 0
-        const homeEvents = f.events?.filter(e => e.team.name === f.teams.home.name) || []
-        const awayEvents = f.events?.filter(e => e.team.name === f.teams.away.name) || []
+        const eventsState = matchEvents[f.fixture.id]
+        const isLoading = eventsState === 'loading'
+        const events: MatchEvent[] = Array.isArray(eventsState) ? eventsState : []
+        const hasEvents = events.length > 0
+        const homeEvents = events.filter(e => e.team.name === f.teams.home.name)
+        const awayEvents = events.filter(e => e.team.name === f.teams.away.name)
+        const goalsLoaded = eventsState !== undefined
 
         return (
           <div key={f.fixture.id} className="card" style={{ padding: '14px 16px', marginBottom: 10 }}>
@@ -152,6 +137,7 @@ export default function ResultsPage() {
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{f.league.round}</span>
               <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{fmtDate(f.fixture.date)}</span>
             </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8 }}>
               <div style={{ textAlign: 'right' }}>
                 {f.teams.home.logo && <img src={f.teams.home.logo} alt="" style={{ width: 32, height: 32, objectFit: 'contain', marginLeft: 'auto', display: 'block', marginBottom: 4 }} />}
@@ -166,68 +152,64 @@ export default function ResultsPage() {
               </div>
             </div>
 
-            {/* Goal scorers summary (always visible when available) */}
-            {hasEvents && !isExpanded && (
-              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                <div style={{ textAlign: 'right', paddingRight: 8 }}>
-                  {homeEvents.filter(e => e.type === 'Goal').map((e, i) => (
-                    <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.6 }}>
-                      {eventIcon(e.detail)} {e.player.name} {fmtMinute(e)}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ paddingLeft: 8 }}>
-                  {awayEvents.filter(e => e.type === 'Goal').map((e, i) => (
-                    <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.6 }}>
-                      {eventIcon(e.detail)} {e.player.name} {fmtMinute(e)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Expanded event timeline */}
-            {hasEvents && isExpanded && (
-              <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                {f.events!.map((e, i) => {
-                  const isHome = e.team.name === f.teams.home.name
-                  const isGoal = e.type === 'Goal'
-                  const isRedCard = e.detail === 'Red Card' || e.detail === 'Yellow Red Card'
-                  return (
-                    <div key={i} style={{
-                      display: 'grid', gridTemplateColumns: '1fr 36px 1fr',
-                      alignItems: 'center', marginBottom: 6, fontSize: 11,
-                      fontFamily: 'var(--font-cond)',
-                    }}>
-                      {isHome ? (
-                        <div style={{ textAlign: 'right', paddingRight: 6, color: isGoal ? 'var(--text)' : isRedCard ? 'var(--red)' : 'var(--text-muted)' }}>
-                          {e.player.name}
-                          {e.assist?.name && <span style={{ color: 'var(--text-dim)' }}> ({e.assist.name})</span>}
-                        </div>
-                      ) : <div />}
-                      <div style={{ textAlign: 'center', fontSize: 13 }}>{eventIcon(e.detail)}<br /><span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{fmtMinute(e)}</span></div>
-                      {!isHome ? (
-                        <div style={{ paddingLeft: 6, color: isGoal ? 'var(--text)' : isRedCard ? 'var(--red)' : 'var(--text-muted)' }}>
-                          {e.player.name}
-                          {e.assist?.name && <span style={{ color: 'var(--text-dim)' }}> ({e.assist.name})</span>}
-                        </div>
-                      ) : <div />}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Expand toggle */}
+            {/* Goal scorers — shown after loading */}
             {hasEvents && (
-              <button onClick={() => toggleExpand(f.fixture.id)} style={{
-                marginTop: 8, background: 'none', border: 'none', cursor: 'pointer',
+              <>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  {/* Goals side by side */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: goalsLoaded ? 8 : 0 }}>
+                    <div style={{ textAlign: 'right', paddingRight: 8 }}>
+                      {homeEvents.filter(e => e.type === 'Goal').map((e, i) => (
+                        <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                          {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ paddingLeft: 8 }}>
+                      {awayEvents.filter(e => e.type === 'Goal').map((e, i) => (
+                        <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                          {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cards */}
+                  {events.filter(e => e.type === 'Card').length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                      <div style={{ textAlign: 'right', paddingRight: 8 }}>
+                        {homeEvents.filter(e => e.type === 'Card').map((e, i) => (
+                          <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                            {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ paddingLeft: 8 }}>
+                        {awayEvents.filter(e => e.type === 'Card').map((e, i) => (
+                          <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                            {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Load scorers button */}
+            {home !== null && !goalsLoaded && (
+              <button onClick={() => loadEvents(f.fixture.id)} style={{
+                marginTop: 10, background: 'none', border: 'none', cursor: 'pointer',
                 fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
                 letterSpacing: 0.5, color: 'var(--text-dim)', padding: '2px 0',
                 textTransform: 'uppercase',
               }}>
-                {isExpanded ? '▲ Hide events' : '▼ All events (cards)'}
+                ▼ Show scorers &amp; cards
               </button>
+            )}
+            {isLoading && (
+              <div style={{ marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)' }}>Loading…</div>
             )}
 
             {f.fixture.venue && (
