@@ -53,9 +53,12 @@ export async function GET(req: NextRequest) {
   const status   = req.nextUrl.searchParams.get('status') || ''
   const round    = req.nextUrl.searchParams.get('round') || ''
 
+  const bust     = req.nextUrl.searchParams.get('bust') === '1'
   const cacheKey = `${endpoint}:${team}:${status}:${round}`
-  const cached = getCached(cacheKey)
-  if (cached) return NextResponse.json(cached)
+  if (!bust) {
+    const cached = getCached(cacheKey)
+    if (cached) return NextResponse.json(cached)
+  }
 
   try {
     switch (endpoint) {

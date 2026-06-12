@@ -29,24 +29,30 @@ export default function ResultsPage() {
   const [stageFilter, setStageFilter] = useState('all')
   const [stages, setStages] = useState<string[]>([])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [reloading, setReloading] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch('/api/football?endpoint=fixtures&status=FT')
-        const data = await res.json()
-        const results = (data.response || []) as Fixture[]
-        results.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime())
-        setFixtures(results)
-        const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
-        setStages(uniqueStages)
-      } catch {
-        setError(t.couldNotLoadResults)
-      }
-      setLoading(false)
+  async function load(bust = false) {
+    if (bust) setReloading(true)
+    try {
+      const url = bust
+        ? '/api/football?endpoint=fixtures&status=FT&bust=1'
+        : '/api/football?endpoint=fixtures&status=FT'
+      const res = await fetch(url)
+      const data = await res.json()
+      const results = (data.response || []) as Fixture[]
+      results.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime())
+      setFixtures(results)
+      const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
+      setStages(uniqueStages)
+      setError('')
+    } catch {
+      setError(t.couldNotLoadResults)
     }
-    load()
-  }, [])
+    setLoading(false)
+    setReloading(false)
+  }
+
+  useEffect(() => { load() }, [])
 
   const filtered = stageFilter === 'all' ? fixtures : fixtures.filter(f => f.league.round === stageFilter)
 
@@ -79,10 +85,27 @@ export default function ResultsPage() {
 
   return (
     <div className="container">
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>{t.wc2026}</div>
-        <h1>{t.matchResults}</h1>
-        <p className="muted">{t.resultsSub}</p>
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 4 }}>{t.wc2026}</div>
+          <h1 style={{ margin: 0 }}>{t.matchResults}</h1>
+          <p className="muted" style={{ marginTop: 4, marginBottom: 0 }}>{t.resultsSub}</p>
+        </div>
+        <button
+          onClick={() => load(true)}
+          disabled={reloading}
+          style={{
+            marginTop: 8, flexShrink: 0,
+            padding: '8px 14px', borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--surface)', cursor: reloading ? 'default' : 'pointer',
+            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+            letterSpacing: 0.5, color: reloading ? 'var(--text-dim)' : 'var(--text-muted)',
+            opacity: reloading ? 0.6 : 1,
+          }}
+        >
+          {reloading ? '…' : '⟳ Reload'}
+        </button>
       </div>
 
       {stages.length > 0 && (
