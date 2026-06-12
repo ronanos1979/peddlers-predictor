@@ -11,6 +11,7 @@ type MatchEvent = {
   assist: { name: string } | null
   type: string
   detail: string
+  teamSide?: 'home' | 'away'
 }
 
 type Fixture = {
@@ -131,8 +132,11 @@ export default function ResultsPage() {
         const awayWon = home !== null && away !== null && away > home
         const events = getEvents(f.fixture.date)
         const hasEvents = events !== null && events.length > 0
-        const homeEvents = (events || []).filter(e => e.team.name === f.teams.home.name)
-        const awayEvents = (events || []).filter(e => e.team.name === f.teams.away.name)
+        const normTeam = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+        const isHome = (e: MatchEvent) => e.teamSide === 'home' || (!e.teamSide && normTeam(e.team.name) === normTeam(f.teams.home.name))
+        const isAway = (e: MatchEvent) => e.teamSide === 'away' || (!e.teamSide && normTeam(e.team.name) === normTeam(f.teams.away.name))
+        const homeEvents = (events || []).filter(isHome)
+        const awayEvents = (events || []).filter(isAway)
 
         return (
           <div key={f.fixture.id} className="card" style={{ padding: '14px 16px', marginBottom: 10 }}>
