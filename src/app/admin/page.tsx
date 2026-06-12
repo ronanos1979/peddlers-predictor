@@ -93,7 +93,7 @@ export default function AdminPage() {
     const now = new Date()
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
     const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
-    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const threeDaysAhead = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
 
     const { data: today } = await supabase.from('matches').select('*')
@@ -103,9 +103,9 @@ export default function AdminPage() {
     setTodaysMatches(today || [])
 
     const { data: recent } = await supabase.from('matches').select('*')
-      .gte('kickoff_at', threeDaysAgo.toISOString())
+      .gte('kickoff_at', sevenDaysAgo.toISOString())
       .lt('kickoff_at', todayStart.toISOString())
-      .is('result', null).neq('stage', 'Demo Match')
+      .neq('stage', 'Demo Match')
       .order('kickoff_at', { ascending: false })
     setRecentMatches(recent || [])
 
@@ -826,7 +826,7 @@ export default function AdminPage() {
 
           {recentMatches.length > 0 && (
             <div className="card">
-              <h2>Recent — result not set</h2>
+              <h2>Recent matches (past 7 days)</h2>
               {recentMatches.map(m => <MatchResultRow key={m.id} m={m} />)}
             </div>
           )}
