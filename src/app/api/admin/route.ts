@@ -267,6 +267,87 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
+    if (action === 'load_match_events') {
+      const { matchId } = payload as { matchId: string }
+      if (!matchId) return NextResponse.json({ error: 'matchId required' }, { status: 400 })
+
+      const AF_KEY = process.env.API_FOOTBALL_KEY
+      if (!AF_KEY) return NextResponse.json({ error: 'API_FOOTBALL_KEY not configured' }, { status: 500 })
+
+      const { data: match, error: matchErr } = await supabaseAdmin
+        .from('matches').select('kickoff_at, home_team, away_team').eq('id', matchId).single()
+      if (matchErr || !match) return NextResponse.json({ error: 'Match not found' }, { status: 404 })
+
+      const normEvt = (s: string) =>
+        s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
+
+      const date = match.kickoff_at.slice(0, 10)
+      const afFixRes = await fetch(
+        `https://v3.football.api-sports.io/fixtures?league=1&season=2026&date=${date}`,
+        { headers: { 'x-apisports-key': AF_KEY } }
+      )
+      const afFixData = await afFixRes.json()
+      if (afFixData?.errors?.requests) return NextResponse.json({ error: 'AF rate limit reached' }, { status: 429 })
+
+      const fixtures = afFixData.response || []
+      const normHome = normEvt(match.home_team)
+      const normAway = normEvt(match.away_team)
+
+      type AfFixture = { fixture: { id: number }; teams: { home: { name: string }; away: { name: string } } }
+      const found = (fixtures as AfFixture[]).find(f => {
+        const fh = normEvt(f.teams.home.name)
+        const fa = normEvt(f.teams.away.name)
+        return (fh.includes(normHome) || normHome.includes(fh)) &&
+               (fa.includes(normAway) || normAway.includes(fa))
+      })
+
+      if (!found) {
+        return NextResponse.json({
+          error: `No AF fixture found for ${match.home_team} vs ${match.away_team} on ${date}. AF returned ${fixtures.length} fixtures for that date.`
+        }, { status: 404 })
+      }
+
+      const afFixtureId = found.fixture.id
+
+      const evRes = await fetch(
+        `https://v3.football.api-sports.io/fixtures/events?fixture=${afFixtureId}`,
+        { headers: { 'x-apisports-key': AF_KEY } }
+      )
+      const evData = await evRes.json()
+      if (evData?.errors?.requests) return NextResponse.json({ error: 'AF rate limit reached on events call' }, { status: 429 })
+
+      type AfEvent = {
+        time: { elapsed: number; extra: number | null }
+        team: { name: string }
+        player: { name: string | null }
+        assist: { name: string | null } | null
+        type: string
+        detail: string
+      }
+
+      const events = ((evData.response || []) as AfEvent[])
+        .filter(e => e.type === 'Goal' || e.type === 'Card')
+        .map(e => ({
+          time:   { elapsed: e.time.elapsed, extra: e.time.extra ?? null },
+          team:   { name: e.team.name },
+          player: { name: e.player.name || '' },
+          assist: e.assist?.name ? { name: e.assist.name } : null,
+          type:   e.type,
+          detail: e.detail === 'Second Yellow card' ? 'Yellow Red Card' : e.detail,
+        }))
+
+      const { error: upsertErr } = await supabaseAdmin.from('match_events').upsert({
+        match_id: matchId,
+        af_fixture_id: afFixtureId,
+        kickoff_at: match.kickoff_at,
+        events,
+        loaded_at: new Date().toISOString(),
+      })
+      if (upsertErr) return NextResponse.json({ error: `DB error: ${upsertErr.message}` }, { status: 500 })
+
+      return NextResponse.json({ success: true, count: events.length, events, af_fixture_id: afFixtureId })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err) {
     console.error('Admin API error:', err)

@@ -509,20 +509,22 @@ export default function AdminPage() {
       if (matchEvents === 'loading') return
       setMatchEvents('loading')
       try {
-        // Step 1: get all FD finished matches (uses 5-min cache)
-        const fRes = await fetch('/api/football?endpoint=fixtures&status=FT')
-        const fData = await fRes.json()
-        const fdMatches: Array<{ fixture: { id: number; date: string } }> = fData.response || []
-        // Match by kickoff ±5 min
-        const kickoffMs = new Date(m.kickoff_at).getTime()
-        const fdMatch = fdMatches.find(f => Math.abs(new Date(f.fixture.date).getTime() - kickoffMs) <= 5 * 60 * 1000)
-        if (!fdMatch) { setMatchEvents([]); return }
-        // Step 2: fetch single match events
-        const eRes = await fetch(`/api/football?endpoint=match&team=${fdMatch.fixture.id}&bust=1`)
-        const eData = await eRes.json()
-        setMatchEvents(eData.events || [])
+        const res = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, action: 'load_match_events', payload: { matchId: m.id } }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          flash(data.error || 'Failed to load events', 'error')
+          setMatchEvents(null)
+          return
+        }
+        setMatchEvents((data.events as MatchEvent[]) || [])
+        flash(`Loaded ${data.count} events from API-Football`, 'success')
       } catch {
-        setMatchEvents([])
+        flash('Network error loading events', 'error')
+        setMatchEvents(null)
       }
     }
 

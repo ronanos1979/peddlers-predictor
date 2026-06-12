@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useLocale } from '@/lib/useLocale'
+import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
 type MatchEvent = {
   time: { elapsed: number; extra: number | null }
-  team: { id: number; name: string }
+  team: { name: string }
   player: { name: string }
   assist: { name: string } | null
   type: string
@@ -18,7 +19,6 @@ type Fixture = {
   teams: { home: { name: string; logo: string }; away: { name: string; logo: string } }
   goals: { home: number | null; away: number | null } | null
   score: { fulltime: { home: number | null; away: number | null } | null } | null
-  events?: MatchEvent[]
 }
 
 export default function ResultsPage() {
@@ -28,19 +28,30 @@ export default function ResultsPage() {
   const [error, setError] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [stages, setStages] = useState<string[]>([])
-  // Per-match event state: id → events array or 'loading'
-  const [matchEvents, setMatchEvents] = useState<Record<number, MatchEvent[] | 'loading'>>({})
+  // Map of kickoff ms → events (loaded from Supabase)
+  const [eventsMap, setEventsMap] = useState<Map<number, MatchEvent[]>>(new Map())
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/football?endpoint=fixtures&status=FT')
-        const data = await res.json()
+        const [fdRes, sbRes] = await Promise.all([
+          fetch('/api/football?endpoint=fixtures&status=FT'),
+          supabase.from('match_events').select('kickoff_at, events'),
+        ])
+
+        const data = await fdRes.json()
         const results = (data.response || []) as Fixture[]
         results.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime())
         setFixtures(results)
         const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
         setStages(uniqueStages)
+
+        // Build kickoff-time → events map from Supabase
+        const map = new Map<number, MatchEvent[]>()
+        for (const row of sbRes.data || []) {
+          map.set(new Date(row.kickoff_at).getTime(), (row.events as MatchEvent[]) || [])
+        }
+        setEventsMap(map)
       } catch {
         setError(t.couldNotLoadResults)
       }
@@ -48,18 +59,6 @@ export default function ResultsPage() {
     }
     load()
   }, [])
-
-  async function loadEvents(fixtureId: number) {
-    if (matchEvents[fixtureId] === 'loading') return
-    setMatchEvents(prev => ({ ...prev, [fixtureId]: 'loading' }))
-    try {
-      const res = await fetch(`/api/football?endpoint=match&team=${fixtureId}&bust=1`)
-      const data = await res.json()
-      setMatchEvents(prev => ({ ...prev, [fixtureId]: data.events || [] }))
-    } catch {
-      setMatchEvents(prev => ({ ...prev, [fixtureId]: [] }))
-    }
-  }
 
   const filtered = stageFilter === 'all' ? fixtures : fixtures.filter(f => f.league.round === stageFilter)
 
@@ -73,13 +72,20 @@ export default function ResultsPage() {
   }
 
   function eventIcon(detail: string) {
-    if (detail === 'Own Goal')       return '⚽🔴'
-    if (detail === 'Penalty')        return '⚽(P)'
-    if (detail === 'Normal Goal')    return '⚽'
-    if (detail === 'Yellow Card')    return '🟨'
+    if (detail === 'Own Goal')        return '⚽🔴'
+    if (detail === 'Penalty')         return '⚽(P)'
+    if (detail === 'Normal Goal')     return '⚽'
+    if (detail === 'Yellow Card')     return '🟨'
     if (detail === 'Yellow Red Card') return '🟥'
-    if (detail === 'Red Card')       return '🟥'
+    if (detail === 'Red Card')        return '🟥'
     return '⚽'
+  }
+
+  // Find events for a fixture by matching kickoff time ±5 min
+  function getEvents(fixtureDate: string): MatchEvent[] | null {
+    const ms = new Date(fixtureDate).getTime()
+    const entry = Array.from(eventsMap.entries()).find(([km]) => Math.abs(km - ms) <= 5 * 60 * 1000)
+    return entry ? entry[1] : null  // null = not yet loaded by admin
   }
 
   return (
@@ -123,13 +129,10 @@ export default function ResultsPage() {
         const away = f.score?.fulltime?.away ?? f.goals?.away ?? null
         const homeWon = home !== null && away !== null && home > away
         const awayWon = home !== null && away !== null && away > home
-        const eventsState = matchEvents[f.fixture.id]
-        const isLoadingEvents = eventsState === 'loading'
-        const events: MatchEvent[] = Array.isArray(eventsState) ? eventsState : []
-        const hasEvents = events.length > 0
-        const loadedEmpty = Array.isArray(eventsState) && eventsState.length === 0
-        const homeEvents = events.filter(e => e.team.name === f.teams.home.name)
-        const awayEvents = events.filter(e => e.team.name === f.teams.away.name)
+        const events = getEvents(f.fixture.date)
+        const hasEvents = events !== null && events.length > 0
+        const homeEvents = (events || []).filter(e => e.team.name === f.teams.home.name)
+        const awayEvents = (events || []).filter(e => e.team.name === f.teams.away.name)
 
         return (
           <div key={f.fixture.id} className="card" style={{ padding: '14px 16px', marginBottom: 10 }}>
@@ -152,74 +155,44 @@ export default function ResultsPage() {
               </div>
             </div>
 
-            {/* Goal scorers — shown after loading */}
+            {/* Events from Supabase */}
             {hasEvents && (
-              <>
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                  {/* Goals side by side */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: hasEvents ? 8 : 0 }}>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                {/* Goals */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: events!.some(e => e.type === 'Card') ? 8 : 0 }}>
+                  <div style={{ textAlign: 'right', paddingRight: 8 }}>
+                    {homeEvents.filter(e => e.type === 'Goal').map((e, i) => (
+                      <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                        {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ paddingLeft: 8 }}>
+                    {awayEvents.filter(e => e.type === 'Goal').map((e, i) => (
+                      <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                        {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Cards */}
+                {events!.some(e => e.type === 'Card') && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                     <div style={{ textAlign: 'right', paddingRight: 8 }}>
-                      {homeEvents.filter(e => e.type === 'Goal').map((e, i) => (
-                        <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                      {homeEvents.filter(e => e.type === 'Card').map((e, i) => (
+                        <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
                           {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
                         </div>
                       ))}
                     </div>
                     <div style={{ paddingLeft: 8 }}>
-                      {awayEvents.filter(e => e.type === 'Goal').map((e, i) => (
-                        <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                      {awayEvents.filter(e => e.type === 'Card').map((e, i) => (
+                        <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
                           {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-
-                  {/* Cards */}
-                  {events.filter(e => e.type === 'Card').length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                      <div style={{ textAlign: 'right', paddingRight: 8 }}>
-                        {homeEvents.filter(e => e.type === 'Card').map((e, i) => (
-                          <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
-                            {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ paddingLeft: 8 }}>
-                        {awayEvents.filter(e => e.type === 'Card').map((e, i) => (
-                          <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
-                            {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMinute(e)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* Load scorers button / state feedback */}
-            {home !== null && !hasEvents && (
-              <div style={{ marginTop: 10 }}>
-                {isLoadingEvents ? (
-                  <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)' }}>Loading…</span>
-                ) : loadedEmpty ? (
-                  <button onClick={() => loadEvents(f.fixture.id)} style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
-                    letterSpacing: 0.5, color: 'var(--text-dim)', padding: 0,
-                    textTransform: 'uppercase',
-                  }}>
-                    ⟳ Scorer data not yet available — tap to retry
-                  </button>
-                ) : (
-                  <button onClick={() => loadEvents(f.fixture.id)} style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
-                    letterSpacing: 0.5, color: 'var(--text-dim)', padding: 0,
-                    textTransform: 'uppercase',
-                  }}>
-                    ▼ Show scorers &amp; cards
-                  </button>
                 )}
               </div>
             )}
