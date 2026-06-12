@@ -279,28 +279,52 @@ export async function POST(req: NextRequest) {
       const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
       const norm = (s: string) =>
         s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
-      const normHome = norm(match.home_team)
-      const normAway = norm(match.away_team)
 
-      // 1. Find ESPN event by date + team names
-      const date = match.kickoff_at.slice(0, 10).replace(/-/g, '')  // YYYYMMDD
-      const sbRes = await fetch(`${ESPN_BASE}/scoreboard?dates=${date}`)
-      if (!sbRes.ok) return NextResponse.json({ error: `ESPN scoreboard fetch failed: ${sbRes.status}` }, { status: 502 })
-      const sbData = await sbRes.json()
+      // ESPN uses US Eastern time (UTC-4) for date grouping.
+      // Matches kicking off in the small hours UTC are still the previous day ET.
+      const ESPN_NAME_MAP: Record<string, string> = {
+        'USA':                    'United States',
+        'Bosnia & Herzegovina':   'Bosnia-Herzegovina',
+      }
+      const espnHomeName = ESPN_NAME_MAP[match.home_team] || match.home_team
+      const espnAwayName = ESPN_NAME_MAP[match.away_team] || match.away_team
+      const normHome = norm(espnHomeName)
+      const normAway = norm(espnAwayName)
+
+      // Compute date in US Eastern time (UTC-4) — all WC 2026 kickoffs are afternoon/evening ET
+      const kickoffEt = new Date(new Date(match.kickoff_at).getTime() - 4 * 60 * 60 * 1000)
+      const date = kickoffEt.toISOString().slice(0, 10).replace(/-/g, '')  // YYYYMMDD in ET
 
       type EspnCompetitor = { homeAway: 'home' | 'away'; team: { id: string; displayName: string } }
       type EspnEvent = { id: string; competitions: Array<{ competitors: EspnCompetitor[] }> }
 
-      const espnEvent = (sbData.events || [] as EspnEvent[]).find((e: EspnEvent) => {
-        const comps = e.competitions?.[0]?.competitors || []
-        const hasHome = comps.some(c => { const n = norm(c.team.displayName); return n === normHome || n.includes(normHome) || normHome.includes(n) })
-        const hasAway = comps.some(c => { const n = norm(c.team.displayName); return n === normAway || n.includes(normAway) || normAway.includes(n) })
-        return hasHome && hasAway
-      }) as EspnEvent | undefined
+      const findInScoreboard = (events: EspnEvent[]) =>
+        events.find(e => {
+          const comps = e.competitions?.[0]?.competitors || []
+          const hasHome = comps.some(c => { const n = norm(c.team.displayName); return n === normHome || n.includes(normHome) || normHome.includes(n) })
+          const hasAway = comps.some(c => { const n = norm(c.team.displayName); return n === normAway || n.includes(normAway) || normAway.includes(n) })
+          return hasHome && hasAway
+        })
+
+      // 1. Try ET date; fall back to ET date - 1 day as a safety net
+      let espnEvent: EspnEvent | undefined
+      const sbRes = await fetch(`${ESPN_BASE}/scoreboard?dates=${date}`)
+      if (!sbRes.ok) return NextResponse.json({ error: `ESPN scoreboard fetch failed: ${sbRes.status}` }, { status: 502 })
+      const sbData = await sbRes.json()
+      espnEvent = findInScoreboard(sbData.events || [])
+
+      if (!espnEvent) {
+        const prevDate = new Date(kickoffEt.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '')
+        const sbRes2 = await fetch(`${ESPN_BASE}/scoreboard?dates=${prevDate}`)
+        if (sbRes2.ok) {
+          const sbData2 = await sbRes2.json()
+          espnEvent = findInScoreboard(sbData2.events || [])
+        }
+      }
 
       if (!espnEvent) {
         return NextResponse.json({
-          error: `ESPN: no match found for ${match.home_team} vs ${match.away_team} on ${date}. ESPN returned ${(sbData.events || []).length} events.`
+          error: `ESPN: no match found for ${match.home_team} vs ${match.away_team} (ESPN names: ${espnHomeName} vs ${espnAwayName}, ET date: ${date}).`
         }, { status: 404 })
       }
 
