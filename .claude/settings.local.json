@@ -36,7 +36,12 @@
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/matchSchedule\" --no-coverage)",
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/pathToFinal\" --no-coverage)",
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/\\(matchSchedule|pathToFinal\\)\" --no-coverage)",
-      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test *)"
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760415\")",
+      "Bash(python3 *)"
     ]
   }
 }
