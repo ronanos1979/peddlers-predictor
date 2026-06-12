@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { checkRateLimit, getIp } from '@/lib/rateLimit'
 import { getFdFixtures, FdRateLimitError } from '@/lib/footballData'
+import { toEspnDate, toEspnTeamName, parseEspnMinute, mapEspnEventType } from '@/lib/espnEvents'
 
 export async function POST(req: NextRequest) {
   try {
@@ -280,20 +281,14 @@ export async function POST(req: NextRequest) {
       const norm = (s: string) =>
         s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
 
-      // ESPN uses US Eastern time (UTC-4) for date grouping.
-      // Matches kicking off in the small hours UTC are still the previous day ET.
-      const ESPN_NAME_MAP: Record<string, string> = {
-        'USA':                    'United States',
-        'Bosnia & Herzegovina':   'Bosnia-Herzegovina',
-      }
-      const espnHomeName = ESPN_NAME_MAP[match.home_team] || match.home_team
-      const espnAwayName = ESPN_NAME_MAP[match.away_team] || match.away_team
+      const espnHomeName = toEspnTeamName(match.home_team)
+      const espnAwayName = toEspnTeamName(match.away_team)
       const normHome = norm(espnHomeName)
       const normAway = norm(espnAwayName)
 
-      // Compute date in US Eastern time (UTC-4) — all WC 2026 kickoffs are afternoon/evening ET
+      // ESPN groups by US Eastern time (UTC-4); toEspnDate handles the offset
+      const date = toEspnDate(match.kickoff_at)
       const kickoffEt = new Date(new Date(match.kickoff_at).getTime() - 4 * 60 * 60 * 1000)
-      const date = kickoffEt.toISOString().slice(0, 10).replace(/-/g, '')  // YYYYMMDD in ET
 
       type EspnCompetitor = { homeAway: 'home' | 'away'; team: { id: string; displayName: string } }
       type EspnEvent = { id: string; competitions: Array<{ competitors: EspnCompetitor[] }> }
@@ -340,15 +335,6 @@ export async function POST(req: NextRequest) {
       const sumData = await sumRes.json()
 
       // 3. Parse keyEvents — goals and cards only
-      const GOAL_TYPES = new Set(['goal', 'goal---header', 'goal---penalty', 'own-goal'])
-      const CARD_TYPES = new Set(['yellow-card', 'red-card', 'yellow-red-card'])
-
-      const parseMinute = (display: string): { elapsed: number; extra: number | null } => {
-        const m = display.match(/^(\d+)'(?:\+(\d+)')?$/)
-        if (m) return { elapsed: parseInt(m[1]), extra: m[2] ? parseInt(m[2]) : null }
-        return { elapsed: 0, extra: null }
-      }
-
       type EspnKeyEvent = {
         type: { type: string }
         clock: { displayValue: string }
@@ -357,9 +343,9 @@ export async function POST(req: NextRequest) {
       }
 
       const events = ((sumData.keyEvents || []) as EspnKeyEvent[])
-        .filter(e => GOAL_TYPES.has(e.type?.type) || CARD_TYPES.has(e.type?.type))
+        .filter(e => mapEspnEventType(e.type?.type) !== null)
         .map(e => {
-          const evType = e.type?.type || ''
+          const mapped = mapEspnEventType(e.type?.type)!
           const teamId = e.team?.id
           const teamSide: 'home' | 'away' | undefined =
             teamId === espnHomeId ? 'home' : teamId === espnAwayId ? 'away' : undefined
@@ -367,16 +353,13 @@ export async function POST(req: NextRequest) {
             : teamSide === 'away' ? match.away_team
             : (e.team?.displayName || '')
           const parts = e.participants || []
-          const isGoal = GOAL_TYPES.has(evType)
           return {
-            time:     parseMinute(e.clock?.displayValue || ''),
+            time:     parseEspnMinute(e.clock?.displayValue || ''),
             team:     { name: teamName },
             player:   { name: parts[0]?.athlete?.displayName || '' },
             assist:   parts[1]?.athlete?.displayName ? { name: parts[1].athlete.displayName } : null,
-            type:     isGoal ? 'Goal' : 'Card',
-            detail:   isGoal
-              ? (evType === 'own-goal' ? 'Own Goal' : evType === 'goal---penalty' ? 'Penalty' : 'Normal Goal')
-              : (evType === 'yellow-card' ? 'Yellow Card' : evType === 'yellow-red-card' ? 'Yellow Red Card' : 'Red Card'),
+            type:     mapped.type,
+            detail:   mapped.detail,
             teamSide,
           }
         })

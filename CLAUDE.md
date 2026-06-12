@@ -15,7 +15,7 @@ A World Cup 2026 prediction game web app for **The Peddler's Daughter** Irish pu
 | Hosting | Vercel (auto-deploys from GitHub on push to main) |
 | Styling | Custom CSS — globals.css, NO Tailwind, NO Bootstrap |
 | Fonts | Bebas Neue (display), Barlow Condensed (labels), Barlow (body) — loaded via Google Fonts in globals.css |
-| Football data | football-data.org v4 (primary, 10 req/min no daily cap) + API-Football v3 (enrichment) — proxied via /api/football and /api/team |
+| Football data | football-data.org v4 (scores/standings/squads, 10 req/min) + API-Football v3 (player photos/clubs) + ESPN unofficial (match events — goals/cards) |
 | Analytics | `@vercel/analytics` + `@vercel/speed-insights` (page views, Web Vitals) + custom `analytics_events` Supabase table via `src/lib/analytics.ts` |
 | Testing | Jest + ts-jest (run with `npm test`) |
 
@@ -122,6 +122,27 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - Events tracked: `geo_verified`, `geo_too_far`, `geo_blocked`, `chose_code_path`, `code_verified`, `code_failed`, `patron_returning`, `leaderboard_viewed`, `my_picks_viewed`, `prediction_submitted`, `form_abandoned`
 - All `track()` calls also forwarded to Vercel Analytics (no-ops on free plan, activates on Pro)
 
+**match_events**
+- `match_id` (uuid — FK to matches), `kickoff_at` (timestamptz), `events` (jsonb), `loaded_at` (timestamptz)
+- `af_fixture_id` (integer, nullable) — stores ESPN event ID (column name is legacy)
+- Each event in the `events` array: `{ time: {elapsed, extra}, team: {name}, player: {name}, assist: {name}|null, type: 'Goal'|'Card', detail: string, teamSide: 'home'|'away' }`
+- `detail` values: `'Normal Goal'`, `'Penalty'`, `'Own Goal'`, `'Yellow Card'`, `'Yellow Red Card'`, `'Red Card'`
+- `teamSide` is the reliable home/away split (schedule team names differ from FD names for some teams)
+- Populated by admin via `load_match_events` action (calls ESPN). Public read, admin write.
+- **Must be created in Supabase before deploying** — run in SQL editor:
+  ```sql
+  create table if not exists match_events (
+    match_id uuid primary key references matches(id) on delete cascade,
+    af_fixture_id integer,
+    kickoff_at timestamptz not null,
+    events jsonb not null default '[]',
+    loaded_at timestamptz not null default now()
+  );
+  alter table match_events enable row level security;
+  create policy "public read" on match_events for select using (true);
+  create policy "admin insert" on match_events for all using (true) with check (true);
+  ```
+
 ### Views
 
 **player_cache_stats** (aggregate view — avoids PostgREST 1000-row default limit)
@@ -209,6 +230,7 @@ src/
     ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron(), savePubPref(), loadPubPref()
     ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
     ├── analytics.ts                # trackEvent() — fires both Vercel Analytics track() and POST /api/analytics
+    ├── espnEvents.ts               # ESPN match event helpers: toEspnDate, toEspnTeamName, parseEspnMinute, mapEspnEventType
     ├── i18n.ts + useLocale.ts      # EN/ES translations + locale cookie hook
 ```
 
@@ -291,30 +313,50 @@ Fully automatic based on datetime — no admin needed:
 
 ## Football Data Integration
 
-### Two-source architecture
-The app uses **football-data.org (FD) as primary** and **API-Football (AF) for player enrichment**:
-- **FD**: free tier = 10 req/min, no daily cap. WC competition ID: `2000`. Env: `FOOTBALL_DATA_API_KEY`
-- **AF**: free tier = 100 req/day (strict). League ID: `1`. Env: `API_FOOTBALL_KEY`. For the WC 2026 squad team lookup, code tries `season=2026` first (correct squads + photos), falls back to `season=2022` if 2026 is unavailable on the current plan.
-- Both are optional — the app degrades gracefully if either key is missing
-- The `footballData.ts` adapter converts FD responses to AF-format so frontend code doesn't change
+### Three-source architecture
+| Source | Purpose | Key | Limits |
+|--------|---------|-----|--------|
+| **football-data.org (FD)** | Standings, fixtures (scores only), squad data | `FOOTBALL_DATA_API_KEY` | 10 req/min, no daily cap |
+| **API-Football (AF)** | Player photos, shirt numbers, club info | `API_FOOTBALL_KEY` | 100 req/day; **free tier blocks seasons > 2024** |
+| **ESPN unofficial** | Match events (goals, assists, cards) | None — no key required | Unlimited, unofficial |
 
-### Known FD free-tier data gaps (always use AF for these)
-| Field | FD free tier | AF |
-|-------|-------------|-----|
-| `shirtNumber` | ❌ Null pre-tournament (may be paid) | ✅ `players/squads` reliable |
-| Player photos | ❌ Not provided | ✅ `players/squads` |
-| Coach photo | ❌ Not provided | ✅ `coaches?team=ID` |
-| Player club | ❌ Not provided | ✅ `players?id=X&season=YYYY` |
+**Critical finding (verified June 2026)**: FD free tier response for `/v4/competitions/2000/matches` and `/v4/matches/{id}` does **not include** `goals` or `bookings` fields at all. AF free tier explicitly rejects season=2025/2026 with `"Free plans do not have access to this season, try from 2022 to 2024"`. ESPN's unofficial API is the only free source for WC 2026 match events.
+
+### Known FD free-tier data gaps
+| Field | FD free tier | Solution |
+|-------|-------------|---------|
+| Goals / bookings | ❌ Fields absent entirely | ✅ ESPN unofficial API |
+| `shirtNumber` | ❌ Null pre-tournament | ✅ AF `players/squads` |
+| Player photos | ❌ Not provided | ✅ AF `players/squads` |
+| Coach photo | ❌ Not provided | ✅ AF `coaches?team=ID` |
+| Player club | ❌ Not provided | ✅ AF `players?id=X&season=2024` |
 
 **Rule**: If FD returns `shirtNumber: null` for all squad members, that means FD doesn't have it yet — NOT that no numbers exist. Auto-fall back to AF `players/squads`. This is implemented in `handleLoadFd` in `src/app/api/admin-teams/route.ts`. Never store `0` as a shirt number; use `null` for unknown.
+
+### ESPN match events (admin `load_match_events` action)
+- **Source**: `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world` — no API key
+- **Flow**: admin clicks `⟳ scorers` on a completed match → `load_match_events` action:
+  1. Convert UTC kickoff to US Eastern time (UTC-4) for ESPN's date grouping — `toEspnDate()` in `espnEvents.ts`
+  2. Fetch `/scoreboard?dates={YYYYMMDD}` to find the ESPN event ID by team names
+  3. Try the ET date first; if not found try ET-1 day (safety net)
+  4. Fetch `/summary?event={id}` — parse `keyEvents` for `goal`, `goal---header`, `goal---penalty`, `own-goal`, `yellow-card`, `yellow-red-card`, `red-card`
+  5. Map to standard event format (see `mapEspnEventType()` in `espnEvents.ts`)
+  6. Upsert into `match_events` Supabase table
+- **Helper module**: `src/lib/espnEvents.ts` — all pure functions, fully tested
+- **Team name aliases** (schedule → ESPN, the only two that differ):
+  - `USA` → `United States`
+  - `Bosnia & Herzegovina` → `Bosnia-Herzegovina`
+  - All other 46 WC 2026 teams match exactly (verified)
+- **`teamSide` field**: each stored event includes `teamSide: 'home' | 'away'`. The results page filters by this first (team names differ between FD fixtures and our schedule for some nations, e.g. FD `Korea Republic` vs schedule `South Korea`).
+- **Results page**: reads from `match_events` Supabase table only — never calls external APIs on patron page load
 
 ### Proxy route: `/api/football`
 - Keeps both API keys server-side
 - 5-minute in-memory cache (shared, caches adapted response regardless of source)
-- `?bust=1` query param skips the cache — used by the admin "Reload results page cache" button
+- `?bust=1` query param skips the cache
 - For `standings`, `fixtures`, `players/topscorers`, `teams` (list) — tries FD first, falls back to AF
 - For `players/squads`, `coaches`, `players` — AF only (FD free tier doesn't cover these)
-- **`endpoint=match&team={fdMatchId}`** — fetches `/v4/matches/{id}` for a single match's full event data (goals + bookings). The competition batch endpoint returns empty `goals`/`bookings` arrays even for finished matches; always use this single-match endpoint for scorers and cards.
+- **`endpoint=match`** is still defined but returns empty events — FD free tier does not provide goals/bookings. Use the admin `load_match_events` action (ESPN) for events instead.
 
 ### Team data route: `/api/team` (cache-only)
 - Reads squad from `player_cache`, teamInfo/coach/fixtures from `team_cache.data`, local schedule from `matches`
@@ -377,14 +419,16 @@ Before June 11, 2026:
 | Query param | Primary source | Fallback | Returns |
 |-------------|---------------|---------|---------|
 | `endpoint=standings` | FD | AF | Group tables |
-| `endpoint=fixtures&status=FT` | FD | AF | Completed matches (score only — no events) |
+| `endpoint=fixtures&status=FT` | FD | AF | Completed matches (scores only — no events) |
 | `endpoint=fixtures&team=ID` | FD | AF | Team's matches |
 | `endpoint=players/topscorers` | FD | AF | Golden Boot |
 | `endpoint=teams` (list) | FD only | — | WC team list (AF IDs incompatible with team_cache) |
 | `endpoint=teams&team=ID` | AF only | — | Single team info |
-| `endpoint=match&team={matchId}` | FD only | — | Single match full events (goals + bookings) |
+| `endpoint=match&team={matchId}` | FD only | — | ⚠️ Returns empty events — FD free tier has no goals/bookings |
 | `endpoint=players/squads&team=ID` | AF only | — | Squad |
 | `endpoint=coaches&team=ID` | AF only | — | Manager info |
+
+**For match events use the admin `load_match_events` action (ESPN), not `/api/football?endpoint=match`.**
 
 ---
 
@@ -432,9 +476,9 @@ Print and laminate for tables:
 - Placeholder changed from "First name + last initial" to "First name Last name"
 
 ### Admin panel features
-- **Results tab**: today's matches, unscored recent matches, upcoming 3 days, daily code display
+- **Results tab**: today's matches, all matches from the past 7 days (scored or not), upcoming 3 days, daily code display
   - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp, sets result + score, and scores all entries automatically. Reports how many matches updated and entries scored.
-  - **"⟳ Reload results page cache"** button — busts the 5-minute server cache so the public Results page shows fresh data (goal scorers, cards) immediately after a match finishes.
+  - **"⟳ scorers" button** per completed match — calls `load_match_events` action, fetches goals/cards from ESPN unofficial API, stores in `match_events` Supabase table. Shows events inline in admin. Public results page reads from Supabase (no external API call on patron load).
   - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming
   - **Auto-scores `winner_picks` when stage is 'Final'**: after setting the Final result, the `set_result` action automatically sets `is_correct=true, raffle_entries=15` for the champion pick and `is_correct=false, raffle_entries=0` for all other pending winner_picks
   - Email reminders: select upcoming matches and send match-day emails to all patrons who provided an email
@@ -479,11 +523,12 @@ Print and laminate for tables:
 
 ## Results Page UX (`/world-cup/results`)
 
-- Shows all completed matches from football-data.org, newest first, filterable by stage
-- Each match card shows team logos, score, and venue
-- **"Show scorers & cards" button** per match: lazy-fetches events from `/api/football?endpoint=match&team={id}&bust=1` (single match endpoint — the competition batch does not return events)
-- Events shown split home/away: goals with minute, own goal and penalty markers; yellow and red card rows below
-- Reload button is **admin-only** (in Results tab) — not shown to patrons
+- Shows all completed matches from football-data.org (scores/logos), newest first, filterable by stage
+- On page load, parallel-fetches FD fixtures + all `match_events` rows from Supabase
+- Events shown automatically when admin has loaded them — no button for patrons
+- Events split home/away: goals with minute + scorer + assist; cards below. Icons: ⚽ Normal Goal, ⚽🔴 Own Goal, ⚽(P) Penalty, 🟨 Yellow, 🟥 Red / Yellow Red
+- Home/away split uses `teamSide` field (reliable) with normalised name match as fallback
+- No external API calls from the patron-facing results page
 
 ## Scorer Picks Page UX (`/world-cup/scorer-picks`)
 
@@ -528,13 +573,14 @@ npm run test:watch    # watch mode during development
 npm run test:coverage # coverage report
 ```
 
-### Test files (194 tests total across 11 suites)
+### Test files (213 tests total across 12 suites)
 | File | What it covers |
 |------|---------------|
 | `src/lib/__tests__/matchSchedule.test.ts` | Rolling 4-day window, isMatchLive, getDailyCode prefix/fallback, isValidOverrideCode |
 | `src/lib/__tests__/teamResolution.test.ts` | Name aliases, youth team filter, WC list resolution, search resolution, cache validation |
 | `src/lib/__tests__/goldenBootContenders.test.ts` | Contender list — 10 players, required fields, no duplicates, WC nations |
 | `src/lib/__tests__/pathToFinalHelpers.test.ts` | Path to Final helper functions |
+| `src/lib/__tests__/espnEvents.test.ts` | ESPN helpers: toEspnDate (ET timezone), toEspnTeamName (USA/Bosnia aliases), parseEspnMinute, mapEspnEventType |
 | `src/app/api/team/__tests__/resolution.test.ts` | Regression tests for USA/France/Israel bugs |
 | `src/app/api/team/__tests__/route.test.ts` | Team route integration tests |
 | `src/app/api/entries/__tests__/route.test.ts` | Entry submission validation, duplicate detection, geo/code checks |
@@ -551,6 +597,9 @@ Always run `npm test` before `git push`. The build (`npm run build`) catches Typ
 - `resolveFromSearch('USA', mixedResults)` → must return senior team ID (not U17)
 - `resolveFromWcList('USA', wcTeams)` → must return United States ID, not France (id 2)
 - `isBadCacheEntry('United States U17')` → must return `true`
+- `toEspnDate('2026-06-12T02:00:00Z')` → must return `'20260611'` (ET timezone, not UTC)
+- `toEspnTeamName('USA')` → must return `'United States'`
+- `mapEspnEventType('substitution')` → must return `null` (not stored)
 
 ---
 
