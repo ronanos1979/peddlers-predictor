@@ -574,6 +574,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 >
                   {t.tryLocationAgain}
                 </button>
+                <a
+                  href={`/feedback?msg=${encodeURIComponent(`Location blocked — could not verify I'm at the pub.\nPub: ${pubId}\nBrowser: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'}`)}`}
+                  style={{ display: 'block', textAlign: 'center', marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', textDecoration: 'underline', opacity: 0.7 }}
+                >
+                  {t.reportLocationProblem}
+                </a>
               </div>
             </div>
           )}
@@ -605,6 +611,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
               {overrideError && (
                 <p className="error" style={{ marginBottom: 0, marginTop: 8 }}>{overrideError}</p>
               )}
+              <a
+                href={`/feedback?msg=${encodeURIComponent(`Location too far — app says I'm ${userDistance !== null ? Math.round(userDistance * 3.28084) + 'ft' : 'unknown distance'} from the pub but I'm here.\nPub: ${pubId}\nBrowser: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'}`)}`}
+                style={{ display: 'block', textAlign: 'center', marginTop: 10, fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', textDecoration: 'underline', opacity: 0.7 }}
+              >
+                {t.reportLocationProblem}
+              </a>
             </div>
           )}
 

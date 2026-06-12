@@ -7,20 +7,24 @@ import { useLocale } from '@/lib/useLocale'
 import Flag from '@/components/Flag'
 import Link from 'next/link'
 
-
 type LeaderEntry = {
   name: string; pub_id: string; total_pts: number
   correct: number; total: number; last_pick: string; last_correct: boolean | null
 }
 
+type AttendanceEntry = { name: string; pub_id: string; match_count: number }
+
 function LeaderboardContent() {
   const { t } = useLocale()
   const searchParams = useSearchParams()
   const pubId = searchParams.get('pub')
+  const [view, setView] = useState<'predictions' | 'attendance'>('predictions')
   const [entries, setEntries] = useState<LeaderEntry[]>([])
+  const [attendanceEntries, setAttendanceEntries] = useState<AttendanceEntry[]>([])
   const [match, setMatch] = useState<Match | null>(null)
   const [filter, setFilter] = useState<'all' | 'this_pub'>('all')
   const [loading, setLoading] = useState(true)
+  const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState('')
 
   async function load() {
@@ -38,7 +42,6 @@ function LeaderboardContent() {
         byPhone[e.phone].total += 1
         if (e.is_correct) byPhone[e.phone].correct += 1
       })
-      // Add tournament winner pick bonus
       winnerBonuses?.forEach(wp => {
         if (byPhone[wp.phone]) byPhone[wp.phone].pts += wp.raffle_entries
       })
@@ -51,6 +54,16 @@ function LeaderboardContent() {
     setLoading(false)
   }
 
+  async function loadAttendance() {
+    setAttendanceLoading(true)
+    try {
+      const res = await fetch('/api/checkin-leaders')
+      const data = await res.json()
+      setAttendanceEntries(data.leaders || [])
+    } catch { /* ignore */ }
+    setAttendanceLoading(false)
+  }
+
   useEffect(() => {
     trackEvent('leaderboard_viewed', { pub_id: pubId || 'unknown' })
     load()
@@ -58,7 +71,14 @@ function LeaderboardContent() {
     return () => clearInterval(iv)
   }, [])
 
+  useEffect(() => {
+    if (view === 'attendance' && attendanceEntries.length === 0) loadAttendance()
+  }, [view])
+
   const filtered = filter === 'this_pub' && pubId ? entries.filter(e => e.pub_id === pubId) : entries
+  const filteredAttendance = filter === 'this_pub' && pubId
+    ? attendanceEntries.filter(e => e.pub_id === pubId)
+    : attendanceEntries
   const medals = ['🥇', '🥈', '🥉']
 
   function pickLabel(pick: string, m: Match | null) {
@@ -76,11 +96,27 @@ function LeaderboardContent() {
         </div>
         <h1>{t.leaderboard}</h1>
         <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>{t.leaderboardSub}</p>
-        {match && (
+        {match && view === 'predictions' && (
           <p className="muted">{t.current}: <Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team} vs <Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</p>
         )}
       </div>
 
+      {/* View toggle */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {(['predictions', 'attendance'] as const).map(v => (
+          <button key={v} onClick={() => setView(v)} style={{
+            padding: '7px 16px', borderRadius: 20,
+            border: `1px solid ${view === v ? (v === 'attendance' ? 'var(--red)' : 'var(--green)') : 'var(--border)'}`,
+            background: view === v ? (v === 'attendance' ? 'rgba(255,59,59,0.12)' : 'rgba(0,200,122,0.12)') : 'transparent',
+            color: view === v ? (v === 'attendance' ? 'var(--red)' : 'var(--green)') : 'var(--text-muted)',
+            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12, letterSpacing: 0.5, cursor: 'pointer',
+          }}>
+            {v === 'predictions' ? t.predictionsTab : t.attendanceTab}
+          </button>
+        ))}
+      </div>
+
+      {/* Pub filter + timestamp */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
         {(['all', 'this_pub'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
@@ -94,46 +130,92 @@ function LeaderboardContent() {
             {f === 'all' ? t.allLocations : t.thisPub}
           </button>
         ))}
-        <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>↻ {lastUpdated}</span>
+        {view === 'predictions' && (
+          <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>↻ {lastUpdated}</span>
+        )}
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
-      ) : filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
-          <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{t.noEntriesYet}</p>
-          <p className="muted" style={{ marginTop: 6 }}>{t.beFirstPrediction}</p>
-        </div>
-      ) : (
-        filtered.map((e, i) => (
-          <div key={i} className={`lb-entry${i === 0 ? ' lb-gold' : i === 1 ? ' lb-silver' : i === 2 ? ' lb-bronze' : ''}`}>
-            <div className="lb-rank" style={{ color: i === 0 ? 'var(--gold)' : i === 1 ? '#b0b8c8' : i === 2 ? '#cd7f32' : 'var(--text-dim)', fontSize: i === 0 ? 26 : i === 1 ? 22 : 20 }}>
-              {medals[i] || i + 1}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
-                {e.correct}/{e.total} {t.correct} · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
-              </div>
-              {match && (
-                <span className={`pick-pill ${e.last_correct === true ? 'correct' : e.last_correct === false ? 'wrong' : ''}`}>
-                  {pickLabel(e.last_pick, match)}
-                  {e.last_correct === true ? ' ✓' : e.last_correct === false ? ' ✗' : ' ⏳'}
-                </span>
-              )}
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="lb-pts">{e.total_pts}</div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{t.tickets}</div>
-            </div>
+      {/* PREDICTIONS tab */}
+      {view === 'predictions' && (
+        loading ? (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
+        ) : filtered.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
+            <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{t.noEntriesYet}</p>
+            <p className="muted" style={{ marginTop: 6 }}>{t.beFirstPrediction}</p>
           </div>
-        ))
+        ) : (
+          filtered.map((e, i) => (
+            <div key={i} className={`lb-entry${i === 0 ? ' lb-gold' : i === 1 ? ' lb-silver' : i === 2 ? ' lb-bronze' : ''}`}>
+              <div className="lb-rank" style={{ color: i === 0 ? 'var(--gold)' : i === 1 ? '#b0b8c8' : i === 2 ? '#cd7f32' : 'var(--text-dim)', fontSize: i === 0 ? 26 : i === 1 ? 22 : 20 }}>
+                {medals[i] || i + 1}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
+                  {e.correct}/{e.total} {t.correct} · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                </div>
+                {match && (
+                  <span className={`pick-pill ${e.last_correct === true ? 'correct' : e.last_correct === false ? 'wrong' : ''}`}>
+                    {pickLabel(e.last_pick, match)}
+                    {e.last_correct === true ? ' ✓' : e.last_correct === false ? ' ✗' : ' ⏳'}
+                  </span>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div className="lb-pts">{e.total_pts}</div>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{t.tickets}</div>
+              </div>
+            </div>
+          ))
+        )
       )}
 
-      <div style={{ marginTop: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #1a1200, #0f1a00)', borderRadius: 'var(--radius)', border: '1px solid rgba(245,197,24,0.2)', fontSize: 13, color: 'var(--text-muted)' }}>
-        🏆 <strong style={{ color: 'var(--gold)' }}>3 {t.raffleEntries}</strong> {t.perCorrectPick}
-      </div>
+      {/* ATTENDANCE tab */}
+      {view === 'attendance' && (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, marginBottom: 2 }}>{t.mostAttendedTitle}</div>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t.mostAttendedSub}</p>
+          </div>
+          {attendanceLoading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.loading}</div>
+          ) : filteredAttendance.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>🍺</div>
+              <p style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{t.noCheckInsYet}</p>
+              <p className="muted" style={{ marginTop: 6 }}>{t.beFirstCheckin}</p>
+            </div>
+          ) : (
+            filteredAttendance.map((e, i) => (
+              <div key={i} className={`lb-entry${i === 0 ? ' lb-gold' : i === 1 ? ' lb-silver' : i === 2 ? ' lb-bronze' : ''}`}>
+                <div className="lb-rank" style={{ color: i === 0 ? 'var(--gold)' : i === 1 ? '#b0b8c8' : i === 2 ? '#cd7f32' : 'var(--text-dim)', fontSize: i === 0 ? 26 : i === 1 ? 22 : 20 }}>
+                  {medals[i] || i + 1}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
+                    {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="lb-pts" style={{ color: 'var(--red)' }}>{e.match_count}</div>
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                    {t.matchesAttended.replace('{count}', '').replace('{plural}', e.match_count !== 1 ? 's' : '').trim()}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </>
+      )}
+
+      {view === 'predictions' && (
+        <div style={{ marginTop: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #1a1200, #0f1a00)', borderRadius: 'var(--radius)', border: '1px solid rgba(245,197,24,0.2)', fontSize: 13, color: 'var(--text-muted)' }}>
+          🏆 <strong style={{ color: 'var(--gold)' }}>3 {t.raffleEntries}</strong> {t.perCorrectPick}
+        </div>
+      )}
 
       <Link href={`/?pub=${pubId || 'haverhill'}`} className="btn btn-secondary"
         style={{ textDecoration: 'none', textAlign: 'center', marginTop: 12 }}>

@@ -1,8 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-export default function FeedbackPage() {
+function FeedbackContent() {
+  const searchParams = useSearchParams()
   const [message, setMessage] = useState('')
   const [email, setEmail]     = useState('')
   const [page, setPage]       = useState('')
@@ -10,6 +12,8 @@ export default function FeedbackPage() {
 
   useEffect(() => {
     setPage(window.location.href)
+    const prefill = searchParams.get('msg')
+    if (prefill) setMessage(decodeURIComponent(prefill))
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -116,4 +120,8 @@ export default function FeedbackPage() {
       </Link>
     </div>
   )
+}
+
+export default function FeedbackPage() {
+  return <Suspense><FeedbackContent /></Suspense>
 }

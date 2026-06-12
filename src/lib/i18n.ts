@@ -215,6 +215,18 @@ export const translations = {
     tickets: 'tickets',
     raffleEntries: 'raffle entries',
     perCorrectPick: 'per correct pick · Raffle draw after the Final on July 19 — more tickets = more chances',
+
+    // Leaderboard tabs
+    predictionsTab: 'Predictions',
+    attendanceTab: '🍺 Most Attended',
+    mostAttendedTitle: 'Most Matches Attended',
+    mostAttendedSub: 'Regulars at The Peddler\'s Daughter during World Cup 2026',
+    matchesAttended: '{count} match{plural}',
+    noCheckInsYet: 'No check-ins yet',
+    beFirstCheckin: 'Check in live during a match to appear here!',
+
+    // Geo problem report
+    reportLocationProblem: 'Report a location problem',
     demoModeShort: '🎮 Demo mode',
     tryItOut: 'Try it out',
     demoPageSub: "See how predictions work before the tournament starts on June 11. Demo entries don't count toward the real leaderboard.",
@@ -742,6 +754,18 @@ export const translations = {
     tickets: 'boletos',
     raffleEntries: 'boletos de rifa',
     perCorrectPick: 'por cada acierto · Sorteo después de la Final el 19 de julio — más boletos = más chances',
+
+    // Leaderboard tabs
+    predictionsTab: 'Predicciones',
+    attendanceTab: '🍺 Más Asistencias',
+    mostAttendedTitle: 'Más Partidos Presenciados',
+    mostAttendedSub: 'Clientes habituales en The Peddler\'s Daughter durante el Mundial 2026',
+    matchesAttended: '{count} partido{plural}',
+    noCheckInsYet: 'Sin registros aún',
+    beFirstCheckin: '¡Regístrate en vivo durante un partido para aparecer aquí!',
+
+    // Geo problem report
+    reportLocationProblem: 'Reportar un problema de ubicación',
     demoModeShort: '🎮 Modo demo',
     tryItOut: 'Pruébalo',
     demoPageSub: 'Mira cómo funcionan las predicciones antes de que comience el torneo el 11 de junio. Las entradas demo no cuentan para la clasificación real.',
