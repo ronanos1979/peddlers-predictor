@@ -4,7 +4,7 @@ import { useLocale } from '@/lib/useLocale'
 import Link from 'next/link'
 
 type Fixture = {
-  fixture: { id: number; date: string; venue: { name: string; city: string } }
+  fixture: { id: number; date: string; venue: { name: string; city: string } | null }
   league: { round: string }
   teams: { home: { name: string; logo: string }; away: { name: string; logo: string } }
   goals: { home: number | null; away: number | null }
@@ -103,9 +103,11 @@ export default function ResultsPage() {
                 <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: awayWon ? 'var(--green)' : 'var(--text)' }}>{f.teams.away.name}</div>
               </div>
             </div>
-            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
-              📍 {f.fixture.venue.name}, {f.fixture.venue.city}
-            </div>
+            {f.fixture.venue && (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
+                📍 {f.fixture.venue.name}, {f.fixture.venue.city}
+              </div>
+            )}
           </div>
         )
       })}
