@@ -36,7 +36,16 @@
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/matchSchedule\" --no-coverage)",
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/pathToFinal\" --no-coverage)",
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test -- --testPathPatterns=\"lib/__tests__/\\(matchSchedule|pathToFinal\\)\" --no-coverage)",
-      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test *)"
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm test *)",
+      "Bash(curl -s 'https://api.football-data.org/v4/competitions/2000/matches?status=FINISHED&season=2026' -H 'X-Auth-Token: 01ba562ed26043ff91810b4da626e16d')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s https://api.football-data.org/v4/matches/537327 -H 'X-Auth-Token: 01ba562ed26043ff91810b4da626e16d')",
+      "Bash(curl -s 'https://v3.football.api-sports.io/fixtures?league=1&season=2026&date=2026-06-11' -H 'x-apisports-key: a2293acc72ebead4cc0eb96b67f76e2c')",
+      "Bash(curl -s 'https://v3.football.api-sports.io/fixtures?league=1&season=2025&date=2026-06-11' -H 'x-apisports-key: a2293acc72ebead4cc0eb96b67f76e2c')",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760415\")",
+      "Bash(python3 *)"
     ]
   }
 }
