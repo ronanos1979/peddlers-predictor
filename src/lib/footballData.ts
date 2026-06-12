@@ -68,6 +68,20 @@ interface FdMatch {
     fullTime?: { home: number | null; away: number | null }
     halfTime?: { home: number | null; away: number | null }
   }
+  goals?: Array<{
+    minute: number | null
+    injuryTime?: number | null
+    type: string
+    team: { id: number; name: string }
+    scorer: { id: number; name: string }
+    assist?: { id: number | null; name: string | null }
+  }>
+  bookings?: Array<{
+    minute: number | null
+    team: { id: number; name: string }
+    player: { id: number; name: string }
+    card: string
+  }>
 }
 
 interface FdStandingRow {
@@ -427,6 +441,24 @@ export async function getFdFixtures(opts: { status?: string; team?: string } = {
         away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || '', winner: done ? winner === 'AWAY_TEAM' : null },
       },
       goals: { home: m.score?.fullTime?.home ?? null, away: m.score?.fullTime?.away ?? null },
+      events: [
+        ...(m.goals || []).map(g => ({
+          time: { elapsed: g.minute ?? 0, extra: g.injuryTime ?? null },
+          team: { id: g.team.id, name: g.team.name },
+          player: { name: g.scorer.name },
+          assist: g.assist?.name ? { name: g.assist.name } : null,
+          type: 'Goal',
+          detail: g.type === 'OWN_GOAL' ? 'Own Goal' : g.type === 'PENALTY' ? 'Penalty' : 'Normal Goal',
+        })),
+        ...(m.bookings || []).map(b => ({
+          time: { elapsed: b.minute ?? 0, extra: null },
+          team: { id: b.team.id, name: b.team.name },
+          player: { name: b.player.name },
+          assist: null,
+          type: b.card === 'RED_CARD' || b.card === 'YELLOW_RED_CARD' ? 'Card' : 'Card',
+          detail: b.card === 'YELLOW_CARD' ? 'Yellow Card' : b.card === 'YELLOW_RED_CARD' ? 'Yellow Red Card' : 'Red Card',
+        })),
+      ].sort((a, b) => a.time.elapsed - b.time.elapsed),
     }
   })
 

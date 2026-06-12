@@ -491,9 +491,9 @@ export const translations = {
     makeYourScorerPickBtn: '🎯 Pick Your Golden Boot →',
 
     // Leaderboard community picks section
-    communityBonusPicks: 'Community Bonus Picks',
-    bonusPicksSub: 'See what the pub is backing — and earn bonus tickets',
-    champPicksLabel: '🏆 Champion',
+    communityBonusPicks: 'What the Pub is Backing',
+    bonusPicksSub: 'See the leading picks from everyone at the pub — earn bonus tickets for getting it right',
+    champPicksLabel: '🏆 World Cup Winner',
     goldenBootPicksLabel: '🎯 Golden Boot',
     seeAllPicks: 'See all →',
     vote: 'vote',
@@ -1049,9 +1049,9 @@ export const translations = {
     makeYourScorerPickBtn: '🎯 Elegir tu Bota de Oro →',
 
     // Leaderboard community picks section
-    communityBonusPicks: 'Picks de Bonus de la Comunidad',
-    bonusPicksSub: 'Ve qué apoya el pub — y gana boletos de bonus',
-    champPicksLabel: '🏆 Campeón',
+    communityBonusPicks: 'Lo Que Apoya el Pub',
+    bonusPicksSub: 'Ve las principales elecciones de todos en el pub — gana boletos de bonus si aciertas',
+    champPicksLabel: '🏆 Ganador de la Copa',
     goldenBootPicksLabel: '🎯 Bota de Oro',
     seeAllPicks: 'Ver todo →',
     vote: 'voto',
