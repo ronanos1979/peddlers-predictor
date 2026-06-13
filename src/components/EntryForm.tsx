@@ -12,6 +12,9 @@ import Link from 'next/link'
 
 type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean; onComplete?: () => void }
 
+// Set NEXT_PUBLIC_GEO_REQUIRED=true in Vercel env vars to re-enable location checking
+const GEO_REQUIRED = process.env.NEXT_PUBLIC_GEO_REQUIRED === 'true'
+
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 10)
   if (digits.length <= 3) return digits
@@ -105,9 +108,9 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
 
   // Geolocation
   const checkGeo = useCallback(async () => {
-    if (!pub || isDemo) {
+    if (!GEO_REQUIRED || !pub || isDemo) {
       setGeoStatus('ok')
-      setGeoMessage(t.demoMode)
+      setGeoMessage(isDemo ? t.demoMode : '')
       return
     }
     try {
@@ -137,7 +140,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
 
   // Geo verification on mount — restore session cache, auto-check if permission granted, or show prompt
   useEffect(() => {
-    if (isDemo || !pub) { checkGeo(); return }
+    if (!GEO_REQUIRED || isDemo || !pub) { checkGeo(); return }
 
     // Restore a valid cached result from this session (TTL: 30 min)
     try {
@@ -486,7 +489,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
       {!isClosed && (
         <>
           {/* Geo strip — only shown after a check has been attempted */}
-          {(geoStatus === 'ok' || geoStatus === 'checking' || geoStatus === 'fail') && (
+          {(geoStatus === 'ok' || geoStatus === 'checking' || geoStatus === 'fail') && !!geoMessage && (
             <div className="geo-strip">
               <div className={`geo-dot ${geoStatus}`} />
               <span>{geoMessage}</span>
