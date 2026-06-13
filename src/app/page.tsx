@@ -637,7 +637,7 @@ function HomeContent() {
     if (pubId) return
     const saved = loadPubPref()
     if (saved && PUB_DATA[saved]) { choosePub(saved); return }
-    if (!navigator.geolocation) return
+    if (!navigator.geolocation) { choosePub('haverhill'); return }
     setGeoDetecting(true)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -647,7 +647,7 @@ function HomeContent() {
         choosePub(dH <= dN ? 'haverhill' : 'nashua')
         setGeoDetecting(false)
       },
-      () => setGeoDetecting(false),
+      () => { setGeoDetecting(false); choosePub('haverhill') },
       { timeout: 7000, maximumAge: 300000 }
     )
   }, []) // eslint-disable-line
