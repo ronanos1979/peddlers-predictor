@@ -29,15 +29,25 @@ export default function ResultsPage() {
   const [error, setError] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [stages, setStages] = useState<string[]>([])
-  // Map of kickoff ms → events (loaded from Supabase)
-  const [eventsMap, setEventsMap] = useState<Map<number, MatchEvent[]>>(new Map())
+  type EventsState = { byId: Map<string, MatchEvent[]>; idByTeams: Map<string, string> }
+  const [eventsState, setEventsState] = useState<EventsState>({ byId: new Map(), idByTeams: new Map() })
+
+  // FD team name → normalised schedule name (only differences that survive norm())
+  const FD_NORM_ALIASES: Record<string, string> = {
+    unitedstates: 'usa',
+    turkey: 'turkiye',
+    capeverdeislands: 'capeverde',
+  }
+  const normFd = (s: string) => { const n = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); return FD_NORM_ALIASES[n] ?? n }
+  const normSched = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
 
   useEffect(() => {
     async function load() {
       try {
-        const [fdRes, sbRes] = await Promise.all([
+        const [fdRes, sbEventsRes, sbMatchesRes] = await Promise.all([
           fetch('/api/football?endpoint=fixtures&status=FT'),
-          supabase.from('match_events').select('kickoff_at, events'),
+          supabase.from('match_events').select('match_id, events'),
+          supabase.from('matches').select('id, home_team, away_team').not('result', 'is', null),
         ])
 
         const data = await fdRes.json()
@@ -47,12 +57,17 @@ export default function ResultsPage() {
         const uniqueStages = Array.from(new Set(results.map(f => f.league.round)))
         setStages(uniqueStages)
 
-        // Build kickoff-time → events map from Supabase
-        const map = new Map<number, MatchEvent[]>()
-        for (const row of sbRes.data || []) {
-          map.set(new Date(row.kickoff_at).getTime(), (row.events as MatchEvent[]) || [])
+        // Build match_id → events map
+        const byId = new Map<string, MatchEvent[]>()
+        for (const row of sbEventsRes.data || []) {
+          byId.set(row.match_id, (row.events as MatchEvent[]) || [])
         }
-        setEventsMap(map)
+        // Build normed-team-pair → match_id map (bridges FD names to Supabase UUIDs)
+        const idByTeams = new Map<string, string>()
+        for (const m of sbMatchesRes.data || []) {
+          idByTeams.set(`${normSched(m.home_team)}|${normSched(m.away_team)}`, m.id)
+        }
+        setEventsState({ byId, idByTeams })
       } catch {
         setError(t.couldNotLoadResults)
       }
@@ -82,11 +97,12 @@ export default function ResultsPage() {
     return '⚽'
   }
 
-  // Find events for a fixture by matching kickoff time ±5 min
-  function getEvents(fixtureDate: string): MatchEvent[] | null {
-    const ms = new Date(fixtureDate).getTime()
-    const entry = Array.from(eventsMap.entries()).find(([km]) => Math.abs(km - ms) <= 5 * 60 * 1000)
-    return entry ? entry[1] : null  // null = not yet loaded by admin
+  // Find events for a fixture by team name → match_id (robust against kickoff time discrepancies)
+  function getEvents(fixture: Fixture): MatchEvent[] | null {
+    const key = `${normFd(fixture.teams.home.name)}|${normFd(fixture.teams.away.name)}`
+    const matchId = eventsState.idByTeams.get(key)
+    if (!matchId) return null
+    return eventsState.byId.get(matchId) ?? null
   }
 
   return (
@@ -130,7 +146,7 @@ export default function ResultsPage() {
         const away = f.score?.fulltime?.away ?? f.goals?.away ?? null
         const homeWon = home !== null && away !== null && home > away
         const awayWon = home !== null && away !== null && away > home
-        const events = getEvents(f.fixture.date)
+        const events = getEvents(f)
         const hasEvents = events !== null && events.length > 0
         const normTeam = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
         const isHome = (e: MatchEvent) => e.teamSide === 'home' || (!e.teamSide && normTeam(e.team.name) === normTeam(f.teams.home.name))
