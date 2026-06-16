@@ -11,13 +11,13 @@ BEGIN;
 -- PART 1: Fix group stage kickoff times (wrong in original load)
 -- =============================================================
 
-UPDATE matches SET kickoff_at = '2026-06-15 17:00:00+00', entries_close_at = '2026-06-15 18:45:00+00'
+UPDATE matches SET kickoff_at = '2026-06-15 16:00:00+00', entries_close_at = '2026-06-15 17:45:00+00'
   WHERE home_team = 'Spain' AND away_team = 'Cape Verde' AND stage = 'Group H';
 
 UPDATE matches SET kickoff_at = '2026-06-15 22:00:00+00', entries_close_at = '2026-06-15 23:45:00+00'
   WHERE home_team = 'Belgium' AND away_team = 'Egypt' AND stage = 'Group G';
 
-UPDATE matches SET kickoff_at = '2026-06-16 04:00:00+00', entries_close_at = '2026-06-16 05:45:00+00'
+UPDATE matches SET kickoff_at = '2026-06-16 01:00:00+00', entries_close_at = '2026-06-16 02:45:00+00'
   WHERE home_team = 'Iran' AND away_team = 'New Zealand' AND stage = 'Group G';
 
 UPDATE matches SET kickoff_at = '2026-06-19 03:00:00+00', entries_close_at = '2026-06-19 04:45:00+00'
