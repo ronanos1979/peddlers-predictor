@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     if (action === 'sync_results') {
       type FdFixture = {
         fixture: { date: string; status: { short: string } }
-        teams: { home: { winner: boolean | null }; away: { winner: boolean | null } }
+        teams: { home: { name: string; winner: boolean | null }; away: { name: string; winner: boolean | null } }
         goals: { home: number | null; away: number | null }
       }
 
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
       const { data: unresolved } = await supabaseAdmin
         .from('matches')
-        .select('id, kickoff_at')
+        .select('id, kickoff_at, home_team, away_team')
         .is('result', null)
         .lt('kickoff_at', twoHoursAgo)
         .neq('stage', 'Demo Match')
@@ -175,12 +175,31 @@ export async function POST(req: NextRequest) {
 
       let updated = 0
       let entries_scored = 0
+      type SyncDebugUnmatched = { match: string; dbKickoff: string; nearestFd: string | null; nearestFdKickoff: string | null; diffMin: number | null }
+      const unmatched: SyncDebugUnmatched[] = []
 
       for (const match of unresolved) {
         const matchMs = new Date(match.kickoff_at).getTime()
         // Match by kickoff time within 5-minute tolerance
         const fdMatch = fdFinished.find(f => Math.abs(new Date(f.fixture.date).getTime() - matchMs) <= 5 * 60 * 1000)
-        if (!fdMatch) continue
+
+        if (!fdMatch) {
+          // Find the nearest FD match by time for debugging
+          let nearestDiff = Infinity
+          let nearestFd: FdFixture | null = null
+          for (const f of fdFinished) {
+            const diff = Math.abs(new Date(f.fixture.date).getTime() - matchMs)
+            if (diff < nearestDiff) { nearestDiff = diff; nearestFd = f }
+          }
+          unmatched.push({
+            match: `${match.home_team} vs ${match.away_team}`,
+            dbKickoff: match.kickoff_at,
+            nearestFd: nearestFd ? `${nearestFd.teams.home.name} vs ${nearestFd.teams.away.name}` : null,
+            nearestFdKickoff: nearestFd ? nearestFd.fixture.date : null,
+            diffMin: nearestFd ? Math.round(nearestDiff / 60000) : null,
+          })
+          continue
+        }
 
         const result: 'home' | 'draw' | 'away' =
           fdMatch.teams.home.winner === true ? 'home' :
@@ -211,7 +230,10 @@ export async function POST(req: NextRequest) {
         updated++
       }
 
-      return NextResponse.json({ success: true, updated, entries_scored })
+      return NextResponse.json({
+        success: true, updated, entries_scored,
+        debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: unresolved.length, unmatched },
+      })
     }
 
     if (action === 'draw_checkin_winner') {

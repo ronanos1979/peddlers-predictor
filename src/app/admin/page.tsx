@@ -66,7 +66,8 @@ export default function AdminPage() {
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[] | null>(null)
   const [analyticsDays, setAnalyticsDays] = useState(7)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
+  type SyncDebugUnmatched = { match: string; dbKickoff: string; nearestFd: string | null; nearestFdKickoff: string | null; diffMin: number | null }
+  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; message?: string; debug?: { fdFinishedCount: number; dbUnresolvedCount: number; unmatched: SyncDebugUnmatched[] } } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [checkins, setCheckins] = useState<CheckInRow[]>([])
   const [checkinMinDraw, setCheckinMinDraw] = useState<number>(() =>
@@ -808,11 +809,41 @@ export default function AdminPage() {
               </button>
             </div>
             {syncResult && (
-              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
-                background: syncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
-                color: syncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
-                border: `1px solid ${syncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
-                {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored`}
+              <div style={{ marginTop: 10 }}>
+                <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                  background: syncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
+                  color: syncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
+                  border: `1px solid ${syncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
+                  {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored`}
+                </div>
+                {syncResult.debug && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, fontSize: 12, background: 'rgba(119,119,112,0.08)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    <div style={{ marginBottom: 4, fontWeight: 700, fontFamily: 'var(--font-cond)', letterSpacing: 0.5, textTransform: 'uppercase', fontSize: 10 }}>
+                      Sync debug — FD: {syncResult.debug.fdFinishedCount} finished · DB unresolved: {syncResult.debug.dbUnresolvedCount}
+                    </div>
+                    {syncResult.debug.unmatched.length === 0 ? (
+                      <div style={{ color: 'var(--green)', fontSize: 11 }}>✓ All unresolved DB matches were paired with FD results</div>
+                    ) : (
+                      <>
+                        <div style={{ color: 'var(--amber)', marginBottom: 4, fontSize: 11 }}>⚠ {syncResult.debug.unmatched.length} DB match{syncResult.debug.unmatched.length !== 1 ? 'es' : ''} could not be paired:</div>
+                        {syncResult.debug.unmatched.map((u, i) => (
+                          <div key={i} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: i < syncResult.debug!.unmatched.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                            <div style={{ color: 'var(--text)', fontSize: 12 }}>{u.match}</div>
+                            <div>DB kickoff: {new Date(u.dbKickoff).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</div>
+                            {u.nearestFd ? (
+                              <>
+                                <div>Nearest FD: {u.nearestFd}</div>
+                                <div>FD kickoff: {new Date(u.nearestFdKickoff!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })} <span style={{ color: u.diffMin! > 5 ? 'var(--red)' : 'var(--green)' }}>({u.diffMin}m off)</span></div>
+                              </>
+                            ) : (
+                              <div style={{ color: 'var(--red)' }}>No FD finished matches at all</div>
+                            )}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
