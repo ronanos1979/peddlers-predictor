@@ -102,12 +102,20 @@ Patron behaviour events (geo outcomes, engagement, conversions). Public insert v
 
 ---
 
-## API-Football Integration
+## Football Data Integration
+
+Three sources: **football-data.org (FD)** for standings/fixtures/scores, **API-Football (AF)** for player photos/clubs, and **ESPN unofficial API** for match events (goals/cards). FD is free with 10 req/min; AF is 100 req/day; ESPN has no key and no rate limit.
+
+### Match events (ESPN)
+Goals and cards load automatically when a match result is synced (`sync_results`) or manually confirmed (`set_result`). The `fetchEspnEvents()` helper in `src/app/api/admin/route.ts` is shared by both call sites and by the manual `load_match_events` action. Stores results in the `match_events` Supabase table; the patron-facing `/world-cup/results` page reads from there and never calls ESPN directly.
+
+### Sync result matching
+`sync_results` matches FD finished fixtures to DB matches by kickoff timestamp (±5 min tolerance). A sync debug panel shows which matches couldn't be paired and why (nearest FD match + time diff in minutes). If the diff is >5 min, fix `kickoff_at` in Supabase and re-sync.
 
 ### Proxy: `/api/football`
-- Keeps the API key server-side
+- Keeps API keys server-side
 - 5-minute in-memory cache
-- League ID `1` (FIFA World Cup), Season `2026`
+- FD primary for standings/fixtures/scores; AF for player photos, squad, coach
 
 ### Team data: `/api/team`
 Handles both `?id=X` (numeric) and `?name=USA` (display name) lookups.
@@ -159,7 +167,7 @@ Automatic based on `kickoff_at`. Entries close at `entries_close_at` (kickoff + 
 Patron name must contain a full first and last name — a single initial is rejected. Validation requires at least two whitespace-separated parts each with at least 2 characters. Enforced client-side (inline error, submit disabled) and server-side in `/api/entries`.
 
 ### Geolocation
-Browser GPS checked against pub coordinates (300m radius). Best-effort — falls back to code-only if GPS denied.
+Browser GPS checked against pub coordinates (200m / ~656ft radius in `pubData.ts`). Distance shown to patron in feet. Falls back to daily access code if GPS denied or unavailable.
 
 ### Cookie persistence
 `peddlers_patron` cookie (90 days): name + phone. Pre-fills form, shows "Welcome back" message. `peddlers_lang` cookie (1 year): EN/ES preference.
@@ -171,20 +179,23 @@ Browser GPS checked against pub coordinates (300m radius). Best-effort — falls
 Tests live in `__tests__/` subdirectories next to the code they test.
 
 ```bash
-npm test              # 157 tests across 9 suites
+npm test              # 213 tests across 12 suites
 npm run test:coverage # coverage report
 ```
 
 Suites:
 - `matchSchedule.test.ts` — rolling window, isMatchLive, getDailyCode, isValidOverrideCode
 - `teamResolution.test.ts` — pure unit tests for name resolution logic
-- `resolution.test.ts` — regression tests (USA≠France, USA≠Israel, USA≠U17)
 - `goldenBootContenders.test.ts` — Golden Boot list validation
+- `pathToFinalHelpers.test.ts` — path-to-final helper functions
+- `espnEvents.test.ts` — ESPN helpers: toEspnDate (ET timezone), toEspnTeamName, parseEspnMinute, mapEspnEventType
+- `team/resolution.test.ts` — regression tests (USA≠France, USA≠Israel, USA≠U17)
+- `team/route.test.ts` — team data route integration
 - `entries/route.test.ts` — entry submission, duplicate detection, geo/code checks
 - `feedback/route.test.ts` — API route with mocked Supabase
 - `admin/auth.test.ts` — authentication
 - `my-picks/route.test.ts` — picks + scorerPick + winnerPick response
-- `team/route.test.ts` — team data route integration
+- `bracket/helpers.test.ts` — parseMatchNumber, isPlaceholder, parseGroupLetters, formatPlaceholder
 
 ---
 
@@ -211,7 +222,7 @@ Fonts: Bebas Neue (display/headings), Barlow Condensed (labels/nav), Barlow (bod
 Push to `main` → Vercel auto-deploys in ~60 seconds. No staging environment currently — test locally with `npm run build` before pushing.
 
 **Pre-push checklist:**
-1. `npm test` — all 157 tests pass
+1. `npm test` — all 213 tests pass
 2. `npm run build` — no TypeScript errors
 3. `git push origin main`
 

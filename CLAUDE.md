@@ -333,14 +333,19 @@ Fully automatic based on datetime — no admin needed:
 
 **Rule**: If FD returns `shirtNumber: null` for all squad members, that means FD doesn't have it yet — NOT that no numbers exist. Auto-fall back to AF `players/squads`. This is implemented in `handleLoadFd` in `src/app/api/admin-teams/route.ts`. Never store `0` as a shirt number; use `null` for unknown.
 
-### ESPN match events (admin `load_match_events` action)
-- **Source**: `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world` — no API key
-- **Flow**: admin clicks `⟳ scorers` on a completed match → `load_match_events` action:
+### ESPN match events — auto-loading and manual refresh
+- **Source**: `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world` — no API key, no rate limit
+- **Auto-load triggers** (no admin click needed):
+  - `sync_results`: after resolving each match from FD, fires `fetchEspnEvents()` for all resolved matches in parallel (`Promise.allSettled` — one failure doesn't block others)
+  - `set_result` (manual confirm button): fires `fetchEspnEvents()` as fire-and-forget after scoring entries
+- **Manual refresh**: admin can still click **"⟳ scorers"** on any completed match row to reload events — useful if auto-load failed or to refresh after ESPN updates their data
+- **`fetchEspnEvents(matchId, kickoffAt, homeTeam, awayTeam)`** — module-level helper in `src/app/api/admin/route.ts`, shared by all three call sites. Returns `{ events, espnEventId }` or `null` if match not found in ESPN. Upserts to `match_events` table on success.
+- **Flow inside `fetchEspnEvents`**:
   1. Convert UTC kickoff to US Eastern time (UTC-4) for ESPN's date grouping — `toEspnDate()` in `espnEvents.ts`
-  2. Fetch `/scoreboard?dates={YYYYMMDD}` to find the ESPN event ID by team names
+  2. Fetch `/scoreboard?dates={YYYYMMDD}` to find the ESPN event ID by fuzzy team name match
   3. Try the ET date first; if not found try ET-1 day (safety net)
-  4. Fetch `/summary?event={id}` — parse `keyEvents` for `goal`, `goal---header`, `goal---penalty`, `own-goal`, `yellow-card`, `yellow-red-card`, `red-card`
-  5. Map to standard event format (see `mapEspnEventType()` in `espnEvents.ts`)
+  4. Fetch `/summary?event={id}` — parse `keyEvents` for goals and cards
+  5. Map to standard event format via `mapEspnEventType()` in `espnEvents.ts`
   6. Upsert into `match_events` Supabase table
 - **Helper module**: `src/lib/espnEvents.ts` — all pure functions, fully tested
 - **Team name aliases** (schedule → ESPN, the only two that differ):
@@ -466,7 +471,7 @@ Print and laminate for tables:
 
 1. Nothing needed before kick-off — match activates automatically
 2. Patron code is automatic (`{prefix}` + day number) — tell bar staff
-3. After full time → go to `/admin` → click **⟳ Sync** to auto-fetch results, or set manually
+3. After full time → go to `/admin` → click **⟳ Sync** to auto-fetch results AND auto-load ESPN match events (goals/cards) in one step. Or set results manually via the dropdowns.
 4. Admin panel has 7 tabs: Results, Entrants, Stats, Feedback, Raffle, Teams, Analytics
 
 ### Name validation
@@ -477,9 +482,10 @@ Print and laminate for tables:
 
 ### Admin panel features
 - **Results tab**: today's matches, all matches from the past 7 days (scored or not), upcoming 3 days, daily code display
-  - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp, sets result + score, and scores all entries automatically. Reports how many matches updated and entries scored.
-  - **"⟳ scorers" button** per completed match — calls `load_match_events` action, fetches goals/cards from ESPN unofficial API, stores in `match_events` Supabase table. Shows events inline in admin. Public results page reads from Supabase (no external API call on patron load).
-  - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming
+  - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp (±5 min tolerance), sets result + score, scores all entries, and **auto-loads ESPN match events** (goals/cards) for every newly resolved match in parallel. Reports updated matches, entries scored, and events loaded.
+  - **Sync debug panel** — shown after every sync. Displays: FD finished count, DB unresolved count, and for any unmatched DB matches: the DB kickoff time, the nearest FD match, and the time difference in minutes (red if >5 min, meaning outside the pairing tolerance). Use this to diagnose kickoff time mismatches — fix by updating `kickoff_at` in Supabase, then re-sync.
+  - **"⟳ scorers" button** per completed match — manually triggers `load_match_events` (ESPN fetch). Events now load automatically on sync or manual confirm, so this button is mainly for refreshing stale data or retrying a failed auto-load.
+  - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming. Confirming also auto-loads ESPN events (fire-and-forget).
   - **Auto-scores `winner_picks` when stage is 'Final'**: after setting the Final result, the `set_result` action automatically sets `is_correct=true, raffle_entries=15` for the champion pick and `is_correct=false, raffle_entries=0` for all other pending winner_picks
   - Email reminders: select upcoming matches and send match-day emails to all patrons who provided an email
   - **Winner draw email**: when the raffle winner is drawn (auto or manual), an email is sent to `ronan.osullivan@ronanos.com` and `mike@thepeddlersdaughter.com` with the winner's name, phone, email, and pub — NOT emailed to the winner directly
