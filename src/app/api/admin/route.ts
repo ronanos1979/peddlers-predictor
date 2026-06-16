@@ -419,104 +419,17 @@ export async function POST(req: NextRequest) {
         .from('matches').select('kickoff_at, home_team, away_team').eq('id', matchId).single()
       if (matchErr || !match) return NextResponse.json({ error: 'Match not found' }, { status: 404 })
 
-      // ESPN unofficial API — free, no key required, has WC 2026 events
-      const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
-      const norm = (s: string) =>
-        s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
-
-      const espnHomeName = toEspnTeamName(match.home_team)
-      const espnAwayName = toEspnTeamName(match.away_team)
-      const normHome = norm(espnHomeName)
-      const normAway = norm(espnAwayName)
-
-      // ESPN groups by US Eastern time (UTC-4); toEspnDate handles the offset
-      const date = toEspnDate(match.kickoff_at)
-      const kickoffEt = new Date(new Date(match.kickoff_at).getTime() - 4 * 60 * 60 * 1000)
-
-      type EspnCompetitor = { homeAway: 'home' | 'away'; team: { id: string; displayName: string } }
-      type EspnEvent = { id: string; competitions: Array<{ competitors: EspnCompetitor[] }> }
-
-      const findInScoreboard = (events: EspnEvent[]) =>
-        events.find(e => {
-          const comps = e.competitions?.[0]?.competitors || []
-          const hasHome = comps.some(c => { const n = norm(c.team.displayName); return n === normHome || n.includes(normHome) || normHome.includes(n) })
-          const hasAway = comps.some(c => { const n = norm(c.team.displayName); return n === normAway || n.includes(normAway) || normAway.includes(n) })
-          return hasHome && hasAway
-        })
-
-      // 1. Try ET date; fall back to ET date - 1 day as a safety net
-      let espnEvent: EspnEvent | undefined
-      const sbRes = await fetch(`${ESPN_BASE}/scoreboard?dates=${date}`)
-      if (!sbRes.ok) return NextResponse.json({ error: `ESPN scoreboard fetch failed: ${sbRes.status}` }, { status: 502 })
-      const sbData = await sbRes.json()
-      espnEvent = findInScoreboard(sbData.events || [])
-
-      if (!espnEvent) {
-        const prevDate = new Date(kickoffEt.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '')
-        const sbRes2 = await fetch(`${ESPN_BASE}/scoreboard?dates=${prevDate}`)
-        if (sbRes2.ok) {
-          const sbData2 = await sbRes2.json()
-          espnEvent = findInScoreboard(sbData2.events || [])
-        }
-      }
-
-      if (!espnEvent) {
+      const result = await fetchEspnEvents(matchId, match.kickoff_at, match.home_team, match.away_team)
+      if (!result) {
+        const espnHome = toEspnTeamName(match.home_team)
+        const espnAway = toEspnTeamName(match.away_team)
+        const date = toEspnDate(match.kickoff_at)
         return NextResponse.json({
-          error: `ESPN: no match found for ${match.home_team} vs ${match.away_team} (ESPN names: ${espnHomeName} vs ${espnAwayName}, ET date: ${date}).`
+          error: `ESPN: no match found for ${match.home_team} vs ${match.away_team} (ESPN names: ${espnHome} vs ${espnAway}, ET date: ${date}).`
         }, { status: 404 })
       }
 
-      const comps = espnEvent.competitions[0].competitors
-      const homeComp = comps.find(c => c.homeAway === 'home')
-      const awayComp = comps.find(c => c.homeAway === 'away')
-      const espnHomeId = homeComp?.team?.id
-      const espnAwayId = awayComp?.team?.id
-
-      // 2. Fetch ESPN match summary for events
-      const sumRes = await fetch(`${ESPN_BASE}/summary?event=${espnEvent.id}`)
-      if (!sumRes.ok) return NextResponse.json({ error: `ESPN summary fetch failed: ${sumRes.status}` }, { status: 502 })
-      const sumData = await sumRes.json()
-
-      // 3. Parse keyEvents — goals and cards only
-      type EspnKeyEvent = {
-        type: { type: string }
-        clock: { displayValue: string }
-        team?: { id: string; displayName: string }
-        participants?: Array<{ athlete: { displayName: string } }>
-      }
-
-      const events = ((sumData.keyEvents || []) as EspnKeyEvent[])
-        .filter(e => mapEspnEventType(e.type?.type) !== null)
-        .map(e => {
-          const mapped = mapEspnEventType(e.type?.type)!
-          const teamId = e.team?.id
-          const teamSide: 'home' | 'away' | undefined =
-            teamId === espnHomeId ? 'home' : teamId === espnAwayId ? 'away' : undefined
-          const teamName = teamSide === 'home' ? match.home_team
-            : teamSide === 'away' ? match.away_team
-            : (e.team?.displayName || '')
-          const parts = e.participants || []
-          return {
-            time:     parseEspnMinute(e.clock?.displayValue || ''),
-            team:     { name: teamName },
-            player:   { name: parts[0]?.athlete?.displayName || '' },
-            assist:   parts[1]?.athlete?.displayName ? { name: parts[1].athlete.displayName } : null,
-            type:     mapped.type,
-            detail:   mapped.detail,
-            teamSide,
-          }
-        })
-
-      const { error: upsertErr } = await supabaseAdmin.from('match_events').upsert({
-        match_id: matchId,
-        af_fixture_id: parseInt(espnEvent.id) || null,
-        kickoff_at: match.kickoff_at,
-        events,
-        loaded_at: new Date().toISOString(),
-      })
-      if (upsertErr) return NextResponse.json({ error: `DB error: ${upsertErr.message}` }, { status: 500 })
-
-      return NextResponse.json({ success: true, count: events.length, events, espn_event_id: espnEvent.id })
+      return NextResponse.json({ success: true, count: result.events.length, events: result.events, espn_event_id: result.espnEventId })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
