@@ -321,6 +321,43 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   )
 }
 
+function FlagTip() {
+  const { t } = useLocale()
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !localStorage.getItem('peddlers_flag_tip')) {
+      setShow(true)
+    }
+  }, [])
+
+  if (!show) return null
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+      background: 'rgba(0,200,122,0.07)',
+      border: '1px solid rgba(0,200,122,0.25)',
+      borderRadius: 8,
+      padding: '10px 14px',
+      marginBottom: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 20, flexShrink: 0 }}>🏳️</span>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3 }}>
+          {t.flagTipText}
+        </span>
+      </div>
+      <button
+        onClick={() => { localStorage.setItem('peddlers_flag_tip', '1'); setShow(false) }}
+        style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--green)', cursor: 'pointer', flexShrink: 0, padding: '2px 0' }}
+      >
+        {t.flagTipDismiss} ✕
+      </button>
+    </div>
+  )
+}
+
 function FirstTimeCard() {
   const { t } = useLocale()
   const [show, setShow] = useState(false)
@@ -794,6 +831,9 @@ function HomeContent() {
           </div>
         </div>
       </div>
+
+      {/* Flag tip — dismissible notice about clicking flags */}
+      <FlagTip />
 
       {/* Discovery strip — scrollable feature teaser */}
       <DiscoveryStrip selectedPub={selectedPub} />
