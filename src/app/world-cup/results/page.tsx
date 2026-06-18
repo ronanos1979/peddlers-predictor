@@ -47,7 +47,7 @@ export default function ResultsPage() {
         const [fdRes, sbEventsRes, sbMatchesRes] = await Promise.all([
           fetch('/api/football?endpoint=fixtures&status=FT'),
           supabase.from('match_events').select('match_id, events'),
-          supabase.from('matches').select('id, home_team, away_team').not('result', 'is', null),
+          supabase.from('matches').select('id, home_team, away_team'),
         ])
 
         const data = await fdRes.json()
@@ -73,11 +73,16 @@ export default function ResultsPage() {
         // Auto-load ESPN events for any completed matches that have no cached events.
         // Fires in background — results page renders immediately, events appear when ready.
         const ONE_HOUR_MS = 60 * 60 * 1000
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
         const needsAutoLoad = results.some(f => {
-          if (Date.now() - new Date(f.fixture.date).getTime() < ONE_HOUR_MS) return false
+          const age = Date.now() - new Date(f.fixture.date).getTime()
+          if (age < ONE_HOUR_MS) return false
           const key = `${normFd(f.teams.home.name)}|${normFd(f.teams.away.name)}`
           const matchId = idByTeams.get(key)
-          return matchId !== undefined && !byId.has(matchId)
+          if (matchId === undefined) return false
+          const events = byId.get(matchId)
+          // No events row at all, or empty row within 24h (premature load — ESPN not ready yet)
+          return events === undefined || (events.length === 0 && age < TWENTY_FOUR_HOURS_MS)
         })
 
         if (needsAutoLoad) {
