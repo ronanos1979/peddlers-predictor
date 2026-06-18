@@ -181,7 +181,12 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
   const nameValid = isValidName(name)
-  const canSubmit = nameValid && phone && phoneValid && pick && geoStatus === 'ok' && !isClosed && !submitting
+  const scoreValid = scoreSkipped || !pick || (
+    pick === 'draw' ? homeScorePred === awayScorePred :
+    pick === 'home' ? homeScorePred > awayScorePred :
+    awayScorePred > homeScorePred
+  )
+  const canSubmit = nameValid && phone && phoneValid && pick && geoStatus === 'ok' && !isClosed && !submitting && scoreValid
 
   function handleOverrideCode() {
     if (isValidOverrideCode(overrideCode)) {
@@ -727,6 +732,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                     </div>
                   </div>
                 </div>
+                {!scoreValid && pick && (
+                  <p style={{ color: 'var(--red)', fontFamily: 'var(--font-cond)', fontSize: 12, textAlign: 'center', margin: '12px 0 0' }}>
+                    {pick === 'draw'
+                      ? t.scoreMismatchDraw
+                      : t.scoreMismatchWinner.replace('{team}', pick === 'home' ? match.home_team : match.away_team)}
+                  </p>
+                )}
                 <button type="button" onClick={() => { setScoreSkipped(true); setHomeScorePred(0); setAwayScorePred(0) }}
                   style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
                   {t.skipNoScore}
