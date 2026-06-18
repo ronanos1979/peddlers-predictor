@@ -163,79 +163,6 @@ All tables have RLS enabled. Public read + insert on entries and scorer_picks. P
 
 ---
 
-## Project Structure
-
-```
-src/
-├── app/
-│   ├── page.tsx                    # Home — GPS pub auto-detect, two-column hero, match predictions
-│   ├── layout.tsx                  # Root layout — header with logo, pub switcher, WC logo, lang switcher, footer
-│   ├── globals.css                 # ALL styles — black theme, custom fonts, animations
-│   ├── feedback/page.tsx           # Bug report / feedback form
-│   ├── leaderboard/page.tsx        # Live leaderboard
-│   ├── schedule/page.tsx           # All 104 matches grouped by date
-│   ├── demo/page.tsx               # USA vs Ireland demo match (always open)
-│   ├── my-picks/page.tsx           # Patron looks up their picks by phone number
-│   ├── overall-picks/page.tsx      # Community picks — all 104 matches with pick bars and results
-│   ├── rules/page.tsx              # Full rules and instructions
-│   ├── locations/page.tsx          # Pub addresses, maps, social links
-│   ├── admin/page.tsx              # Admin panel — set results, view entrants, stats, feedback
-│   ├── world-cup/
-│   │   ├── page.tsx                # World Cup hub — nav grid to all WC sub-pages
-│   │   ├── groups/page.tsx         # All 12 groups compact overview (2-column grid)
-│   │   ├── standings/page.tsx      # Full group standings table
-│   │   ├── results/page.tsx        # Completed match results
-│   │   ├── scorers/page.tsx        # Top scorers / Golden Boot race
-│   │   ├── bracket/page.tsx        # Knockout bracket (R32→R16→QF→SF→Final) — includes inline group standings widget
-│   │   ├── bracket/bracketHelpers.ts # Pure functions: isPlaceholder, parseGroupLetters, formatPlaceholder, parseMatchNumber
-│   │   ├── team/page.tsx           # Team profile — squad, manager, fixtures
-│   │   ├── top-scorer-pick/page.tsx # Patron picks Golden Boot winner (+10 bonus tickets)
-│   │   ├── winner-pick/page.tsx    # Patron picks World Cup Champion (+15 bonus tickets, locked once submitted)
-│   │   ├── winner-picks/page.tsx   # Community champion picks — team vote counts, progress bars, pub breakdown
-│   │   └── scorer-picks/page.tsx   # Community Golden Boot picks — player vote tally, progress bars, your pick highlight
-│   ├── admin/
-│   │   ├── page.tsx                # Admin panel — set results, view entrants, stats, feedback, check-ins
-│   │   └── checkins/page.tsx       # Admin check-ins page — filter by date/pub, by-match list, most attended leaderboard
-│   └── api/
-│       ├── entries/route.ts        # POST — validate and save match prediction
-│       ├── matches/route.ts        # GET — active match
-│       ├── demo-match/route.ts     # GET — fetch/create the demo match (always-open window)
-│       ├── admin/route.ts          # POST — set_result, sync_results, ping, mark_feedback_read (auth)
-│       ├── admin-data/route.ts     # GET — stats, entrants, feedback, CSV export (auth)
-│       ├── admin-teams/route.ts    # GET — 48-team cache status; POST — load_fd, enrich_af (auth)
-│       ├── analytics/route.ts      # POST — log analytics event (public, rate-limited); GET — admin read (password header)
-│       ├── checkin-leaders/route.ts # GET — public aggregated check-in leaderboard (name, pub, match_count — no phone/email)
-│       ├── feedback/route.ts       # POST — public feedback/bug report submission
-│       ├── my-picks/route.ts       # GET — patron's picks by phone
-│       ├── football/route.ts       # GET — football data proxy (FD primary, AF fallback, 5min cache); ?bust=1 skips cache
-│       ├── team/route.ts           # GET — team data with 60-day Supabase cache
-│       └── send-reminder/route.ts  # POST — email reminder to all patrons via Resend (admin auth)
-├── components/
-│   ├── CheckInCard.tsx             # Live match check-in card — fully i18n'd (all strings via t.checkInXxx keys)
-│   ├── EntryForm.tsx               # Match prediction form — geo check (200m/656ft), feet display, location instructions, report link
-│   ├── Flag.tsx                    # Renders flag emoji via flagcdn.com PNG (fixes Windows text fallback)
-│   ├── HeaderLocation.tsx          # Pub switcher in sticky header — both pubs shown, active highlighted, clickable
-│   ├── LangSwitcher.tsx            # EN/ES toggle buttons in header
-│   ├── ShareCard.tsx               # "Love the app?" share card with Web Share API
-│   └── SiteFooter.tsx              # Footer — Facebook links, nav links, feedback link
-└── lib/
-    ├── supabase.ts                 # Browser Supabase client + types (Pub, Match, Entry)
-    ├── supabaseAdmin.ts            # Server Supabase client (secret key — server only)
-    ├── footballData.ts             # football-data.org adapter — standings, fixtures, scorers, team profiles
-    ├── goldenBootContenders.ts     # Pre-seeded top-10 Golden Boot picks (shown pre-tournament)
-    ├── rateLimit.ts                # In-memory rate limiter (checkRateLimit, getIp)
-    ├── pubData.ts                  # Pub info constants (address, phone, social links, coords)
-    ├── matchSchedule.ts            # getDailyCode(), isValidOverrideCode(), isMatchLive(), selectActiveMatch(), getPredictableWindowEnd()
-    ├── geo.ts                      # distanceMetres(), getPosition()
-    ├── patron.ts                   # Cookie utils: savePatron(), loadPatron(), clearPatron(), savePubPref(), loadPubPref()
-    ├── teamResolution.ts           # Team name→ID resolution logic (tested separately)
-    ├── analytics.ts                # trackEvent() — fires both Vercel Analytics track() and POST /api/analytics
-    ├── espnEvents.ts               # ESPN match event helpers: toEspnDate, toEspnTeamName, parseEspnMinute, mapEspnEventType
-    ├── i18n.ts + useLocale.ts      # EN/ES translations + locale cookie hook
-```
-
----
-
 ## Key Business Logic
 
 ### Daily patron code
@@ -414,12 +341,6 @@ Known name aliases:
 - Deduplicates by lowercase email — one email per address even if patron entered multiple times
 - Triggered from the admin panel before a match day
 
-### Pre-tournament behavior
-Before June 11, 2026:
-- Squad data may return empty — shows "Squad not yet announced."
-- Fixtures may return empty — falls back to local Supabase schedule.
-- WC teams list may be empty — falls back to name search with national team filter.
-
 ### Endpoints used by `/api/football`
 | Query param | Primary source | Fallback | Returns |
 |-------------|---------------|---------|---------|
@@ -434,36 +355,6 @@ Before June 11, 2026:
 | `endpoint=coaches&team=ID` | AF only | — | Manager info |
 
 **For match events use the admin `load_match_events` action (ESPN), not `/api/football?endpoint=match`.**
-
----
-
-## Pub Information
-
-### Haverhill, MA
-- Address: 45 Wingate St., Haverhill, MA 01832
-- Phone: (978) 372-9555
-- GPS: 42.7762, -71.0773
-- Facebook: facebook.com/peddlershaverhill
-- Instagram: instagram.com/peddlershaverhill
-
-### Nashua, NH
-- Address: 48 Main St., Nashua, NH 03064
-- Phone: (603) 821-7535
-- GPS: 42.7654, -71.4676
-- Facebook: facebook.com/pg/PeddlersNashua
-- Instagram: instagram.com/peddlersnashua
-
-### Both pubs
-- Website: https://www.thepeddlersdaughter.com/
-- Prize: **one TV — one winner across both pubs**, drawn by raffle after the World Cup Final (July 19, 2026). All entries from Haverhill and Nashua compete in one combined draw.
-
----
-
-## QR Codes
-
-Print and laminate for tables:
-- Haverhill: `https://peddlers-predictor.vercel.app/?pub=haverhill`
-- Nashua: `https://peddlers-predictor.vercel.app/?pub=nashua`
 
 ---
 
@@ -500,23 +391,6 @@ Print and laminate for tables:
 ### Admin session persistence
 - Password and auth state saved in `sessionStorage` (`admin_pw`, `admin_authed`) — survives page refresh but clears when the tab is closed
 - Flash notifications appear as a fixed-position toast at the bottom of the screen with a ✕ dismiss button (no auto-dismiss) — visible regardless of scroll position
-
----
-
-## Home Page UX
-
-- **Hero**: two-column layout — official FIFA World Cup 2026 logo fills the left third, "World Cup Predictor" title + subtitle + player count fill the right two-thirds
-- **WC logo**: displayed in both the hero and the sticky header; sourced from `https://www.fifplay.com/img/public/fifa-world-cup-2026-logo.png`
-- **Pub auto-detection**: on first visit (no saved preference, no `?pub=` param), GPS locates the nearest pub using `distanceMetres()` with a 7-second timeout; detected pub saved to cookie
-- **Header pub switcher** (`HeaderLocation.tsx`): both pub names shown side by side in the sticky header; active pub is green with `📍` prefix, inactive is grayed out and clickable; works on any page with `?pub=` in the URL
-- **DiscoveryStrip**: horizontally scrollable row of 3 cards just below the hero — Leaderboard "Raffle ticket standings", World Cup Hub "Squads, standings, bracket", Golden Boot "+10 bonus tickets"
-- **FirstTimeCard**: collapsible "✨ New here? How it works" card shown once (localStorage `peddlers_toured`), 4 numbered steps explaining the game, dismisses with "Got it!"
-- **PatronWelcome**: shows returning patron's name, raffle ticket count, and rank at their pub (e.g. "· #3 at Haverhill") — rank computed client-side by grouping all pub entries by phone
-- **GoldenBootCallout**: gold card after matches, prompts patron to pick a Golden Boot scorer — disappears once they have a scorer_pick
-- **WinnerPickCallout**: green card after matches, prompts patron to pick the World Cup Champion — disappears once they have a winner_pick
-- **Match predictions** appear before the callouts and nav grid
-- **Access code card** (`EntryForm.tsx`, `geoStatus === 'geo_blocked'`): large prominent card with gold border, key icon, "Ask bar staff for today's code" instruction, full-width verify button — shown when GPS is unavailable. Also shows step-by-step location enable instructions (iPhone Safari, iPhone Chrome, Android, Other) and a "Report a location problem" link that pre-fills the feedback form.
-- **Geo fail state**: shows distance in feet, "Report a location problem" link pre-filled with distance, pub, and browser info
 
 ---
 
@@ -609,57 +483,9 @@ Always run `npm test` before `git push`. The build (`npm run build`) catches Typ
 
 ---
 
-## Tournament Dates
-
-- Group stage: June 11 – June 27, 2026
-- Round of 32: June 28 – July 4, 2026
-- Round of 16: July 4 – July 8, 2026
-- Quarter Finals: July 10 – July 12, 2026
-- Semi Finals: July 14 – July 15, 2026
-- Third Place: July 18, 2026
-- **Final: July 19, 2026** — MetLife Stadium, NJ → TV raffle draw
-
----
-
 ## CSS Design System (globals.css)
 
-All CSS variables:
-```css
---green: #00C87A          /* primary action color */
---gold: #F5C518           /* prize/raffle highlights */
---amber: #FF9500          /* pub brand color (Peddler's Daughter name), warnings */
---red: #FF3B3B            /* errors, closed badges */
---bg: #0a0a0a             /* page background (near black) */
---surface: #111111        /* card background */
---surface2: #181818       /* input background */
---border: #2a2a2a         /* subtle borders */
---text: #f0ede8           /* primary text */
---text-muted: #777770     /* secondary text */
---font-display: 'Bebas Neue'        /* headings, scores, big numbers */
---font-cond: 'Barlow Condensed'     /* labels, badges, nav */
---font-body: 'Barlow'               /* body text, inputs */
-```
-
-Color identity: **green = football/game**, **amber/orange = Peddler's Daughter pub brand**. Do not change green to orange globally — green is the pitch color and is correct for football UI.
-
-Key classes: `.card`, `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-gold`,
-`.badge`, `.badge-live`, `.badge-closed`, `.badge-pending`,
-`.pick-btn`, `.pick-btn.selected`, `.match-hero`, `.countdown-grid`,
-`.nav-grid`, `.nav-card`, `.loc-selector`, `.loc-btn`, `.geo-strip`,
-`.lb-entry`, `.share-btn`, `.social-link`, `.map-btn`
-
-Animations: `.pop-in`, `.slide-up`, `.slide-up-delay`, `.slide-up-delay-2`
-
----
-
-## Common Commands
-
-```bash
-npm run dev          # run locally at http://localhost:3000
-npm run build        # production build (run before pushing to catch TS errors)
-npm test             # run test suite (run before pushing to catch logic regressions)
-git add . && git commit -m "message" && git push   # deploy to Vercel
-```
+Color identity: **green = football/game**, **amber/orange = Peddler's Daughter pub brand**. Do not change green to orange globally — green is the pitch color and is correct for football UI. All variables and class names are defined in `src/app/globals.css`.
 
 ---
 
@@ -669,10 +495,3 @@ git add . && git commit -m "message" && git push   # deploy to Vercel
 - `supabase/master.sql` — source of truth for DB schema, update if schema changes
 - `public/logo.avif` — pub logo, don't resize or recompress
 
-## Deploying to a new Supabase project
-
-1. Create project at supabase.com
-2. Run `supabase/master.sql` in the SQL editor (Settings → SQL Editor)
-3. Create the `player_cache_stats` view (SQL in the Views section above)
-4. Set all environment variables in `.env.local` and Vercel dashboard
-5. Push to GitHub — Vercel auto-deploys
