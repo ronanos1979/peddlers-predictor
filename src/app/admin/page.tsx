@@ -362,7 +362,8 @@ export default function AdminPage() {
             data.photos_added  > 0 ? `${data.photos_added} photos`         : '',
             data.clubs_added   > 0 ? `${data.clubs_added} clubs`           : '',
           ].filter(Boolean)
-          const summary = parts.length > 0 ? parts.join(', ') + ` ${verb}` : 'already up to date'
+          let summary = parts.length > 0 ? parts.join(', ') + ` ${verb}` : 'already up to date'
+          if (data.no_af_id > 0) summary += ` (${data.no_af_id} players missing AF match — reload photos first)`
           flash(`✅ ${teamName}: ${summary}`, 'success')
         }
       } else {
