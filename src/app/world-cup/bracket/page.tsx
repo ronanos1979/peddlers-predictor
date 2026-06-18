@@ -134,15 +134,19 @@ function SourceMatchPanel({
       {src.result ? (
         // Match played — show real teams with result
         <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
-          <span style={{ color: src.result === 'home' ? 'var(--green)' : 'var(--text-muted)' }}>{src.home_team}</span>
+          <Link href={`/world-cup/team?name=${encodeURIComponent(src.home_team)}`} style={{ color: src.result === 'home' ? 'var(--green)' : 'var(--text-muted)', textDecoration: 'none' }}>{src.home_team}</Link>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> vs </span>
-          <span style={{ color: src.result === 'away' ? 'var(--green)' : 'var(--text-muted)' }}>{src.away_team}</span>
+          <Link href={`/world-cup/team?name=${encodeURIComponent(src.away_team)}`} style={{ color: src.result === 'away' ? 'var(--green)' : 'var(--text-muted)', textDecoration: 'none' }}>{src.away_team}</Link>
         </div>
       ) : (
         <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
-          <span style={{ color: 'var(--text)' }}>{homeLabel}</span>
+          {isPlaceholder(src.home_team)
+            ? <span style={{ color: 'var(--text)' }}>{homeLabel}</span>
+            : <Link href={`/world-cup/team?name=${encodeURIComponent(src.home_team)}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{homeLabel}</Link>}
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> vs </span>
-          <span style={{ color: 'var(--text)' }}>{awayLabel}</span>
+          {isPlaceholder(src.away_team)
+            ? <span style={{ color: 'var(--text)' }}>{awayLabel}</span>
+            : <Link href={`/world-cup/team?name=${encodeURIComponent(src.away_team)}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{awayLabel}</Link>}
         </div>
       )}
       {allGroups.map(letter => (
@@ -345,16 +349,23 @@ export default function BracketPage() {
               <div style={{ padding: '0 14px' }}>
                 {/* Home */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: '1px solid var(--border)', opacity: homePH ? 0.7 : 1 }}>
-                  <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {homePH ? <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span> : <Flag emoji={m.home_flag} size={22} />}
-                  </span>
-                  <span style={{
-                    flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700,
-                    fontSize: homePH ? 13 : 15, fontStyle: homePH ? 'italic' : 'normal',
-                    color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--text-muted)' : homePH ? 'var(--text-muted)' : 'var(--text)',
-                  }}>
-                    {homeLabel}
-                  </span>
+                  {homePH ? (
+                    <>
+                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span>
+                      </span>
+                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>{homeLabel}</span>
+                    </>
+                  ) : (
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none' }}>
+                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Flag emoji={m.home_flag} size={22} />
+                      </span>
+                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--text-muted)' : 'var(--text)' }}>
+                        {homeLabel}
+                      </span>
+                    </Link>
+                  )}
                   {homeRes && (
                     <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
                       {homeRes}
@@ -364,16 +375,23 @@ export default function BracketPage() {
 
                 {/* Away */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', opacity: awayPH ? 0.7 : 1 }}>
-                  <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {awayPH ? <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span> : <Flag emoji={m.away_flag} size={22} />}
-                  </span>
-                  <span style={{
-                    flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700,
-                    fontSize: awayPH ? 13 : 15, fontStyle: awayPH ? 'italic' : 'normal',
-                    color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--text-muted)' : awayPH ? 'var(--text-muted)' : 'var(--text)',
-                  }}>
-                    {awayLabel}
-                  </span>
+                  {awayPH ? (
+                    <>
+                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span>
+                      </span>
+                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>{awayLabel}</span>
+                    </>
+                  ) : (
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none' }}>
+                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Flag emoji={m.away_flag} size={22} />
+                      </span>
+                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--text-muted)' : 'var(--text)' }}>
+                        {awayLabel}
+                      </span>
+                    </Link>
+                  )}
                   {awayRes && (
                     <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
                       {awayRes}
