@@ -14,7 +14,6 @@ export async function GET() {
   const { data: matches, error } = await supabaseAdmin
     .from('matches')
     .select('id, kickoff_at, home_team, away_team')
-    .not('result', 'is', null)
     .lt('kickoff_at', cutoff)
     .neq('stage', 'Demo Match')
 
@@ -22,13 +21,26 @@ export async function GET() {
     return NextResponse.json({ loaded: 0, skipped: 0 })
   }
 
+  // Fetch existing event rows — include events array to detect premature empty loads
   const { data: existing } = await supabaseAdmin
     .from('match_events')
-    .select('match_id')
+    .select('match_id, events, loaded_at')
     .in('match_id', matches.map(m => m.id))
 
-  const hasEvents = new Set((existing || []).map(e => e.match_id))
-  const needEvents = matches.filter(m => !hasEvents.has(m.id))
+  const twentyFourHoursMs = 24 * 60 * 60 * 1000
+  const skipSet = new Set(
+    (existing || [])
+      .filter(e => {
+        const hasData = Array.isArray(e.events) && e.events.length > 0
+        if (hasData) return true // has real events — skip
+        // Empty events row: only skip if kickoff was >24h ago (genuine 0-0/no-cards match)
+        const match = matches.find(m => m.id === e.match_id)
+        if (!match) return true
+        return Date.now() - new Date(match.kickoff_at).getTime() > twentyFourHoursMs
+      })
+      .map(e => e.match_id)
+  )
+  const needEvents = matches.filter(m => !skipSet.has(m.id))
 
   if (!needEvents.length) {
     return NextResponse.json({ loaded: 0, skipped: 0 })
