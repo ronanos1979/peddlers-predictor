@@ -8,7 +8,7 @@ const AF_BASE      = 'https://v3.football.api-sports.io'
 const ADMIN_PW     = process.env.ADMIN_PASSWORD
 
 // Matches placeholder team names in knockout rounds
-const PLACEHOLDER_RE = /TBD|Winner|Runner|Place|R32 |QF[0-9]|SF[0-9]|Group [A-L] /
+const PLACEHOLDER_RE = /TBD|Winner|Loser|Runner|Place|R32 |QF[0-9]|SF[0-9]|Group [A-L] /
 
 function auth(pw: string | null): boolean {
   return !!ADMIN_PW && pw === ADMIN_PW
@@ -436,12 +436,17 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
     for (const player of (unenriched || [])) {
       if (!player.af_id) continue
       try {
-        // Try the most recent completed club season first, fall back one year
+        // Try the most recent completed club season, fall back on season error (AF free tier blocks >2024)
         let stats: Array<{ team?: { name: string; logo?: string } }> = []
-        for (const season of ['2025', '2024']) {
-          const data = await afFetch('players', { id: String(player.af_id), season })
-          stats = (data.response?.[0]?.statistics || []) as typeof stats
-          if (stats.length > 0) break
+        for (const season of ['2025', '2024', '2023']) {
+          try {
+            const data = await afFetch('players', { id: String(player.af_id), season })
+            stats = (data.response?.[0]?.statistics || []) as typeof stats
+            if (stats.length > 0) break
+          } catch (seasonErr) {
+            if ((seasonErr as Error).message === 'AF_RATE_LIMIT') throw seasonErr
+            // AF free tier rejects seasons > 2024 — try next year
+          }
         }
         const club = stats.find(s => s.team?.name && !isNatTeam(s.team.name))
         if (club?.team?.name) {
