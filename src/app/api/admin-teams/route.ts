@@ -163,7 +163,7 @@ async function resolveAfTeamId(scheduleName: string): Promise<number | null> {
   return null
 }
 
-// ── Match FD player list against AF squad by name (4 strategies) ─────────────
+// ── Match FD player list against AF squad by name (5 strategies) ─────────────
 // Returns a map of fd_id → AF player data for matched players.
 
 type AfPlayerBasic = { id: number; name: string; number?: number | null; photo?: string; age?: number; position?: string }
@@ -202,6 +202,17 @@ function matchAfSquad(
         const init = fdNorm.split(' ')[0][0]
         af = hits.find(c => normName(c.name).split(' ')[0] === init)
       }
+    }
+    // Strategy 5: subset-word match — handles dual-surname names where FD uses the
+    // shorter form e.g. FD "Hirving Lozano" vs AF "Hirving Rodolfo Lozano Bahena".
+    // Every word in the FD name must appear in the AF name (or vice versa).
+    if (!af) {
+      const fdWords = fdNorm.split(' ')
+      const subsetHits = afPlayers.filter(p => {
+        const afWords = normName(p.name).split(' ')
+        return fdWords.every(w => afWords.includes(w)) || afWords.every(w => fdWords.includes(w))
+      })
+      if (subsetHits.length === 1) af = subsetHits[0]
     }
     if (af) result.set(player.id, af)
   }
@@ -410,7 +421,16 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
   // ── Step 2: Club enrichment — 1 AF call per player with af_id ─────────────
   // Force mode re-fetches clubs even for already-enriched players
   let clubsAdded = 0
+  let noAfIdCount = 0
   if (!afRateLimited && doClubs) {
+    // Count players with no af_id so the admin knows they need photos re-run first
+    const { count: missingAfId } = await supabaseAdmin
+      .from('player_cache')
+      .select('fd_id', { count: 'exact', head: true })
+      .ilike('team_name', scheduleName)
+      .is('af_id', null)
+    noAfIdCount = missingAfId || 0
+
     const { data: unenriched } = force
       ? await supabaseAdmin
           .from('player_cache')
@@ -484,6 +504,7 @@ async function handleEnrichAf(scheduleName: string, force = false, steps: 'photo
     photos_added:      photosAdded,
     numbers_added:     numbersAdded,
     clubs_added:       clubsAdded,
+    no_af_id:          noAfIdCount,
     rate_limited:      afRateLimited,
     af_team_found:     afTeamFound,
     af_players_found:  afPlayersFound,
