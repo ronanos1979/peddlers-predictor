@@ -40,6 +40,13 @@ export default function ResultsPage() {
   }
   const normFd = (s: string) => { const n = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); return FD_NORM_ALIASES[n] ?? n }
   const normSched = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+  // FD display name → schedule name for team page links
+  const FD_TO_SCHEDULE: Record<string, string> = {
+    'United States': 'USA', 'Korea Republic': 'South Korea',
+    "Côte d'Ivoire": 'Ivory Coast', 'Turkey': 'Türkiye',
+    'Czech Republic': 'Czechia', 'Cape Verde Islands': 'Cape Verde',
+  }
+  const fdToSched = (name: string) => FD_TO_SCHEDULE[name] ?? name
 
   useEffect(() => {
     async function load() {
@@ -189,17 +196,17 @@ export default function ResultsPage() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8 }}>
-              <div style={{ textAlign: 'right' }}>
+              <Link href={`/world-cup/team?name=${encodeURIComponent(fdToSched(f.teams.home.name))}`} style={{ display: 'block', textAlign: 'right', textDecoration: 'none' }}>
                 {f.teams.home.logo && <img src={f.teams.home.logo} alt="" style={{ width: 32, height: 32, objectFit: 'contain', marginLeft: 'auto', display: 'block', marginBottom: 4 }} />}
                 <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: homeWon ? 'var(--green)' : 'var(--text)' }}>{f.teams.home.name}</div>
-              </div>
+              </Link>
               <div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 30, letterSpacing: 4, color: 'var(--text)', minWidth: 80 }}>
                 {home ?? '–'} : {away ?? '–'}
               </div>
-              <div style={{ textAlign: 'left' }}>
+              <Link href={`/world-cup/team?name=${encodeURIComponent(fdToSched(f.teams.away.name))}`} style={{ display: 'block', textAlign: 'left', textDecoration: 'none' }}>
                 {f.teams.away.logo && <img src={f.teams.away.logo} alt="" style={{ width: 32, height: 32, objectFit: 'contain', display: 'block', marginBottom: 4 }} />}
                 <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: awayWon ? 'var(--green)' : 'var(--text)' }}>{f.teams.away.name}</div>
-              </div>
+              </Link>
             </div>
 
             {/* Events from Supabase */}

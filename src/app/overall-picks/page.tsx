@@ -181,9 +181,13 @@ export default function OverallPicksPage() {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
                     <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, lineHeight: 1.3 }}>
-                      <Flag emoji={m.home_flag} size={18} style={{ marginRight: 5 }} />{m.home_team}
+                      <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                        <Flag emoji={m.home_flag} size={18} style={{ marginRight: 5 }} />{m.home_team}
+                      </Link>
                       <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 13 }}> vs </span>
-                      <Flag emoji={m.away_flag} size={18} style={{ marginRight: 5 }} />{m.away_team}
+                      <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                        <Flag emoji={m.away_flag} size={18} style={{ marginRight: 5 }} />{m.away_team}
+                      </Link>
                     </div>
                     {m.result ? (
                       <div style={{ flexShrink: 0, textAlign: 'right' }}>

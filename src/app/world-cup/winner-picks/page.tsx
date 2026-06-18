@@ -102,19 +102,21 @@ export default function WinnerPicksPage() {
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-dim)', flexShrink: 0, width: 26, textAlign: 'center' }}>
                       {i < 3 ? medals[i] : i + 1}
                     </div>
-                    <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-                      <Flag emoji={tally.flag} size={22} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: isMine ? 'var(--gold)' : 'var(--text)' }}>
-                        {tally.name}
-                        {isMine && (
-                          <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--gold)', marginLeft: 8, fontWeight: 400, fontStyle: 'italic' }}>
-                            {t.yourPickAnnotation}
-                          </span>
-                        )}
+                    <Link href={`/world-cup/team?name=${encodeURIComponent(tally.name)}`} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, textDecoration: 'none' }}>
+                      <div style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+                        <Flag emoji={tally.flag} size={22} />
                       </div>
-                    </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: isMine ? 'var(--gold)' : 'var(--text)' }}>
+                          {tally.name}
+                          {isMine && (
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--gold)', marginLeft: 8, fontWeight: 400, fontStyle: 'italic' }}>
+                              {t.yourPickAnnotation}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: isMine ? 'var(--gold)' : isTop ? 'var(--green)' : 'var(--text)' }}>
                         {tally.count}

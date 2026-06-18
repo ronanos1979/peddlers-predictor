@@ -114,7 +114,11 @@ export default function ScorerPicksPage() {
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-dim)', flexShrink: 0, width: 26, textAlign: 'center' }}>
                       {i < 3 ? medals[i] : i + 1}
                     </div>
-                    <div style={{ fontSize: 22, flexShrink: 0 }}>{tally.flag}</div>
+                    {tally.playerTeam ? (
+                      <Link href={`/world-cup/team?name=${encodeURIComponent(tally.playerTeam)}`} style={{ fontSize: 22, flexShrink: 0, textDecoration: 'none' }}>{tally.flag}</Link>
+                    ) : (
+                      <div style={{ fontSize: 22, flexShrink: 0 }}>{tally.flag}</div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: isMine ? 'var(--gold)' : 'var(--text)' }}>
                         {tally.playerName}
@@ -125,9 +129,9 @@ export default function ScorerPicksPage() {
                         )}
                       </div>
                       {tally.playerTeam && (
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                        <Link href={`/world-cup/team?name=${encodeURIComponent(tally.playerTeam)}`} style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 1, display: 'block', textDecoration: 'none' }}>
                           {tally.playerTeam}
-                        </div>
+                        </Link>
                       )}
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>

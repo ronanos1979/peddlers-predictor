@@ -200,10 +200,10 @@ function MyPicksContent() {
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 3 }}>
                   {t.yourWCChampionPick}
                 </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: winnerPick.is_correct === true ? 'var(--green)' : winnerPick.is_correct === false ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Link href={`/world-cup/team?name=${encodeURIComponent(winnerPick.team_name)}`} style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 1, color: winnerPick.is_correct === true ? 'var(--green)' : winnerPick.is_correct === false ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.1, display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
                   <Flag emoji={winnerPick.team_flag} size={22} />
                   {winnerPick.team_name}
-                </div>
+                </Link>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 {winnerPick.is_correct === true ? (
