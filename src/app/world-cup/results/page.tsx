@@ -68,10 +68,32 @@ export default function ResultsPage() {
           idByTeams.set(`${normSched(m.home_team)}|${normSched(m.away_team)}`, m.id)
         }
         setEventsState({ byId, idByTeams })
+        setLoading(false)
+
+        // Auto-load ESPN events for any completed matches that have no cached events.
+        // Fires in background — results page renders immediately, events appear when ready.
+        const ONE_HOUR_MS = 60 * 60 * 1000
+        const needsAutoLoad = results.some(f => {
+          if (Date.now() - new Date(f.fixture.date).getTime() < ONE_HOUR_MS) return false
+          const key = `${normFd(f.teams.home.name)}|${normFd(f.teams.away.name)}`
+          const matchId = idByTeams.get(key)
+          return matchId !== undefined && !byId.has(matchId)
+        })
+
+        if (needsAutoLoad) {
+          fetch('/api/auto-load-events').then(() =>
+            supabase.from('match_events').select('match_id, events').then(({ data: fresh }) => {
+              if (!fresh) return
+              const byId2 = new Map<string, MatchEvent[]>()
+              for (const row of fresh) byId2.set(row.match_id, (row.events as MatchEvent[]) || [])
+              setEventsState({ byId: byId2, idByTeams })
+            })
+          ).catch(() => {})
+        }
       } catch {
         setError(t.couldNotLoadResults)
+        setLoading(false)
       }
-      setLoading(false)
     }
     load()
   }, [])
