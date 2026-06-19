@@ -41,7 +41,10 @@
       "Bash(python3 -c ' *)",
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611\")",
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760415\")",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260615\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760426\")",
+      "Bash(curl -s \"https://peddlers-predictor.vercel.app/api/football?endpoint=fixtures&status=FT\")"
     ]
   }
 }

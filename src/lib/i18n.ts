@@ -333,6 +333,8 @@ export const translations = {
 
     // Home - discovery strip & onboarding
     leaderboardDesc: 'Raffle ticket standings',
+    latestResults: 'Latest Results',
+    latestResultsDesc: 'Scores & match events',
     worldCupHubDesc: 'Squads, standings, bracket',
     goldenBootDesc: '+10 bonus tickets',
     newHereTitle: '✨ New here? How it works',
@@ -895,6 +897,8 @@ export const translations = {
 
     // Home - discovery strip & onboarding
     leaderboardDesc: 'Clasificación de boletos',
+    latestResults: 'Últimos Resultados',
+    latestResultsDesc: 'Marcadores y eventos',
     worldCupHubDesc: 'Plantillas, tabla, cuadro',
     goldenBootDesc: '+10 boletos extra',
     newHereTitle: '✨ ¿Nuevo aquí? Cómo funciona',

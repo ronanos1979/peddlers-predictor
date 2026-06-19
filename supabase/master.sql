@@ -303,7 +303,7 @@ insert into matches (home_team, away_team, home_flag, away_flag, kickoff_at, ent
 ('Czechia',     'South Africa',        '🇨🇿','🇿🇦', '2026-06-18 16:00:00+00', '2026-06-18 17:45:00+00', 'Group A', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
 ('Switzerland', 'Bosnia & Herzegovina','🇨🇭','🇧🇦', '2026-06-18 19:00:00+00', '2026-06-18 20:45:00+00', 'Group B', false, 'SoFi Stadium, Inglewood, CA'),
 ('Canada',      'Qatar',               '🇨🇦','🇶🇦', '2026-06-18 22:00:00+00', '2026-06-18 23:45:00+00', 'Group B', false, 'BC Place, Vancouver, BC'),
-('Mexico',      'South Korea',         '🇲🇽','🇰🇷', '2026-06-19 03:00:00+00', '2026-06-19 04:45:00+00', 'Group A', false, 'Estadio Akron, Guadalajara'),
+('Mexico',      'South Korea',         '🇲🇽','🇰🇷', '2026-06-19 01:00:00+00', '2026-06-19 02:45:00+00', 'Group A', false, 'Estadio Akron, Guadalajara'),
 
 -- ── JUNE 19 ──────────────────────────────────────────────────
 ('USA',         'Australia',           '🇺🇸','🇦🇺', '2026-06-19 19:00:00+00', '2026-06-19 20:45:00+00', 'Group D', false, 'Lumen Field, Seattle, WA'),

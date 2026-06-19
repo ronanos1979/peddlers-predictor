@@ -295,7 +295,8 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   const pub = selectedPub || 'haverhill'
   const items = [
     { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: t.leaderboard, desc: t.leaderboardDesc },
-    { href: '/world-cup', icon: '⚽', title: t.worldCupHub, desc: t.worldCupHubDesc },
+    { href: '/world-cup/results', icon: '⚽', title: t.latestResults, desc: t.latestResultsDesc },
+    { href: '/world-cup', icon: '🌍', title: t.worldCupHub, desc: t.worldCupHubDesc },
     { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDesc },
   ]
   return (
