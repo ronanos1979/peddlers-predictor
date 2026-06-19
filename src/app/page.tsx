@@ -300,12 +300,11 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
     { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDesc },
   ]
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 0 12px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, padding: '0 0 12px' }}>
       {items.map(item => (
         <Link key={item.href} href={item.href} style={{
-          flex: '0 0 auto', width: 130,
           background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 10, padding: '12px 12px 14px',
+          borderRadius: 10, padding: '12px 10px 14px',
           textDecoration: 'none', display: 'block',
           transition: 'border-color 0.15s',
         }}>
