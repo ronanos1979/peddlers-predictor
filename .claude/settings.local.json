@@ -44,7 +44,11 @@
       "Bash(python3 *)",
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260615\")",
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760426\")",
-      "Bash(curl -s \"https://peddlers-predictor.vercel.app/api/football?endpoint=fixtures&status=FT\")"
+      "Bash(curl -s \"https://peddlers-predictor.vercel.app/api/football?endpoint=fixtures&status=FT\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260618\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260617\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760441\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=760440\")"
     ]
   }
 }
