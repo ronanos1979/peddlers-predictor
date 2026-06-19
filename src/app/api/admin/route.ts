@@ -211,6 +211,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
+    if (action === 'refresh_all_events') {
+      // Re-fetch ESPN events for every resolved match (force overwrite existing events)
+      const { data: resolvedMatches } = await supabaseAdmin
+        .from('matches')
+        .select('id, kickoff_at, home_team, away_team')
+        .not('result', 'is', null)
+        .neq('stage', 'Demo Match')
+        .order('kickoff_at', { ascending: true })
+
+      if (!resolvedMatches?.length) {
+        return NextResponse.json({ success: true, updated: 0, failed: 0, detail: [] })
+      }
+
+      const results = await Promise.allSettled(
+        resolvedMatches.map(m => fetchEspnEvents(m.id, m.kickoff_at, m.home_team, m.away_team))
+      )
+
+      const detail: string[] = []
+      let updated = 0
+      let failed = 0
+      results.forEach((r, i) => {
+        const m = resolvedMatches[i]
+        const label = `${m.home_team} vs ${m.away_team}`
+        if (r.status === 'fulfilled' && r.value) {
+          updated++
+          detail.push(`✓ ${label}: ${r.value.events.length} events`)
+        } else {
+          failed++
+          detail.push(`✗ ${label}: not found on ESPN`)
+        }
+      })
+
+      return NextResponse.json({ success: true, updated, failed, detail })
+    }
+
     if (action === 'load_match_events') {
       const { matchId } = payload as { matchId: string }
       if (!matchId) return NextResponse.json({ error: 'matchId required' }, { status: 400 })

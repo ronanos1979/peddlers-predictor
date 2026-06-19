@@ -61,6 +61,8 @@ export default function AdminPage() {
   const [loadAllShirtsRunning, setLoadAllShirtsRunning] = useState(false)
   const [loadAllShirtsProgress, setLoadAllShirtsProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [refreshingEvents, setRefreshingEvents] = useState(false)
+  const [refreshEventsResult, setRefreshEventsResult] = useState<{ updated: number; failed: number; detail: string[] } | null>(null)
   const [reloadingResults, setReloadingResults] = useState(false)
   type AnalyticsEvent = { event: string; properties: Record<string, unknown>; created_at: string }
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[] | null>(null)
@@ -451,6 +453,25 @@ export default function AdminPage() {
       flash('Network error during sync', 'error')
     }
     setSyncing(false)
+  }
+
+  async function refreshAllEvents() {
+    setRefreshingEvents(true)
+    setRefreshEventsResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'refresh_all_events', payload: {} })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Refresh failed', 'error'); setRefreshingEvents(false); return }
+      setRefreshEventsResult(data)
+      flash(`${data.updated} matches refreshed, ${data.failed} not found on ESPN`, data.failed === 0 ? 'success' : 'error')
+    } catch {
+      flash('Network error during event refresh', 'error')
+    }
+    setRefreshingEvents(false)
   }
 
   async function reloadResultsCache() {
@@ -845,6 +866,26 @@ export default function AdminPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Re-fetch all match scorers</div>
+                <div className="muted" style={{ fontSize: 12 }}>Forces ESPN re-fetch for every resolved match — fixes missing goals</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={refreshingEvents} onClick={refreshAllEvents}>
+                {refreshingEvents ? 'Refreshing…' : '⟳ All scorers'}
+              </button>
+            </div>
+            {refreshEventsResult && (
+              <div style={{ marginTop: 10, fontSize: 12, fontFamily: 'monospace', background: 'rgba(119,119,112,0.08)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', maxHeight: 200, overflowY: 'auto' }}>
+                {refreshEventsResult.detail.map((line, i) => (
+                  <div key={i} style={{ color: line.startsWith('✓') ? 'var(--green)' : 'var(--red)', lineHeight: 1.7 }}>{line}</div>
+                ))}
               </div>
             )}
           </div>
