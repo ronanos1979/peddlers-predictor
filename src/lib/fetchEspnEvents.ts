@@ -67,13 +67,35 @@ export async function fetchEspnEvents(
   const sumData = await sumRes.json()
 
   type EspnKeyEvent = {
+    id?: string
     type: { type: string }
-    clock: { displayValue: string }
+    clock: { displayValue: string; value?: number }
     team?: { id: string; displayName: string }
     participants?: Array<{ athlete: { displayName: string } }>
   }
 
-  const events: EspnMatchEvent[] = ((sumData.keyEvents || []) as EspnKeyEvent[])
+  // Merge keyEvents + commentary plays, deduplicated by play ID.
+  // ESPN omits some events (notably penalty---scored) from keyEvents but includes them
+  // in commentary play objects, so combining both sources gives the complete set.
+  const seen = new Set<string>()
+  const allEvents: EspnKeyEvent[] = []
+
+  for (const e of (sumData.keyEvents || []) as EspnKeyEvent[]) {
+    if (e.id) seen.add(e.id)
+    allEvents.push(e)
+  }
+  for (const c of (sumData.commentary || []) as Array<{ play?: EspnKeyEvent }>) {
+    if (!c.play) continue
+    const pid = c.play.id
+    if (pid && seen.has(pid)) continue
+    if (pid) seen.add(pid)
+    allEvents.push(c.play)
+  }
+
+  // Sort by clock seconds so events are in chronological order
+  allEvents.sort((a, b) => (a.clock?.value ?? 0) - (b.clock?.value ?? 0))
+
+  const events: EspnMatchEvent[] = allEvents
     .filter(e => mapEspnEventType(e.type?.type) !== null)
     .map(e => {
       const mapped = mapEspnEventType(e.type?.type)!

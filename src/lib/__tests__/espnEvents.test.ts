@@ -95,6 +95,8 @@ describe('mapEspnEventType', () => {
 
   it('maps penalty goal', () => {
     expect(mapEspnEventType('goal---penalty')).toEqual({ type: 'Goal', detail: 'Penalty' })
+    // penalty---scored appears in commentary plays but not keyEvents — same result
+    expect(mapEspnEventType('penalty---scored')).toEqual({ type: 'Goal', detail: 'Penalty' })
   })
 
   it('maps own goal', () => {
