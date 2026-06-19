@@ -88,6 +88,9 @@ describe('mapEspnEventType', () => {
   it('maps regular goal types to Normal Goal', () => {
     expect(mapEspnEventType('goal')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
     expect(mapEspnEventType('goal---header')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
+    expect(mapEspnEventType('goal---volley')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
+    expect(mapEspnEventType('goal---free-kick')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
+    expect(mapEspnEventType('goal---chip')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
   })
 
   it('maps penalty goal', () => {
