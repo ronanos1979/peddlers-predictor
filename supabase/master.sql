@@ -308,8 +308,8 @@ insert into matches (home_team, away_team, home_flag, away_flag, kickoff_at, ent
 -- ── JUNE 19 ──────────────────────────────────────────────────
 ('USA',         'Australia',           '🇺🇸','🇦🇺', '2026-06-19 19:00:00+00', '2026-06-19 20:45:00+00', 'Group D', false, 'Lumen Field, Seattle, WA'),
 ('Scotland',    'Morocco',             '🏴󠁧󠁢󠁳󠁣󠁴󠁿','🇲🇦', '2026-06-19 22:00:00+00', '2026-06-19 23:45:00+00', 'Group C', false, 'Gillette Stadium, Foxborough, MA'),
-('Brazil',      'Haiti',               '🇧🇷','🇭🇹', '2026-06-20 01:00:00+00', '2026-06-20 02:45:00+00', 'Group C', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Türkiye',     'Paraguay',            '🇹🇷','🇵🇾', '2026-06-20 04:00:00+00', '2026-06-20 05:45:00+00', 'Group D', false, 'Levi''s Stadium, Santa Clara, CA'),
+('Brazil',      'Haiti',               '🇧🇷','🇭🇹', '2026-06-20 00:30:00+00', '2026-06-20 02:15:00+00', 'Group C', false, 'Lincoln Financial Field, Philadelphia, PA'),
+('Türkiye',     'Paraguay',            '🇹🇷','🇵🇾', '2026-06-20 03:00:00+00', '2026-06-20 04:45:00+00', 'Group D', false, 'Levi''s Stadium, Santa Clara, CA'),
 
 -- ── JUNE 20 ──────────────────────────────────────────────────
 ('Netherlands', 'Sweden',              '🇳🇱','🇸🇪', '2026-06-20 17:00:00+00', '2026-06-20 18:45:00+00', 'Group F', false, 'NRG Stadium, Houston, TX'),
