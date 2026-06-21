@@ -10,6 +10,14 @@ type EntryRow = {
   home_score_pred: number | null; away_score_pred: number | null
   matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; stage: string; kickoff_at: string } | null
 }
+type ScorerPickRow = { phone: string; player_name: string; player_team: string; is_correct: boolean | null }
+type WinnerPickRow = { phone: string; team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number }
+type PatronSummary = {
+  phone: string; name: string; email: string | null; pub_id: string
+  total: number; correct: number; pending: number; wrong: number; raffle_entries: number
+  golden_boot: ScorerPickRow | null; winner_pick: WinnerPickRow | null
+  entries: EntryRow[]
+}
 type DayStat = [string, { haverhill: number; nashua: number; total: number }]
 type Totals = { total_entries: number; unique_phones: number; emails_collected: number; correct: number; haverhill: number; nashua: number }
 type FeedbackRow = { id: string; message: string; email: string | null; page: string | null; created_at: string; read: boolean }
@@ -41,8 +49,12 @@ export default function AdminPage() {
   const [stats, setStats] = useState<DayStat[]>([])
   const [totals, setTotals] = useState<Totals | null>(null)
   const [entrants, setEntrants] = useState<EntryRow[]>([])
+  const [scorerPicks, setScorerPicks] = useState<ScorerPickRow[]>([])
+  const [winnerPicks, setWinnerPicks] = useState<WinnerPickRow[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [loadingEntrants, setLoadingEntrants] = useState(false)
+  const [entrantView, setEntrantView] = useState<'entries' | 'by-person'>('entries')
+  const [entrantFilter, setEntrantFilter] = useState<'all' | 'correct' | 'pending' | 'wrong'>('all')
   const [feedback, setFeedback] = useState<FeedbackRow[]>([])
   const [selectedReminderIds, setSelectedReminderIds] = useState<Set<string>>(new Set())
   const [reminderSending, setReminderSending] = useState(false)
@@ -131,6 +143,8 @@ export default function AdminPage() {
     const res = await fetch(url)
     const data = await res.json()
     setEntrants(data.entries || [])
+    setScorerPicks(data.scorer_picks || [])
+    setWinnerPicks(data.winner_picks || [])
     setLoadingEntrants(false)
   }, [password])
 
@@ -642,6 +656,120 @@ export default function AdminPage() {
     )
   }
 
+  function PatronSummaryRow({ patron }: { patron: PatronSummary }) {
+    const [expanded, setExpanded] = useState(false)
+    return (
+      <div style={{ background: 'var(--white)', border: '1px solid var(--gray-border)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+        <div onClick={() => setExpanded(e => !e)} style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▶</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{patron.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--gray-bg)', padding: '1px 6px', borderRadius: 8 }}>
+                {patron.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              📞 {patron.phone}
+              {patron.email && <span style={{ marginLeft: 8 }}>✉️ {patron.email}</span>}
+            </div>
+            {(patron.golden_boot || patron.winner_pick) && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+                {patron.golden_boot && (
+                  <span style={{ fontSize: 11, color: 'var(--amber)' }}>
+                    🥇 {patron.golden_boot.player_name}
+                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓</span>}
+                    {patron.golden_boot.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
+                  </span>
+                )}
+                {patron.winner_pick && (
+                  <span style={{ fontSize: 11, color: 'var(--amber)' }}>
+                    🏆 {patron.winner_pick.team_flag} {patron.winner_pick.team_name}
+                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓</span>}
+                    {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ textAlign: 'center', minWidth: 28 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>{patron.correct}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>✓</div>
+            </div>
+            <div style={{ textAlign: 'center', minWidth: 28 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--amber)' }}>{patron.pending}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>pend</div>
+            </div>
+            <div style={{ textAlign: 'center', minWidth: 28 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--red)' }}>{patron.wrong}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>✗</div>
+            </div>
+            <div style={{ textAlign: 'center', minWidth: 36, borderLeft: '1px solid var(--border)', paddingLeft: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gold)' }}>{patron.raffle_entries}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>tickets</div>
+            </div>
+          </div>
+        </div>
+        {expanded && (
+          <div style={{ borderTop: '1px solid var(--gray-border)', padding: '8px 14px' }}>
+            {patron.entries.map((e, i) => (
+              <div key={e.id} style={{ padding: '7px 0', borderBottom: i < patron.entries.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 13 }}>
+                {e.matches && (
+                  <>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
+                      {fmtFull(e.matches.kickoff_at)} · {e.matches.stage}
+                    </div>
+                    <div>
+                      {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
+                      {' · '}
+                      <strong>
+                        {e.pick === 'home' ? `${e.matches.home_team} win` :
+                         e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
+                      </strong>
+                      {e.home_score_pred != null && e.away_score_pred != null && (
+                        <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
+                          ({e.home_score_pred}–{e.away_score_pred})
+                        </span>
+                      )}
+                      {' · '}
+                      {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct {e.raffle_entries > 1 ? `· 🎟×${e.raffle_entries}` : ''}</span>}
+                      {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                      {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {(patron.golden_boot || patron.winner_pick) && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Bonus Picks</div>
+                {patron.golden_boot && (
+                  <div style={{ fontSize: 13, marginBottom: 6 }}>
+                    🥇 Golden Boot: <strong>{patron.golden_boot.player_name}</strong> ({patron.golden_boot.player_team})
+                    {' · '}
+                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×10</span>}
+                    {patron.golden_boot.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                    {patron.golden_boot.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Not set yet</span>}
+                  </div>
+                )}
+                {patron.winner_pick && (
+                  <div style={{ fontSize: 13 }}>
+                    🏆 Champion: <strong>{patron.winner_pick.team_flag} {patron.winner_pick.team_name}</strong>
+                    {' · '}
+                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×15</span>}
+                    {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                    {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (!authed) {
     return (
       <div className="container" style={{ maxWidth: 360 }}>
@@ -1020,96 +1148,169 @@ export default function AdminPage() {
       )}
 
       {/* ENTRANTS TAB */}
-      {tab === 'entrants' && (
-        <>
-          <div className="card">
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="date" value={selectedDate}
-                onChange={e => { setSelectedDate(e.target.value); loadEntrants(e.target.value) }}
-                style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 14 }}
-              />
-              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }}
-                onClick={() => { setSelectedDate(''); loadEntrants() }}>
-                Show all
-              </button>
-              <a href={`/api/admin-data?password=${encodeURIComponent(password)}&action=export-csv`}
-                className="btn btn-primary"
-                style={{ width: 'auto', padding: '8px 14px', fontSize: 13, textDecoration: 'none', display: 'inline-block' }}>
-                ↓ Export CSV
-              </a>
-            </div>
-            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              {entrants.length} entries shown
-            </p>
-          </div>
+      {tab === 'entrants' && (() => {
+        const scorerByPhone = new Map(scorerPicks.map(s => [s.phone, s]))
+        const winnerByPhone = new Map(winnerPicks.map(w => [w.phone, w]))
 
-          {loadingEntrants
-            ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
-            : entrants.map((e) => (
-              <div key={e.id} style={{
-                background: 'var(--white)', border: '1px solid var(--gray-border)',
-                borderRadius: 10, padding: '12px 14px', marginBottom: 8
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start' }}>
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
-                    <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-                      {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
-                    {confirmDeleteId === e.id ? (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          onClick={() => deleteEntry(e.id)}
-                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'rgba(255,59,59,0.12)', color: 'var(--red)', cursor: 'pointer', fontWeight: 700 }}>
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmDeleteId(e.id)}
-                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
-                        title="Delete entry">
-                        🗑
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                  📞 {e.phone}
-                  {e.email && <span style={{ marginLeft: 12 }}>✉️ {e.email}</span>}
-                </div>
-                {e.matches && (
-                  <div style={{ marginTop: 6, fontSize: 13 }}>
-                    {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
-                    {' · '}
-                    <strong>
-                      {e.pick === 'home' ? `${e.matches.home_team} win` :
-                       e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
-                    </strong>
-                    {e.home_score_pred != null && e.away_score_pred != null && (
-                      <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
-                        ({e.home_score_pred}–{e.away_score_pred})
-                      </span>
-                    )}
-                    {' · '}
-                    {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct</span>}
-                    {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
-                    {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
-                  </div>
-                )}
-              </div>
-            ))
+        const patronSummaries: PatronSummary[] = (() => {
+          const byPhone = new Map<string, PatronSummary>()
+          for (const e of entrants) {
+            if (!byPhone.has(e.phone)) {
+              byPhone.set(e.phone, {
+                phone: e.phone, name: e.name, email: e.email, pub_id: e.pub_id,
+                total: 0, correct: 0, pending: 0, wrong: 0, raffle_entries: 0,
+                golden_boot: scorerByPhone.get(e.phone) || null,
+                winner_pick: winnerByPhone.get(e.phone) || null,
+                entries: [],
+              })
+            }
+            const p = byPhone.get(e.phone)!
+            p.total++
+            p.raffle_entries += e.raffle_entries
+            if (e.is_correct === true) p.correct++
+            else if (e.is_correct === false) p.wrong++
+            else p.pending++
+            p.entries.push(e)
           }
-        </>
-      )}
+          return Array.from(byPhone.values()).sort((a, b) => b.raffle_entries - a.raffle_entries)
+        })()
+
+        const filteredEntrants = entrantFilter === 'all' ? entrants
+          : entrants.filter(e =>
+              entrantFilter === 'correct' ? e.is_correct === true :
+              entrantFilter === 'pending' ? e.is_correct === null :
+              e.is_correct === false
+            )
+
+        return (
+          <>
+            <div className="card">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                <input type="date" value={selectedDate}
+                  onChange={e => { setSelectedDate(e.target.value); loadEntrants(e.target.value) }}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 14 }}
+                />
+                <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }}
+                  onClick={() => { setSelectedDate(''); loadEntrants() }}>
+                  Show all
+                </button>
+                <a href={`/api/admin-data?password=${encodeURIComponent(password)}&action=export-csv`}
+                  className="btn btn-primary"
+                  style={{ width: 'auto', padding: '8px 14px', fontSize: 13, textDecoration: 'none', display: 'inline-block' }}>
+                  ↓ Export CSV
+                </a>
+              </div>
+
+              {/* View toggle */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                {(['entries', 'by-person'] as const).map(v => (
+                  <button key={v} onClick={() => setEntrantView(v)}
+                    style={{ padding: '6px 14px', borderRadius: 16, border: `1px solid ${entrantView === v ? 'var(--green)' : 'var(--gray-border)'}`, background: entrantView === v ? 'var(--green)' : 'transparent', color: entrantView === v ? '#fff' : 'var(--text)', fontWeight: entrantView === v ? 600 : 400, cursor: 'pointer', fontSize: 13 }}>
+                    {v === 'entries' ? 'All Entries' : 'By Person'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Status filter — only in entries view */}
+              {entrantView === 'entries' && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {([
+                    { key: 'all', label: 'All' },
+                    { key: 'correct', label: '✓ Correct' },
+                    { key: 'pending', label: '⏳ Pending' },
+                    { key: 'wrong', label: '✗ Wrong' },
+                  ] as const).map(({ key, label }) => (
+                    <button key={key} onClick={() => setEntrantFilter(key)}
+                      style={{ padding: '5px 12px', borderRadius: 14, fontSize: 12, cursor: 'pointer',
+                        border: `1px solid ${entrantFilter === key ? (key === 'correct' ? 'var(--green)' : key === 'pending' ? 'var(--amber)' : key === 'wrong' ? 'var(--red)' : 'var(--green)') : 'var(--gray-border)'}`,
+                        background: entrantFilter === key ? (key === 'correct' ? 'rgba(0,200,122,0.12)' : key === 'pending' ? 'rgba(245,197,24,0.12)' : key === 'wrong' ? 'rgba(255,59,59,0.12)' : 'rgba(0,200,122,0.12)') : 'transparent',
+                        color: entrantFilter === key ? (key === 'correct' ? 'var(--green)' : key === 'pending' ? 'var(--amber)' : key === 'wrong' ? 'var(--red)' : 'var(--green)') : 'var(--text-muted)',
+                        fontWeight: entrantFilter === key ? 600 : 400 }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                {entrantView === 'entries'
+                  ? `${filteredEntrants.length} entr${filteredEntrants.length !== 1 ? 'ies' : 'y'}`
+                  : `${patronSummaries.length} patron${patronSummaries.length !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+
+            {loadingEntrants ? (
+              <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
+            ) : entrantView === 'by-person' ? (
+              patronSummaries.length === 0
+                ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>No entries yet.</p>
+                : patronSummaries.map(patron => <PatronSummaryRow key={patron.phone} patron={patron} />)
+            ) : (
+              filteredEntrants.length === 0
+                ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>No entries match this filter.</p>
+                : filteredEntrants.map((e) => (
+                  <div key={e.id} style={{
+                    background: 'var(--white)', border: '1px solid var(--gray-border)',
+                    borderRadius: 10, padding: '12px 14px', marginBottom: 8
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
+                        <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+                          {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
+                        {confirmDeleteId === e.id ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => deleteEntry(e.id)}
+                              style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'rgba(255,59,59,0.12)', color: 'var(--red)', cursor: 'pointer', fontWeight: 700 }}>
+                              Confirm
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(null)}
+                              style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDeleteId(e.id)}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                            title="Delete entry">
+                            🗑
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                      📞 {e.phone}
+                      {e.email && <span style={{ marginLeft: 12 }}>✉️ {e.email}</span>}
+                    </div>
+                    {e.matches && (
+                      <div style={{ marginTop: 6, fontSize: 13 }}>
+                        {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
+                        {' · '}
+                        <strong>
+                          {e.pick === 'home' ? `${e.matches.home_team} win` :
+                           e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
+                        </strong>
+                        {e.home_score_pred != null && e.away_score_pred != null && (
+                          <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
+                            ({e.home_score_pred}–{e.away_score_pred})
+                          </span>
+                        )}
+                        {' · '}
+                        {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct</span>}
+                        {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                        {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                      </div>
+                    )}
+                  </div>
+                ))
+            )}
+          </>
+        )
+      })()}
 
       {/* STATS TAB */}
       {tab === 'stats' && totals && (
