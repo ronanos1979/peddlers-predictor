@@ -47,7 +47,7 @@ export async function syncResults(): Promise<SyncResultsOutput> {
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
   const { data: unresolved } = await supabaseAdmin
     .from('matches')
-    .select('id, kickoff_at, home_team, away_team')
+    .select('id, kickoff_at, home_team, away_team, hat_trick_scored')
     .is('result', null)
     .lt('kickoff_at', twoHoursAgo)
     .neq('stage', 'Demo Match')
@@ -94,9 +94,11 @@ export async function syncResults(): Promise<SyncResultsOutput> {
 
     await supabaseAdmin.from('matches').update({ result, home_score: homeScore, away_score: awayScore }).eq('id', match.id)
 
+    const hatTrickScored = (match as typeof match & { hat_trick_scored?: boolean | null }).hat_trick_scored ?? null
+
     const { data: entries } = await supabaseAdmin
       .from('entries')
-      .select('id, pick, home_score_pred, away_score_pred')
+      .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred')
       .eq('match_id', match.id)
 
     if (entries) {
@@ -107,6 +109,9 @@ export async function syncResults(): Promise<SyncResultsOutput> {
           const scoreCorrect = homeScore != null && awayScore != null &&
             entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
           raffle_entries = scoreCorrect ? 3 : 1
+        }
+        if (entry.hat_trick_pred === true && hatTrickScored === true) {
+          raffle_entries += 7
         }
         await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
         entries_scored++

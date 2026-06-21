@@ -24,6 +24,7 @@ type EntryWithMatch = {
   pub_id: string
   home_score_pred: number | null
   away_score_pred: number | null
+  hat_trick_pred: boolean | null
   matches: {
     home_team: string
     away_team: string
@@ -34,6 +35,7 @@ type EntryWithMatch = {
     result: string | null
     home_score: number | null
     away_score: number | null
+    hat_trick_scored: boolean | null
   }
 }
 
@@ -307,6 +309,18 @@ function MyPicksContent() {
                       </span>
                     )}
                   </div>
+                  {e.hat_trick_pred === true && (
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>⚡ {t.hatTrickBonusLabel}:</span>
+                      {m.hat_trick_scored === true ? (
+                        <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>{t.hatTrickHit} +7</span>
+                      ) : m.hat_trick_scored === false ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+7 {t.ifCorrect}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })

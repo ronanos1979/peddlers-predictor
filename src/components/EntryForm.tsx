@@ -51,6 +51,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [homeScorePred, setHomeScorePred] = useState<number>(0)
   const [awayScorePred, setAwayScorePred] = useState<number>(0)
   const [scoreSkipped, setScoreSkipped] = useState(false)
+  const [hatTrickPred, setHatTrickPred] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -219,6 +220,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           honeypot,
           home_score_pred: scoreSkipped ? null : homeScorePred,
           away_score_pred: scoreSkipped ? null : awayScorePred,
+          hat_trick_pred: hatTrickPred ?? null,
           entry_lat: userCoords?.lat ?? null,
           entry_lng: userCoords?.lng ?? null,
           entry_distance_m: userDistance !== null ? Math.round(userDistance) : null,
@@ -318,7 +320,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
         {!isDemo && (
           <div className="slide-up-delay" style={{ marginBottom: 14 }}>
             <div className="card" style={{ background: 'linear-gradient(135deg, #1a1200, #111)', border: '1px solid rgba(245,197,24,0.25)', padding: '14px 16px' }}>
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+1</div>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.correctResultLabel}</div>
@@ -328,6 +330,15 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+2</div>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.exactScoreLabel}</div>
                 </div>
+                {hatTrickPred === true && (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 20, color: 'var(--text-muted)', alignSelf: 'center' }}>+</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--green)', letterSpacing: 2 }}>+7</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.hatTrickBonusLabel}</div>
+                    </div>
+                  </>
+                )}
               </div>
               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
                 {t.raffleEntriesIfCorrect}
@@ -751,6 +762,43 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 style={{ display: 'block', width: '100%', marginTop: 10, padding: '10px 14px', background: 'rgba(245,197,24,0.06)', border: '1px dashed rgba(245,197,24,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--gold)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>
                 {t.addScorePrediction}
               </button>
+            )}
+
+            {/* Hat-trick bonus prediction */}
+            {pick && (
+              hatTrickPred === true ? (
+                <div style={{ marginTop: 10, padding: '12px 14px', background: 'linear-gradient(135deg, #0a1a0f, #0c1510)', border: '1px solid rgba(0,200,122,0.5)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', letterSpacing: 0.5 }}>
+                      {t.hatTrickPredicted}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {t.hatTrickPredictedDesc}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setHatTrickPred(null)}
+                    style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', flexShrink: 0 }}>
+                    {t.hatTrickRemove}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, padding: '12px 14px', background: 'rgba(0,200,122,0.04)', border: '1px dashed rgba(0,200,122,0.25)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--green)', letterSpacing: 0.5 }}>
+                        {t.hatTrickBonusTitle}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                        {t.hatTrickBonusDesc}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setHatTrickPred(true)}
+                      style={{ background: 'rgba(0,200,122,0.12)', border: '1px solid rgba(0,200,122,0.35)', borderRadius: 8, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      ⚡ {t.hatTrickYesBtn}
+                    </button>
+                  </div>
+                </div>
+              )
             )}
 
             {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}

@@ -125,5 +125,44 @@ export async function fetchEspnEvents(
     loaded_at: new Date().toISOString(),
   })
 
+  // Detect hat-trick: any player (excluding own goals) scored 3+ goals
+  const goalsByPlayer: Record<string, number> = {}
+  for (const ev of events) {
+    if (ev.type === 'Goal' && ev.detail !== 'Own Goal' && ev.player.name) {
+      goalsByPlayer[ev.player.name] = (goalsByPlayer[ev.player.name] || 0) + 1
+    }
+  }
+  const hatTrickScored = Object.values(goalsByPlayer).some(count => count >= 3)
+
+  await supabaseAdmin.from('matches').update({ hat_trick_scored: hatTrickScored }).eq('id', matchId)
+
+  // Re-score hat-trick bonus for entries already scored for result
+  if (hatTrickScored) {
+    const { data: matchData } = await supabaseAdmin
+      .from('matches').select('home_score, away_score, result').eq('id', matchId).single()
+
+    const { data: scoredEntries } = await supabaseAdmin
+      .from('entries')
+      .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, is_correct')
+      .eq('match_id', matchId)
+      .not('is_correct', 'is', null)
+      .eq('hat_trick_pred', true)
+
+    if (scoredEntries && matchData?.result) {
+      for (const entry of scoredEntries) {
+        let raffle = 0
+        if (entry.is_correct) {
+          const scoreCorrect =
+            matchData.home_score != null && matchData.away_score != null &&
+            entry.home_score_pred === matchData.home_score &&
+            entry.away_score_pred === matchData.away_score
+          raffle = scoreCorrect ? 3 : 1
+        }
+        raffle += 7
+        await supabaseAdmin.from('entries').update({ raffle_entries: raffle }).eq('id', entry.id)
+      }
+    }
+  }
+
   return { events, espnEventId: espnEvent.id }
 }

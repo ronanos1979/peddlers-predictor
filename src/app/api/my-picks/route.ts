@@ -13,10 +13,10 @@ export async function GET(req: NextRequest) {
     .from('entries')
     .select(`
       id, pick, is_correct, raffle_entries, created_at, pub_id,
-      home_score_pred, away_score_pred,
+      home_score_pred, away_score_pred, hat_trick_pred,
       matches (
         home_team, away_team, home_flag, away_flag,
-        kickoff_at, stage, result, home_score, away_score
+        kickoff_at, stage, result, home_score, away_score, hat_trick_scored
       )
     `)
     .eq('phone', phone)

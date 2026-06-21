@@ -46,9 +46,14 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', match_id)
 
+      // Fetch hat_trick_scored if ESPN events were already loaded before result was set
+      const { data: matchForHatTrick } = await supabaseAdmin
+        .from('matches').select('hat_trick_scored').eq('id', match_id).single()
+      const hatTrickScored = matchForHatTrick?.hat_trick_scored ?? null
+
       const { data: entries } = await supabaseAdmin
         .from('entries')
-        .select('id, pick, home_score_pred, away_score_pred')
+        .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred')
         .eq('match_id', match_id)
 
       if (entries) {
@@ -60,6 +65,9 @@ export async function POST(req: NextRequest) {
               homeScore != null && awayScore != null &&
               entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
             raffle_entries = scoreCorrect ? 3 : 1
+          }
+          if (entry.hat_trick_pred === true && hatTrickScored === true) {
+            raffle_entries += 7
           }
           await supabaseAdmin
             .from('entries')

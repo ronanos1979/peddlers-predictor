@@ -532,6 +532,17 @@ export const translations = {
     exactScoreLabel: 'exact score',
     pleaseEnterNamePhone: 'Please enter your name and phone number.',
 
+    // Hat-trick prediction
+    hatTrickBonusTitle: '⚡ Hat-trick bonus',
+    hatTrickBonusDesc: 'Will any player score 3+ goals in this match?',
+    hatTrickYesBtn: 'Yes — I think a hat-trick will happen!',
+    hatTrickPredicted: '⚡ Hat-trick predicted!',
+    hatTrickPredictedDesc: '+7 raffle tickets if any player scores 3+ goals',
+    hatTrickRemove: 'Remove',
+    hatTrickBonusLabel: 'hat-trick',
+    hatTrickHit: 'hat-trick ✓',
+    hatTrickMissed: 'no hat-trick',
+
     // Check-in card
     checkInLiveNow: 'Live Now',
     checkInCheckedCount: '{count} checked in',
@@ -1095,6 +1106,17 @@ export const translations = {
     correctResultLabel: 'resultado correcto',
     exactScoreLabel: 'marcador exacto',
     pleaseEnterNamePhone: 'Por favor ingresa tu nombre y número de teléfono.',
+
+    // Hat-trick prediction
+    hatTrickBonusTitle: '⚡ Bono hat-trick',
+    hatTrickBonusDesc: '¿Algún jugador marcará 3 o más goles en este partido?',
+    hatTrickYesBtn: '¡Sí — creo que habrá un hat-trick!',
+    hatTrickPredicted: '⚡ ¡Hat-trick predicho!',
+    hatTrickPredictedDesc: '+7 boletos de rifa si algún jugador anota 3+ goles',
+    hatTrickRemove: 'Eliminar',
+    hatTrickBonusLabel: 'hat-trick',
+    hatTrickHit: 'hat-trick ✓',
+    hatTrickMissed: 'sin hat-trick',
 
     // Check-in card
     checkInLiveNow: 'En Vivo',
