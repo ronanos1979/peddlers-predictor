@@ -534,14 +534,16 @@ export const translations = {
 
     // Hat-trick prediction
     hatTrickBonusTitle: '⚡ Hat-trick bonus',
-    hatTrickBonusDesc: 'Will any player score 3+ goals in this match?',
-    hatTrickYesBtn: 'Yes — I think a hat-trick will happen!',
+    hatTrickBonusDesc: 'Name a player who will score a hat-trick (3+ goals)',
+    hatTrickYesBtn: 'Yes — predict a hat-trick scorer!',
     hatTrickPredicted: '⚡ Hat-trick predicted!',
-    hatTrickPredictedDesc: '+7 raffle tickets if any player scores 3+ goals',
+    hatTrickPredictedDesc: '+7 raffle tickets if your player scores 3+ goals',
     hatTrickRemove: 'Remove',
     hatTrickBonusLabel: 'hat-trick',
     hatTrickHit: 'hat-trick ✓',
     hatTrickMissed: 'no hat-trick',
+    hatTrickScorerPlaceholder: 'e.g. Messi, Mbappé…',
+    hatTrickScorerRequired: 'Name a scorer to activate the hat-trick bonus',
 
     // Check-in card
     checkInLiveNow: 'Live Now',
@@ -1109,14 +1111,16 @@ export const translations = {
 
     // Hat-trick prediction
     hatTrickBonusTitle: '⚡ Bono hat-trick',
-    hatTrickBonusDesc: '¿Algún jugador marcará 3 o más goles en este partido?',
-    hatTrickYesBtn: '¡Sí — creo que habrá un hat-trick!',
+    hatTrickBonusDesc: 'Nombra un jugador que anotará hat-trick (3+ goles)',
+    hatTrickYesBtn: '¡Sí — predecir un anotador de hat-trick!',
     hatTrickPredicted: '⚡ ¡Hat-trick predicho!',
-    hatTrickPredictedDesc: '+7 boletos de rifa si algún jugador anota 3+ goles',
+    hatTrickPredictedDesc: '+7 boletos si tu jugador anota 3+ goles',
     hatTrickRemove: 'Eliminar',
     hatTrickBonusLabel: 'hat-trick',
     hatTrickHit: 'hat-trick ✓',
     hatTrickMissed: 'sin hat-trick',
+    hatTrickScorerPlaceholder: 'ej. Messi, Mbappé…',
+    hatTrickScorerRequired: 'Nombra un anotador para activar el bono hat-trick',
 
     // Check-in card
     checkInLiveNow: 'En Vivo',

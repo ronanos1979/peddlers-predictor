@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many submissions — try again later' }, { status: 429 })
     }
 
-    const { pub_id, match_id, name, phone, pick, code, email, honeypot, home_score_pred, away_score_pred, hat_trick_pred, entry_lat, entry_lng, entry_distance_m } = await req.json()
+    const { pub_id, match_id, name, phone, pick, code, email, honeypot, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, entry_lat, entry_lng, entry_distance_m } = await req.json()
 
     // Silently drop honeypot-filled submissions (bots fill hidden fields)
     if (honeypot) {
@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
     const awayPred = away_score_pred != null ? parseInt(String(away_score_pred), 10) : null
     const validHomePred = homePred != null && !isNaN(homePred) && homePred >= 0 && homePred <= 20 ? homePred : null
     const validAwayPred = awayPred != null && !isNaN(awayPred) && awayPred >= 0 && awayPred <= 20 ? awayPred : null
-    const validHatTrickPred = hat_trick_pred === true ? true : null
+    const scorerName = hat_trick_pred === true && typeof hat_trick_scorer_pred === 'string' ? hat_trick_scorer_pred.trim().slice(0, 80) : null
+    const validHatTrickPred = hat_trick_pred === true && scorerName ? true : null
 
     const lat = entry_lat != null ? parseFloat(String(entry_lat)) : null
     const lng = entry_lng != null ? parseFloat(String(entry_lng)) : null
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
         home_score_pred: validHomePred,
         away_score_pred: validAwayPred,
         hat_trick_pred: validHatTrickPred,
+        hat_trick_scorer_pred: validHatTrickPred === true ? scorerName : null,
         entry_lat: lat != null && !isNaN(lat) ? lat : null,
         entry_lng: lng != null && !isNaN(lng) ? lng : null,
         entry_distance_m: distM != null && !isNaN(distM) ? distM : null,

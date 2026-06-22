@@ -52,6 +52,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [awayScorePred, setAwayScorePred] = useState<number>(0)
   const [scoreSkipped, setScoreSkipped] = useState(false)
   const [hatTrickPred, setHatTrickPred] = useState<boolean | null>(null)
+  const [hatTrickScorerPred, setHatTrickScorerPred] = useState('')
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -220,7 +221,8 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           honeypot,
           home_score_pred: scoreSkipped ? null : homeScorePred,
           away_score_pred: scoreSkipped ? null : awayScorePred,
-          hat_trick_pred: hatTrickPred ?? null,
+          hat_trick_pred: (hatTrickPred === true && hatTrickScorerPred.trim()) ? true : null,
+          hat_trick_scorer_pred: (hatTrickPred === true && hatTrickScorerPred.trim()) ? hatTrickScorerPred.trim() : null,
           entry_lat: userCoords?.lat ?? null,
           entry_lng: userCoords?.lng ?? null,
           entry_distance_m: userDistance !== null ? Math.round(userDistance) : null,
@@ -330,7 +332,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 2 }}>+2</div>
                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.exactScoreLabel}</div>
                 </div>
-                {hatTrickPred === true && (
+                {hatTrickPred === true && hatTrickScorerPred.trim() && (
                   <>
                     <div style={{ fontFamily: 'var(--font-cond)', fontSize: 20, color: 'var(--text-muted)', alignSelf: 'center' }}>+</div>
                     <div style={{ textAlign: 'center' }}>
@@ -767,19 +769,34 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             {/* Hat-trick bonus prediction */}
             {pick && (
               hatTrickPred === true ? (
-                <div style={{ marginTop: 10, padding: '12px 14px', background: 'linear-gradient(135deg, #0a1a0f, #0c1510)', border: '1px solid rgba(0,200,122,0.5)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', letterSpacing: 0.5 }}>
-                      {t.hatTrickPredicted}
+                <div style={{ marginTop: 10, padding: '12px 14px', background: 'linear-gradient(135deg, #0a1a0f, #0c1510)', border: '1px solid rgba(0,200,122,0.5)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', letterSpacing: 0.5 }}>
+                        {t.hatTrickPredicted}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {t.hatTrickPredictedDesc}
+                      </div>
                     </div>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                      {t.hatTrickPredictedDesc}
-                    </div>
+                    <button type="button" onClick={() => { setHatTrickPred(null); setHatTrickScorerPred('') }}
+                      style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', flexShrink: 0 }}>
+                      {t.hatTrickRemove}
+                    </button>
                   </div>
-                  <button type="button" onClick={() => setHatTrickPred(null)}
-                    style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', flexShrink: 0 }}>
-                    {t.hatTrickRemove}
-                  </button>
+                  <input
+                    type="text"
+                    value={hatTrickScorerPred}
+                    onChange={e => setHatTrickScorerPred(e.target.value)}
+                    placeholder={t.hatTrickScorerPlaceholder}
+                    maxLength={80}
+                    style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 6, color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 14, padding: '8px 10px', outline: 'none' }}
+                  />
+                  {!hatTrickScorerPred.trim() && (
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'rgba(245,197,24,0.7)', marginTop: 4 }}>
+                      {t.hatTrickScorerRequired}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ marginTop: 10, padding: '12px 14px', background: 'rgba(0,200,122,0.04)', border: '1px dashed rgba(0,200,122,0.25)', borderRadius: 'var(--radius-sm)' }}>

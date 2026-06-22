@@ -30,6 +30,7 @@ export type Match = {
   home_score: number | null
   away_score: number | null
   hat_trick_scored: boolean | null
+  hat_trick_scorer: string | null
 }
 
 export type Entry = {
@@ -46,4 +47,5 @@ export type Entry = {
   home_score_pred: number | null
   away_score_pred: number | null
   hat_trick_pred: boolean | null
+  hat_trick_scorer_pred: string | null
 }

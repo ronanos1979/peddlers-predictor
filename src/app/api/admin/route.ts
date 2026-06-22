@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { checkRateLimit, getIp } from '@/lib/rateLimit'
 import { FdRateLimitError } from '@/lib/footballData'
-import { fetchEspnEvents } from '@/lib/fetchEspnEvents'
+import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 import { toEspnDate, toEspnTeamName } from '@/lib/espnEvents'
 import { syncResults } from '@/lib/syncResults'
 
@@ -46,14 +46,15 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', match_id)
 
-      // Fetch hat_trick_scored if ESPN events were already loaded before result was set
+      // Fetch hat_trick_scored/scorer if ESPN events were already loaded before result was set
       const { data: matchForHatTrick } = await supabaseAdmin
-        .from('matches').select('hat_trick_scored').eq('id', match_id).single()
+        .from('matches').select('hat_trick_scored, hat_trick_scorer').eq('id', match_id).single()
       const hatTrickScored = matchForHatTrick?.hat_trick_scored ?? null
+      const hatTrickScorer = (matchForHatTrick as { hat_trick_scorer?: string | null } | null)?.hat_trick_scorer ?? null
 
       const { data: entries } = await supabaseAdmin
         .from('entries')
-        .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred')
+        .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred')
         .eq('match_id', match_id)
 
       if (entries) {
@@ -66,7 +67,8 @@ export async function POST(req: NextRequest) {
               entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
             raffle_entries = scoreCorrect ? 3 : 1
           }
-          if (entry.hat_trick_pred === true && hatTrickScored === true) {
+          const htPred = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
+          if (entry.hat_trick_pred === true && hatTrickScored === true && hatTrickScorer && htPred && scorerNameMatches(htPred, hatTrickScorer)) {
             raffle_entries += 7
           }
           await supabaseAdmin

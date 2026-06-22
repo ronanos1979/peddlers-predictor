@@ -3,6 +3,16 @@ import { toEspnDate, toEspnTeamName, parseEspnMinute, mapEspnEventType } from '@
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
 
+function normName(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
+}
+
+export function scorerNameMatches(pred: string, actual: string): boolean {
+  const p = normName(pred)
+  const a = normName(actual)
+  return p === a || a.includes(p) || p.includes(a)
+}
+
 export type EspnMatchEvent = {
   time: { elapsed: number; extra: number | null }
   team: { name: string }
@@ -132,18 +142,20 @@ export async function fetchEspnEvents(
       goalsByPlayer[ev.player.name] = (goalsByPlayer[ev.player.name] || 0) + 1
     }
   }
-  const hatTrickScored = Object.values(goalsByPlayer).some(count => count >= 3)
+  const hatTrickScorerEntry = Object.entries(goalsByPlayer).find(([, count]) => count >= 3)
+  const hatTrickScored = !!hatTrickScorerEntry
+  const hatTrickScorer = hatTrickScorerEntry ? hatTrickScorerEntry[0] : null
 
-  await supabaseAdmin.from('matches').update({ hat_trick_scored: hatTrickScored }).eq('id', matchId)
+  await supabaseAdmin.from('matches').update({ hat_trick_scored: hatTrickScored, hat_trick_scorer: hatTrickScorer }).eq('id', matchId)
 
   // Re-score hat-trick bonus for entries already scored for result
-  if (hatTrickScored) {
+  if (hatTrickScored && hatTrickScorer) {
     const { data: matchData } = await supabaseAdmin
       .from('matches').select('home_score, away_score, result').eq('id', matchId).single()
 
     const { data: scoredEntries } = await supabaseAdmin
       .from('entries')
-      .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, is_correct')
+      .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, is_correct')
       .eq('match_id', matchId)
       .not('is_correct', 'is', null)
       .eq('hat_trick_pred', true)
@@ -158,7 +170,9 @@ export async function fetchEspnEvents(
             entry.away_score_pred === matchData.away_score
           raffle = scoreCorrect ? 3 : 1
         }
-        raffle += 7
+        if (entry.hat_trick_scorer_pred && scorerNameMatches(entry.hat_trick_scorer_pred, hatTrickScorer)) {
+          raffle += 7
+        }
         await supabaseAdmin.from('entries').update({ raffle_entries: raffle }).eq('id', entry.id)
       }
     }

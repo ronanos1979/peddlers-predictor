@@ -25,6 +25,7 @@ type EntryWithMatch = {
   home_score_pred: number | null
   away_score_pred: number | null
   hat_trick_pred: boolean | null
+  hat_trick_scorer_pred: string | null
   matches: {
     home_team: string
     away_team: string
@@ -36,6 +37,7 @@ type EntryWithMatch = {
     home_score: number | null
     away_score: number | null
     hat_trick_scored: boolean | null
+    hat_trick_scorer: string | null
   }
 }
 
@@ -45,6 +47,14 @@ type Stats = {
   pending: number
   raffle_entries: number
 }
+function normName(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
+}
+function scorerMatches(pred: string, actual: string): boolean {
+  const p = normName(pred); const a = normName(actual)
+  return p === a || a.includes(p) || p.includes(a)
+}
+
 type ScorerPick = { player_name: string; player_team: string }
 type WinnerPick = { team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number }
 
@@ -309,15 +319,17 @@ function MyPicksContent() {
                       </span>
                     )}
                   </div>
-                  {e.hat_trick_pred === true && (
-                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>⚡ {t.hatTrickBonusLabel}:</span>
-                      {m.hat_trick_scored === true ? (
-                        <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>{t.hatTrickHit} +7</span>
+                  {e.hat_trick_pred === true && e.hat_trick_scorer_pred && (
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>⚡ {t.hatTrickBonusLabel}: <em>{e.hat_trick_scorer_pred}</em></span>
+                      {m.hat_trick_scored === null ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+7 {t.ifCorrect}</span>
                       ) : m.hat_trick_scored === false ? (
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
+                      ) : m.hat_trick_scorer && scorerMatches(e.hat_trick_scorer_pred, m.hat_trick_scorer) ? (
+                        <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>{t.hatTrickHit} +7</span>
                       ) : (
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+7 {t.ifCorrect}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
                       )}
                     </div>
                   )}

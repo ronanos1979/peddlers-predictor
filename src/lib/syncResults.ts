@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getFdFixtures, FdRateLimitError } from '@/lib/footballData'
-import { fetchEspnEvents } from '@/lib/fetchEspnEvents'
+import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 
 export { FdRateLimitError }
 
@@ -47,7 +47,7 @@ export async function syncResults(): Promise<SyncResultsOutput> {
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
   const { data: unresolved } = await supabaseAdmin
     .from('matches')
-    .select('id, kickoff_at, home_team, away_team, hat_trick_scored')
+    .select('id, kickoff_at, home_team, away_team, hat_trick_scored, hat_trick_scorer')
     .is('result', null)
     .lt('kickoff_at', twoHoursAgo)
     .neq('stage', 'Demo Match')
@@ -95,10 +95,11 @@ export async function syncResults(): Promise<SyncResultsOutput> {
     await supabaseAdmin.from('matches').update({ result, home_score: homeScore, away_score: awayScore }).eq('id', match.id)
 
     const hatTrickScored = (match as typeof match & { hat_trick_scored?: boolean | null }).hat_trick_scored ?? null
+    const hatTrickScorer = (match as typeof match & { hat_trick_scorer?: string | null }).hat_trick_scorer ?? null
 
     const { data: entries } = await supabaseAdmin
       .from('entries')
-      .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred')
+      .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred')
       .eq('match_id', match.id)
 
     if (entries) {
@@ -110,7 +111,8 @@ export async function syncResults(): Promise<SyncResultsOutput> {
             entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
           raffle_entries = scoreCorrect ? 3 : 1
         }
-        if (entry.hat_trick_pred === true && hatTrickScored === true) {
+        const htScorer = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
+        if (entry.hat_trick_pred === true && hatTrickScored === true && hatTrickScorer && htScorer && scorerNameMatches(htScorer, hatTrickScorer)) {
           raffle_entries += 7
         }
         await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
