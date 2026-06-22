@@ -67,13 +67,17 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - `stage` (Group A–L, Round of 32, Round of 16, Quarter Final, Semi Final, Third Place, Final, Demo Match)
 - `result` (home/draw/away or null), `is_active` (boolean)
 - `home_score`, `away_score` (integer, null until result set by admin)
+- `hat_trick_scored` (boolean, nullable — set by `fetchEspnEvents` after events load)
+- `hat_trick_scorer` (text, nullable — name of the player who scored the hat-trick, set alongside `hat_trick_scored`)
 - All 104 World Cup 2026 matches pre-loaded. entries_close_at = kickoff + 105 minutes.
 
 **entries**
 - `id`, `pub_id`, `match_id`, `name`, `phone`, `email` (nullable)
 - `pick` (home/draw/away), `is_correct` (boolean, null until result set)
-- `raffle_entries` (0, 1, or 3), `created_at`
+- `raffle_entries` (0, 1, 3, or higher with bonuses), `created_at`
 - `home_score_pred`, `away_score_pred` (integer, nullable — patron's optional score guess)
+- `hat_trick_pred` (boolean, nullable — true if patron predicted a hat-trick)
+- `hat_trick_scorer_pred` (text, nullable — the specific player the patron named as hat-trick scorer; required when hat_trick_pred is true)
 - Unique constraint: (phone, match_id) — one entry per person per match
 
 **scorer_picks**
@@ -188,6 +192,7 @@ Fully automatic based on datetime — no admin needed:
 - Correct result only → `is_correct = true`, `raffle_entries = 1`
 - Correct result + exact score → `is_correct = true`, `raffle_entries = 3`
 - Wrong prediction → `is_correct = false`, `raffle_entries = 0`
+- **Hat-trick bonus**: +7 raffle entries if the patron named a specific player who then scores 3+ goals in that match. Requires both `hat_trick_pred = true` and a non-empty `hat_trick_scorer_pred`. Awarded independently of the result pick. Scorer matching is fuzzy (case-insensitive, accent-normalised, partial — "Messi" matches "Lionel Messi"). `matches.hat_trick_scorer` stores the actual scorer name (set by `fetchEspnEvents`); `scorerNameMatches()` in `src/lib/fetchEspnEvents.ts` is the shared comparison function used by all three scoring paths.
 - Score prediction (`home_score_pred` / `away_score_pred`) is optional — patron enters via +/− steppers in the form
 - Set via admin panel after each match — either manually via `set_result` action or automatically via `sync_results` (fetches from football-data.org)
 - Leaderboard ranks by total `raffle_entries` descending (match entries + winner pick bonus combined)
