@@ -12,6 +12,7 @@ import { trackEvent } from '@/lib/analytics'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
 import { distanceMetres } from '@/lib/geo'
 import { getPredictableWindowEnd } from '@/lib/matchSchedule'
+import { getWinnerPickTickets, getScorerPickTickets } from '@/lib/bonusTickets'
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
@@ -293,11 +294,12 @@ function PatronWelcome({ onClear, t, selectedPub, pubCity }: {
 function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   const { t } = useLocale()
   const pub = selectedPub || 'haverhill'
+  const scorerTickets = getScorerPickTickets()
   const items = [
     { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: t.leaderboard, desc: t.leaderboardDesc },
     { href: '/world-cup/results', icon: '⚽', title: t.latestResults, desc: t.latestResultsDesc },
     { href: '/world-cup', icon: '🌍', title: t.worldCupHub, desc: t.worldCupHubDesc },
-    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDesc },
+    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDescN.replace('{n}', String(scorerTickets)) },
   ]
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, padding: '0 0 12px' }}>
@@ -362,6 +364,8 @@ function FirstTimeCard() {
   const { t } = useLocale()
   const [show, setShow] = useState(false)
   const [expanded, setExpanded] = useState(true)
+  const winnerTickets = getWinnerPickTickets()
+  const scorerTickets = getScorerPickTickets()
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !localStorage.getItem('peddlers_toured')) {
@@ -379,8 +383,8 @@ function FirstTimeCard() {
   const steps = [
     t.onboardStep1,
     t.onboardStep2,
-    t.onboardStep3,
-    t.onboardStep4,
+    t.onboardStep3N.replace('{n}', String(scorerTickets)),
+    t.onboardStep4N.replace('{n}', String(winnerTickets)),
     t.onboardStep5,
   ]
 
@@ -432,6 +436,7 @@ function FirstTimeCard() {
 
 function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
   const { t } = useLocale()
+  const winnerTickets = getWinnerPickTickets()
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -467,7 +472,7 @@ function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
             {t.winnerPickCalloutTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {t.winnerPickCalloutDesc}
+            {t.winnerPickCalloutDescN.replace('{n}', String(winnerTickets))}
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', flexShrink: 0 }}>
@@ -480,6 +485,7 @@ function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
 
 function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
   const { t } = useLocale()
+  const scorerTickets = getScorerPickTickets()
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -515,7 +521,7 @@ function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
             {t.goldenBootCalloutTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {t.goldenBootCalloutDesc}
+            {t.goldenBootCalloutDescN.replace('{n}', String(scorerTickets))}
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>

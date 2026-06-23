@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useLocale } from '@/lib/useLocale'
+import { getWinnerPickTickets } from '@/lib/bonusTickets'
 import { supabase, type Match } from '@/lib/supabase'
 import Flag from '@/components/Flag'
 
@@ -9,6 +10,7 @@ type GroupedMatches = Record<string, Match[]>
 
 export default function WorldCupHub() {
   const { t } = useLocale()
+  const winnerTickets = getWinnerPickTickets()
   const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -90,7 +92,7 @@ export default function WorldCupHub() {
     { href: '/world-cup/results',     icon: '⚽', label: t.results,             desc: t.resultsSub },
     { href: '/world-cup/scorers',     icon: '🥇', label: t.scorers,             desc: t.scorersSub },
     { href: '/world-cup/team',        icon: '⭐', label: t.myTeam,              desc: t.teamInfo },
-    { href: '/world-cup/winner-pick',   icon: '🏆', label: t.pickChampionLabel,          desc: t.pickChampionDesc },
+    { href: '/world-cup/winner-pick',   icon: '🏆', label: t.pickChampionLabel,          desc: t.pickChampionDescN.replace('{n}', String(winnerTickets)) },
     { href: '/world-cup/winner-picks',  icon: '📊', label: t.communityPicksLabel,         desc: t.communityPicksDesc },
     { href: '/world-cup/top-scorer-pick', icon: '🎯', label: t.pickTopScorer,             desc: t.topScorerBonus },
     { href: '/world-cup/scorer-picks',  icon: '📈', label: t.goldenBootCommunityNavLabel, desc: t.goldenBootCommunityNavDesc },

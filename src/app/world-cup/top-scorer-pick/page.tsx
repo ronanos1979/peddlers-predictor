@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
+import { getScorerPickTickets } from '@/lib/bonusTickets'
 import Link from 'next/link'
 import { GOLDEN_BOOT_CONTENDERS, type Contender } from '@/lib/goldenBootContenders'
 
@@ -19,6 +20,8 @@ function TopScorerPickContent() {
   const { t } = useLocale()
   const searchParams = useSearchParams()
   const pubId = searchParams.get('pub') || 'haverhill'
+
+  const currentTickets = getScorerPickTickets()
 
   const [search, setSearch]           = useState('')
   const [customTeam, setCustomTeam]   = useState('')
@@ -84,12 +87,13 @@ function TopScorerPickContent() {
     setError('')
     try {
       const { error: err } = await supabase.from('scorer_picks').insert({
-        pub_id:      pubId,
+        pub_id:                  pubId,
         phone,
         name,
-        player_name: selected.name,
-        player_team: selected.team,
-        player_id:   selected.id,
+        player_name:             selected.name,
+        player_team:             selected.team,
+        player_id:               selected.id,
+        potential_raffle_entries: currentTickets,
       })
       if (err) { setError(err.message); setSubmitting(false); return }
       if (!patron) savePatron({ name, phone, pub_id: pubId })
@@ -110,7 +114,7 @@ function TopScorerPickContent() {
           <div className="pop-in" style={{ fontSize: 56, marginBottom: 10 }}>🥇</div>
           <div className="slide-up">
             <h1 style={{ marginBottom: 6 }}>{t.topScorerSuccess}</h1>
-            <p className="muted" style={{ marginBottom: 20 }}>{t.topScorerBonus}</p>
+            <p className="muted" style={{ marginBottom: 20 }}>{t.topScorerBonusN.replace('{n}', String(currentTickets))}</p>
           </div>
           <div className="slide-up-delay card" style={{ marginBottom: 20, border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.05)' }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>{t.yourTopScorerPick}</div>
@@ -139,7 +143,7 @@ function TopScorerPickContent() {
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>🥇 {t.bonusPick}</div>
         <h1>{t.pickTopScorer}</h1>
-        <p className="muted">{t.topScorerSub}</p>
+        <p className="muted">{t.topScorerSubN.replace('{n}', String(currentTickets))}</p>
       </div>
 
       {/* Search */}

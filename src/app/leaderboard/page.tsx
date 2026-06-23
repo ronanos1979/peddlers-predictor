@@ -31,10 +31,11 @@ function LeaderboardContent() {
   const [topScorer, setTopScorer] = useState<TopPick | null>(null)
 
   async function load() {
-    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
+    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }, { data: scorerBonuses }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
       supabase.from('matches').select('*').eq('is_active', true).single(),
       supabase.from('entries').select('*').order('created_at', { ascending: false }),
       supabase.from('winner_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
+      supabase.from('scorer_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
       supabase.from('winner_picks').select('team_name, team_flag'),
       supabase.from('scorer_picks').select('player_name, player_team'),
     ])
@@ -49,6 +50,9 @@ function LeaderboardContent() {
       })
       winnerBonuses?.forEach(wp => {
         if (byPhone[wp.phone]) byPhone[wp.phone].pts += wp.raffle_entries
+      })
+      scorerBonuses?.forEach(sp => {
+        if (byPhone[sp.phone]) byPhone[sp.phone].pts += sp.raffle_entries
       })
       const sorted = Object.values(byPhone)
         .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))

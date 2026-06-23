@@ -132,9 +132,18 @@ export async function POST(req: NextRequest) {
         .from('matches').select('stage, home_team, away_team, kickoff_at').eq('id', match_id).single()
       if (finalMatchData?.stage === 'Final') {
         const champion = result === 'home' ? finalMatchData.home_team : finalMatchData.away_team
-        await supabaseAdmin.from('winner_picks')
-          .update({ is_correct: true, raffle_entries: 15 })
+        // Award each winner pick their locked-in potential_raffle_entries (varies by when pick was submitted)
+        const { data: championPicks } = await supabaseAdmin
+          .from('winner_picks')
+          .select('id, potential_raffle_entries')
           .eq('team_name', champion)
+        if (championPicks) {
+          for (const pick of championPicks) {
+            await supabaseAdmin.from('winner_picks')
+              .update({ is_correct: true, raffle_entries: pick.potential_raffle_entries ?? 15 })
+              .eq('id', pick.id)
+          }
+        }
         await supabaseAdmin.from('winner_picks')
           .update({ is_correct: false, raffle_entries: 0 })
           .neq('team_name', champion)
@@ -153,6 +162,34 @@ export async function POST(req: NextRequest) {
       const { id } = payload
       await supabaseAdmin.from('feedback').update({ read: true }).eq('id', id)
       return NextResponse.json({ success: true })
+    }
+
+    // Score the Golden Boot — set is_correct + award potential_raffle_entries for correct pick
+    if (action === 'score_golden_boot') {
+      const { player_name } = payload
+      if (!player_name) return NextResponse.json({ error: 'player_name required' }, { status: 400 })
+
+      // Correct picks: award their locked-in potential_raffle_entries
+      const { data: correctPicks } = await supabaseAdmin
+        .from('scorer_picks')
+        .select('id, potential_raffle_entries')
+        .ilike('player_name', `%${player_name}%`)
+      let scored = 0
+      if (correctPicks) {
+        for (const pick of correctPicks) {
+          await supabaseAdmin.from('scorer_picks')
+            .update({ is_correct: true, raffle_entries: pick.potential_raffle_entries ?? 10 })
+            .eq('id', pick.id)
+          scored++
+        }
+      }
+      // Wrong picks: mark false, 0 tickets
+      await supabaseAdmin.from('scorer_picks')
+        .update({ is_correct: false, raffle_entries: 0 })
+        .not('player_name', 'ilike', `%${player_name}%`)
+        .is('is_correct', null)
+
+      return NextResponse.json({ success: true, scored })
     }
 
     if (action === 'sync_results') {

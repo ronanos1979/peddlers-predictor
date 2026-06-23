@@ -40,6 +40,9 @@ const RULES = {
         'The leaderboard shows total raffle entries',
         'You can enter every match across the tournament',
         'There are 104 matches total',
+        'Bonus picks — World Cup Champion and Golden Boot — earn extra tickets if correct',
+        'The bonus ticket value decreases as the tournament progresses: early picks during the group stage are worth the most; picks made later (R32, R16, QF, SF) are worth progressively fewer tickets',
+        'Your bonus ticket value is locked in at the time you submit — pick early for maximum tickets',
       ]],
       ['⏱️ Timing', [
         'The app shows all matches available to predict in a rolling 4-day window',
@@ -118,6 +121,9 @@ const RULES = {
         'La clasificación muestra el total de boletos de rifa',
         'Puedes participar en todos los partidos del torneo',
         'Hay 104 partidos en total',
+        'Los picks de bonificación (Campeón del Mundial y Bota de Oro) otorgan boletos extra si aciertas',
+        'El valor de los boletos de bonificación disminuye a medida que avanza el torneo: los picks en la fase de grupos valen más; los de R32, R16, cuartos y semis valen progresivamente menos',
+        'Tu valor de boletos de bonificación queda fijado al momento de enviar tu pick — elige pronto para maximizar los boletos',
       ]],
       ['⏱️ Horarios', [
         'La app muestra todos los partidos disponibles para predecir en una ventana móvil de 4 días',

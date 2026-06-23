@@ -55,8 +55,8 @@ function scorerMatches(pred: string, actual: string): boolean {
   return p === a || a.includes(p) || p.includes(a)
 }
 
-type ScorerPick = { player_name: string; player_team: string }
-type WinnerPick = { team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number }
+type ScorerPick = { player_name: string; player_team: string; potential_raffle_entries: number | null; raffle_entries: number | null; is_correct: boolean | null }
+type WinnerPick = { team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number; potential_raffle_entries: number | null }
 
 function MyPicksContent() {
   const { t } = useLocale()
@@ -178,7 +178,7 @@ function MyPicksContent() {
               display: 'flex', alignItems: 'center', gap: 14,
               padding: '14px 16px', borderRadius: 10, marginBottom: 10,
               background: 'rgba(245,197,24,0.06)',
-              border: '1px solid rgba(245,197,24,0.35)',
+              border: `1px solid ${scorerPick.is_correct === true ? 'rgba(0,200,122,0.5)' : scorerPick.is_correct === false ? 'rgba(255,59,59,0.3)' : 'rgba(245,197,24,0.35)'}`,
             }}>
               <div style={{ fontSize: 32, flexShrink: 0 }}>🥇</div>
               <div style={{ flex: 1 }}>
@@ -193,8 +193,22 @@ function MyPicksContent() {
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)' }}>+10</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
+                {scorerPick.is_correct === true ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>+{scorerPick.raffle_entries} ✓</div>
+                    <div style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)' }}>{t.correctExclaim}</div>
+                  </>
+                ) : scorerPick.is_correct === false ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)' }}>+0</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>{t.wrongLower}</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)' }}>+{scorerPick.potential_raffle_entries ?? 10}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -220,7 +234,7 @@ function MyPicksContent() {
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 {winnerPick.is_correct === true ? (
                   <>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>+15 ✓</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>+{winnerPick.raffle_entries} ✓</div>
                     <div style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)' }}>{t.correctExclaim}</div>
                   </>
                 ) : winnerPick.is_correct === false ? (
@@ -230,7 +244,7 @@ function MyPicksContent() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>+15</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>+{winnerPick.potential_raffle_entries ?? 15}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
                   </>
                 )}

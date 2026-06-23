@@ -26,15 +26,18 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: 'Failed to load' }, { status: 500 })
 
   const [{ data: scorerPick }, { data: winnerPick }] = await Promise.all([
-    supabaseAdmin.from('scorer_picks').select('player_name, player_team').eq('phone', phone).maybeSingle(),
-    supabaseAdmin.from('winner_picks').select('team_name, team_flag, is_correct, raffle_entries').eq('phone', phone).maybeSingle(),
+    supabaseAdmin.from('scorer_picks').select('player_name, player_team, potential_raffle_entries, raffle_entries, is_correct').eq('phone', phone).maybeSingle(),
+    supabaseAdmin.from('winner_picks').select('team_name, team_flag, is_correct, raffle_entries, potential_raffle_entries').eq('phone', phone).maybeSingle(),
   ])
 
   const stats = {
     total: entries?.length || 0,
     correct: entries?.filter(e => e.is_correct === true).length || 0,
     pending: entries?.filter(e => e.is_correct === null).length || 0,
-    raffle_entries: (entries?.reduce((sum, e) => sum + (e.raffle_entries || 0), 0) || 0) + (winnerPick?.raffle_entries || 0),
+    raffle_entries:
+      (entries?.reduce((sum, e) => sum + (e.raffle_entries || 0), 0) || 0) +
+      (winnerPick?.raffle_entries || 0) +
+      (scorerPick?.raffle_entries || 0),
   }
 
   return NextResponse.json({ entries: entries || [], stats, scorerPick: scorerPick || null, winnerPick: winnerPick || null })

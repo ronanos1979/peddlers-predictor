@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
 import { useLocale } from '@/lib/useLocale'
+import { getWinnerPickTickets } from '@/lib/bonusTickets'
 import Flag from '@/components/Flag'
 import Link from 'next/link'
 
@@ -14,10 +15,12 @@ function WinnerPickContent() {
   const searchParams = useSearchParams()
   const pubId = searchParams.get('pub') || 'haverhill'
 
+  const currentTickets = getWinnerPickTickets()
+
   const [teams, setTeams] = useState<Team[]>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Team | null>(null)
-  const [existingPick, setExistingPick] = useState<{ team_name: string; team_flag: string; is_correct: boolean | null } | null>(null)
+  const [existingPick, setExistingPick] = useState<{ team_name: string; team_flag: string; is_correct: boolean | null; potential_raffle_entries: number | null } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -47,7 +50,7 @@ function WinnerPickContent() {
         if (phone.length === 10) {
           const { data } = await supabase
             .from('winner_picks')
-            .select('team_name, team_flag, is_correct')
+            .select('team_name, team_flag, is_correct, potential_raffle_entries')
             .eq('phone', phone)
             .maybeSingle()
           if (data) setExistingPick(data)
@@ -73,11 +76,12 @@ function WinnerPickContent() {
     setError('')
     try {
       const { error: err } = await supabase.from('winner_picks').insert({
-        pub_id:    pubId,
-        phone:     cleanPhone,
+        pub_id:                  pubId,
+        phone:                   cleanPhone,
         name,
-        team_name: selected.name,
-        team_flag: selected.flag,
+        team_name:               selected.name,
+        team_flag:               selected.flag,
+        potential_raffle_entries: currentTickets,
       })
       if (err) {
         setError(err.code === '23505' ? t.onceSubmitted : err.message)
@@ -94,7 +98,8 @@ function WinnerPickContent() {
 
   // ── Already picked ──────────────────────────────────────────────────────
   if (submitted || existingPick) {
-    const pick = existingPick || (selected ? { team_name: selected.name, team_flag: selected.flag, is_correct: null } : null)
+    const pick = existingPick || (selected ? { team_name: selected.name, team_flag: selected.flag, is_correct: null, potential_raffle_entries: null } : null)
+    const pickTickets = pick?.potential_raffle_entries ?? currentTickets
     return (
       <div className="container">
         <div style={{ textAlign: 'center', paddingTop: 32 }}>
@@ -103,10 +108,10 @@ function WinnerPickContent() {
             <h1 style={{ marginBottom: 6 }}>{submitted ? t.pickLocked : t.yourChampionPick}</h1>
             <p className="muted" style={{ marginBottom: 20 }}>
               {pick?.is_correct === true
-                ? t.correctBonus
+                ? t.correctBonusN.replace('{n}', String(pickTickets))
                 : pick?.is_correct === false
                 ? t.wrongKeepStacking
-                : t.bonusIfTrophy}
+                : t.bonusIfTrophyN.replace('{n}', String(pickTickets))}
             </p>
           </div>
           <div className="slide-up-delay card" style={{ marginBottom: 20, border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.05)', padding: '24px 20px' }}>
@@ -123,7 +128,7 @@ function WinnerPickContent() {
             </div>
             {pick?.is_correct === true && (
               <span style={{ background: 'rgba(0,200,122,0.15)', color: 'var(--green)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 6, padding: '5px 14px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>
-                {t.correctPlus15}
+                {t.correctPlusN.replace('{n}', String(pickTickets))}
               </span>
             )}
             {pick?.is_correct === false && (
@@ -156,7 +161,7 @@ function WinnerPickContent() {
         <h1>{t.predictChampion}</h1>
         <p className="muted" style={{ marginBottom: 6 }}>
           {t.whichTeamLifts}{' '}
-          <strong style={{ color: 'var(--gold)' }}>{t.correctPick15}</strong>
+          <strong style={{ color: 'var(--gold)' }}>{t.correctPickN.replace('{n}', String(currentTickets))}</strong>
         </p>
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
           {t.onceSubmitted}

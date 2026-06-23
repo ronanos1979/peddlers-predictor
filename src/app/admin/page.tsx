@@ -10,8 +10,8 @@ type EntryRow = {
   home_score_pred: number | null; away_score_pred: number | null
   matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; stage: string; kickoff_at: string } | null
 }
-type ScorerPickRow = { phone: string; player_name: string; player_team: string; is_correct: boolean | null }
-type WinnerPickRow = { phone: string; team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number }
+type ScorerPickRow = { phone: string; player_name: string; player_team: string; is_correct: boolean | null; potential_raffle_entries: number | null; raffle_entries: number | null }
+type WinnerPickRow = { phone: string; team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number; potential_raffle_entries: number | null }
 type PatronSummary = {
   phone: string; name: string; email: string | null; pub_id: string
   total: number; correct: number; pending: number; wrong: number; raffle_entries: number
@@ -82,6 +82,9 @@ export default function AdminPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   type SyncDebugUnmatched = { match: string; dbKickoff: string; nearestFd: string | null; nearestFdKickoff: string | null; diffMin: number | null }
   const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; events_loaded?: number; message?: string; debug?: { fdFinishedCount: number; dbUnresolvedCount: number; unmatched: SyncDebugUnmatched[] } } | null>(null)
+  const [goldenBootPlayerInput, setGoldenBootPlayerInput] = useState('')
+  const [goldenBootScoring, setGoldenBootScoring] = useState(false)
+  const [goldenBootResult, setGoldenBootResult] = useState<{ scored: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [checkins, setCheckins] = useState<CheckInRow[]>([])
   const [checkinMinDraw, setCheckinMinDraw] = useState<number>(() =>
@@ -269,13 +272,25 @@ export default function AdminPage() {
     const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=entrants`)
     const data = await res.json()
     const rows: EntryRow[] = data.entries || []
-    // Aggregate by phone: sum tickets, keep latest name + pub
+    const winnerPicks: WinnerPickRow[] = data.winner_picks || []
+    const scorerPicks: ScorerPickRow[] = data.scorer_picks || []
+    // Aggregate by phone: sum match tickets + winner bonus + scorer bonus
     const byPhone = new Map<string, RaffleEntrant>()
     for (const e of rows) {
       if (!byPhone.has(e.phone)) {
         byPhone.set(e.phone, { name: e.name, phone: e.phone, pub_id: e.pub_id, tickets: 0 })
       }
       byPhone.get(e.phone)!.tickets += e.raffle_entries
+    }
+    for (const wp of winnerPicks) {
+      if (byPhone.has(wp.phone) && wp.raffle_entries > 0) {
+        byPhone.get(wp.phone)!.tickets += wp.raffle_entries
+      }
+    }
+    for (const sp of scorerPicks) {
+      if (byPhone.has(sp.phone) && (sp.raffle_entries ?? 0) > 0) {
+        byPhone.get(sp.phone)!.tickets += sp.raffle_entries ?? 0
+      }
     }
     const pool = Array.from(byPhone.values())
       .filter(p => p.tickets > 0)
@@ -748,18 +763,18 @@ export default function AdminPage() {
                   <div style={{ fontSize: 13, marginBottom: 6 }}>
                     🥇 Golden Boot: <strong>{patron.golden_boot.player_name}</strong> ({patron.golden_boot.player_team})
                     {' · '}
-                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×10</span>}
+                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×{patron.golden_boot.raffle_entries ?? 10}</span>}
                     {patron.golden_boot.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
-                    {patron.golden_boot.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Not set yet</span>}
+                    {patron.golden_boot.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ +{patron.golden_boot.potential_raffle_entries ?? 10} if correct</span>}
                   </div>
                 )}
                 {patron.winner_pick && (
                   <div style={{ fontSize: 13 }}>
                     🏆 Champion: <strong>{patron.winner_pick.team_flag} {patron.winner_pick.team_name}</strong>
                     {' · '}
-                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×15</span>}
+                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×{patron.winner_pick.raffle_entries}</span>}
                     {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
-                    {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                    {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ +{patron.winner_pick.potential_raffle_entries ?? 15} if correct</span>}
                   </div>
                 )}
               </div>
@@ -1407,6 +1422,54 @@ export default function AdminPage() {
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
               Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Wrong = 0 tickets. The draw is weighted — more tickets = better odds. Draw 1st, 2nd, and 3rd place winners.
             </p>
+          </div>
+
+          {/* Score Golden Boot */}
+          <div className="card" style={{ marginBottom: 16, borderColor: 'rgba(245,197,24,0.3)' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
+              🥇 Score Golden Boot (after the Final)
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Enter the exact Golden Boot winner name — fuzzy match awards picks who named this player. Each patron gets their locked-in ticket value (varies by when they submitted).
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={goldenBootPlayerInput}
+                onChange={e => setGoldenBootPlayerInput(e.target.value)}
+                placeholder="e.g. Kylian Mbappé"
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 14 }}
+              />
+              <button
+                disabled={!goldenBootPlayerInput.trim() || goldenBootScoring}
+                onClick={async () => {
+                  if (!goldenBootPlayerInput.trim()) return
+                  setGoldenBootScoring(true)
+                  setGoldenBootResult(null)
+                  const res = await fetch('/api/admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, action: 'score_golden_boot', payload: { player_name: goldenBootPlayerInput.trim() } })
+                  })
+                  const data = await res.json()
+                  setGoldenBootScoring(false)
+                  if (data.success) {
+                    setGoldenBootResult({ scored: data.scored })
+                    flash(`✅ Golden Boot scored — ${data.scored} correct picks awarded tickets`, 'success')
+                    setRafflePoolLoaded(false)
+                  } else {
+                    flash(`❌ Error: ${data.error}`, 'error')
+                  }
+                }}
+                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, whiteSpace: 'nowrap' }}
+              >
+                {goldenBootScoring ? 'Scoring…' : 'Score'}
+              </button>
+            </div>
+            {goldenBootResult && (
+              <p style={{ marginTop: 8, fontSize: 13, color: 'var(--green)' }}>
+                ✓ {goldenBootResult.scored} patron{goldenBootResult.scored !== 1 ? 's' : ''} had the correct pick and were awarded tickets.
+              </p>
+            )}
           </div>
 
           {/* Pub filter */}

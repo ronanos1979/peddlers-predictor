@@ -79,29 +79,32 @@ create policy "Public insert check_ins" on check_ins for insert to anon with che
 
 -- Golden Boot (top scorer) picks
 create table if not exists scorer_picks (
-  id           uuid primary key default gen_random_uuid(),
-  pub_id       text references pubs(id),
-  phone        text not null,
-  name         text not null,
-  player_name  text not null,
-  player_team  text not null,
-  player_id    integer,
-  created_at   timestamptz not null default now(),
-  is_correct   boolean default null,
+  id                      uuid primary key default gen_random_uuid(),
+  pub_id                  text references pubs(id),
+  phone                   text not null,
+  name                    text not null,
+  player_name             text not null,
+  player_team             text not null,
+  player_id               integer,
+  created_at              timestamptz not null default now(),
+  is_correct              boolean default null,
+  potential_raffle_entries integer not null default 10,
+  raffle_entries          integer not null default 0,
   unique(phone)
 );
 
 -- Tournament winner picks (one per phone, locked once submitted)
 create table if not exists winner_picks (
-  id             uuid primary key default gen_random_uuid(),
-  pub_id         text references pubs(id),
-  phone          text not null,
-  name           text not null,
-  team_name      text not null,
-  team_flag      text not null default '',
-  is_correct     boolean default null,
-  raffle_entries integer not null default 0,
-  created_at     timestamptz not null default now(),
+  id                      uuid primary key default gen_random_uuid(),
+  pub_id                  text references pubs(id),
+  phone                   text not null,
+  name                    text not null,
+  team_name               text not null,
+  team_flag               text not null default '',
+  is_correct              boolean default null,
+  raffle_entries          integer not null default 0,
+  potential_raffle_entries integer not null default 15,
+  created_at              timestamptz not null default now(),
   unique(phone)
 );
 

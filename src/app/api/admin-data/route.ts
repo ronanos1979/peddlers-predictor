@@ -65,8 +65,8 @@ export async function GET(req: NextRequest) {
 
     const [{ data }, { data: scorerPicks }, { data: winnerPicks }] = await Promise.all([
       query,
-      supabaseAdmin.from('scorer_picks').select('phone, player_name, player_team, is_correct'),
-      supabaseAdmin.from('winner_picks').select('phone, team_name, team_flag, is_correct, raffle_entries'),
+      supabaseAdmin.from('scorer_picks').select('phone, player_name, player_team, is_correct, potential_raffle_entries, raffle_entries'),
+      supabaseAdmin.from('winner_picks').select('phone, team_name, team_flag, is_correct, raffle_entries, potential_raffle_entries'),
     ])
     return NextResponse.json({ entries: data || [], scorer_picks: scorerPicks || [], winner_picks: winnerPicks || [] })
   }
