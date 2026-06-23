@@ -6,6 +6,7 @@ import { useLocale } from '@/lib/useLocale'
 import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
 import Flag from '@/components/Flag'
+import { BONUS_TIERS, MAX_WINNER_TICKETS, MAX_SCORER_TICKETS, getWinnerPickTickets, getScorerPickTickets } from '@/lib/bonusTickets'
 
 function TeamLink({ name, flag }: { name: string; flag: string }) {
   return (
@@ -71,6 +72,25 @@ function MyPicksContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fromCookie, setFromCookie] = useState(false)
+  const [showScoringInfo, setShowScoringInfo] = useState(false)
+
+  const currentWinnerTickets = getWinnerPickTickets()
+  const currentScorerTickets = getScorerPickTickets()
+  const patron = loadPatron()
+  const pubParam = patron?.pub_id ? `?pub=${patron.pub_id}` : ''
+
+  const currentTierKey = currentWinnerTickets === MAX_WINNER_TICKETS
+    ? 'group-early'
+    : (BONUS_TIERS.find(tier => tier.winnerTickets === currentWinnerTickets)?.label ?? 'group-early')
+
+  const scheduleRows = [
+    { key: 'group-early', label: t.scoringInfoGroupEarly, winner: MAX_WINNER_TICKETS, scorer: MAX_SCORER_TICKETS },
+    { key: BONUS_TIERS[0].label, label: t.scoringInfoGroupMD3, winner: BONUS_TIERS[0].winnerTickets, scorer: BONUS_TIERS[0].scorerTickets },
+    { key: BONUS_TIERS[1].label, label: t.roundOf32, winner: BONUS_TIERS[1].winnerTickets, scorer: BONUS_TIERS[1].scorerTickets },
+    { key: BONUS_TIERS[2].label, label: t.roundOf16, winner: BONUS_TIERS[2].winnerTickets, scorer: BONUS_TIERS[2].scorerTickets },
+    { key: BONUS_TIERS[3].label, label: t.quarterFinals, winner: BONUS_TIERS[3].winnerTickets, scorer: BONUS_TIERS[3].scorerTickets },
+    { key: BONUS_TIERS[4].label, label: t.semiFinals, winner: BONUS_TIERS[4].winnerTickets, scorer: BONUS_TIERS[4].scorerTickets },
+  ]
 
   async function lookup(p?: string) {
     const num = p || phone
@@ -172,6 +192,100 @@ function MyPicksContent() {
             ))}
           </div>
 
+          {/* How Tickets Work toggle */}
+          <button
+            onClick={() => setShowScoringInfo(v => !v)}
+            style={{
+              width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid var(--gray-border)',
+              borderRadius: showScoringInfo ? '10px 10px 0 0' : 10,
+              padding: '10px 14px', cursor: 'pointer', marginBottom: showScoringInfo ? 0 : 12,
+              fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--text-muted)',
+              letterSpacing: 0.5,
+            }}
+          >
+            <span>ℹ {t.howTicketsWork}</span>
+            <span style={{ fontSize: 11 }}>{showScoringInfo ? '▲' : '▼'}</span>
+          </button>
+
+          {showScoringInfo && (
+            <div style={{
+              border: '1px solid var(--gray-border)', borderTop: 'none',
+              borderRadius: '0 0 10px 10px', padding: '14px 16px', marginBottom: 12,
+              background: 'rgba(255,255,255,0.02)', fontSize: 13,
+            }}>
+              {/* Match predictions */}
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                {t.scoringInfoMatchTitle}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
+                {[t.scoringInfoMatchLine1, t.scoringInfoMatchLine2, t.scoringInfoMatchLine3].map(line => (
+                  <div key={line} style={{ fontSize: 13, color: 'var(--text)' }}>{line}</div>
+                ))}
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t.scoringInfoHatIndep}</div>
+              </div>
+
+              {/* Bonus picks */}
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
+                {t.scoringInfoBonusTitle}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>{t.scoringInfoBonusDesc}</div>
+
+              {/* Schedule table */}
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                {t.scoringInfoScheduleTitle}
+              </div>
+              <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--gray-border)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 56px', background: 'rgba(255,255,255,0.05)', padding: '6px 10px', fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                  <span>{t.stage}</span>
+                  <span style={{ textAlign: 'center' }}>{t.scoringInfoChampion}</span>
+                  <span style={{ textAlign: 'center' }}>{t.goldenBoot}</span>
+                </div>
+                {scheduleRows.map((row, i) => {
+                  const isCurrent = row.key === currentTierKey
+                  const isPast = scheduleRows.findIndex(r => r.key === currentTierKey) > i
+                  return (
+                    <div key={row.key} style={{
+                      display: 'grid', gridTemplateColumns: '1fr 56px 56px',
+                      padding: '7px 10px', alignItems: 'center',
+                      borderTop: i === 0 ? 'none' : '1px solid var(--gray-border)',
+                      background: isCurrent ? 'rgba(245,197,24,0.08)' : 'transparent',
+                    }}>
+                      <div style={{ fontSize: 12, color: isCurrent ? 'var(--gold)' : isPast ? 'var(--text-dim)' : 'var(--text)', fontWeight: isCurrent ? 700 : 400, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {row.label}
+                        {isCurrent && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: 1, background: 'rgba(245,197,24,0.18)', borderRadius: 4, padding: '1px 5px' }}>{t.scoringInfoNow}</span>}
+                      </div>
+                      <div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 15, color: isCurrent ? 'var(--gold)' : isPast ? 'var(--text-dim)' : 'var(--text)', letterSpacing: 1 }}>+{row.winner}</div>
+                      <div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 15, color: isCurrent ? 'var(--gold)' : isPast ? 'var(--text-dim)' : 'var(--text)', letterSpacing: 1 }}>+{row.scorer}</div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.5 }}>{t.scoringInfoTotal}</div>
+            </div>
+          )}
+
+          {/* Golden Boot CTA (when no pick yet) */}
+          {!scorerPick && (
+            <Link href={`/world-cup/top-scorer-pick${pubParam}`} style={{ textDecoration: 'none' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 16px', borderRadius: 10, marginBottom: 10,
+                background: 'rgba(245,197,24,0.04)',
+                border: '1px dashed rgba(245,197,24,0.4)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 28 }}>🥇</span>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--gold)' }}>{t.noGoldenBootPickYet}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t.scoringInfoBonusDesc}</div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>{t.goldenBootPickCta}</div>
+              </div>
+            </Link>
+          )}
+
           {/* Golden Boot pick */}
           {scorerPick && (
             <div style={{
@@ -211,6 +325,27 @@ function MyPicksContent() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* World Cup Winner CTA (when no pick yet) */}
+          {!winnerPick && (
+            <Link href={`/world-cup/winner-pick${pubParam}`} style={{ textDecoration: 'none' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 16px', borderRadius: 10, marginBottom: 10,
+                background: 'rgba(0,200,122,0.03)',
+                border: '1px dashed rgba(0,200,122,0.3)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 28 }}>🏆</span>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)' }}>{t.noChampionPickYet}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t.bonusIfTrophyN.replace('{n}', String(currentWinnerTickets))}</div>
+                  </div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', flexShrink: 0 }}>{t.championPickCta}</div>
+              </div>
+            </Link>
           )}
 
           {/* World Cup Winner pick */}
@@ -330,6 +465,13 @@ function MyPicksContent() {
                     {e.raffle_entries > 0 && (
                       <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
                         +{e.raffle_entries} {t.tickets}
+                      </span>
+                    )}
+                    {e.is_correct === null && (
+                      <span style={{ fontSize: 11, color: 'var(--amber)', opacity: 0.85 }}>
+                        {e.home_score_pred != null && e.away_score_pred != null
+                          ? t.pendingCouldEarnExact
+                          : t.pendingCouldEarn1}
                       </span>
                     )}
                   </div>
