@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/useLocale'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
-import { getScorerPickTickets, BONUS_TIERS, getActiveTierIndex } from '@/lib/bonusTickets'
+import { getScorerPickTickets, BONUS_TIERS, MAX_SCORER_TICKETS, getActiveTierIndex } from '@/lib/bonusTickets'
 import Link from 'next/link'
 import { GOLDEN_BOOT_CONTENDERS, type Contender } from '@/lib/goldenBootContenders'
 
@@ -171,19 +171,31 @@ function TopScorerPickContent() {
           </div>
 
           {/* Current tier */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 1, lineHeight: 1 }}>
-              +{currentTickets}
-            </span>
-            <div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
-                {activeTierIdx >= 0 ? t[STAGE_LABEL_KEYS[BONUS_TIERS[activeTierIdx].label]] : t.bonusPickStageGroupMD3}
+          {(() => {
+            const prevTickets = activeTierIdx === 0 ? MAX_SCORER_TICKETS : activeTierIdx > 0 ? BONUS_TIERS[activeTierIdx - 1].scorerTickets : null
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  {prevTickets !== null && (
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-dim)', letterSpacing: 1, lineHeight: 1, textDecoration: 'line-through', opacity: 0.5 }}>
+                      +{prevTickets}
+                    </span>
+                  )}
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 1, lineHeight: 1 }}>
+                    +{currentTickets}
+                  </span>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+                    {activeTierIdx >= 0 ? t[STAGE_LABEL_KEYS[BONUS_TIERS[activeTierIdx].label]] : t.bonusPickStageGroupMD3}
+                  </div>
+                  <span style={{ background: 'var(--gold)', color: '#000', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>
+                    {t.ticketNowBadge}
+                  </span>
+                </div>
               </div>
-              <span style={{ background: 'var(--gold)', color: '#000', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>
-                {t.ticketNowBadge}
-              </span>
-            </div>
-          </div>
+            )
+          })()}
 
           {/* Future tiers */}
           {BONUS_TIERS.filter((_, i) => i > activeTierIdx).map(tier => (
