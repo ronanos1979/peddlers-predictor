@@ -254,6 +254,7 @@ export default function WorldCupHub() {
     { href: '/world-cup/standings',   icon: '📊', label: t.standings,           desc: t.standingsSub },
     { href: '/world-cup/bracket',     icon: '🏆', label: t.bracket,             desc: t.bracketSub },
     { href: '/world-cup/results',     icon: '⚽', label: t.results,             desc: t.resultsSub },
+    { href: '/schedule',              icon: '📅', label: t.allMatches104,        desc: t.allMatches104Desc },
     { href: '/world-cup/scorers',     icon: '🥇', label: t.scorers,             desc: t.scorersSub },
     { href: '/world-cup/team',        icon: '⭐', label: t.myTeam,              desc: t.teamInfo },
     { href: '/world-cup/winner-pick',     icon: '🏆', label: t.pickChampionLabel,          desc: t.pickChampionDescN.replace('{n}', String(winnerTickets)) },
