@@ -693,15 +693,17 @@ export default function AdminPage() {
                 {patron.golden_boot && (
                   <span style={{ fontSize: 11, color: 'var(--amber)' }}>
                     🥇 {patron.golden_boot.player_name}
-                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓</span>}
+                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓ +{patron.golden_boot.raffle_entries ?? 10}</span>}
                     {patron.golden_boot.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
+                    {patron.golden_boot.is_correct === null && <span style={{ color: 'var(--amber)', opacity: 0.8 }}> ⏳+{patron.golden_boot.potential_raffle_entries ?? 10}</span>}
                   </span>
                 )}
                 {patron.winner_pick && (
                   <span style={{ fontSize: 11, color: 'var(--amber)' }}>
                     🏆 {patron.winner_pick.team_flag} {patron.winner_pick.team_name}
-                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓</span>}
+                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓ +{patron.winner_pick.raffle_entries}</span>}
                     {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
+                    {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)', opacity: 0.8 }}> ⏳+{patron.winner_pick.potential_raffle_entries ?? 15}</span>}
                   </span>
                 )}
               </div>

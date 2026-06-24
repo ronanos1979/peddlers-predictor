@@ -175,59 +175,86 @@ function WinnerPickContent() {
         <p className="muted" style={{ marginBottom: 12 }}>{t.whichTeamLifts}</p>
 
         {/* Ticket schedule */}
-        <div style={{
-          background: 'rgba(245,197,24,0.07)',
-          border: '1px solid rgba(245,197,24,0.4)',
-          borderRadius: 10,
-          padding: '14px 16px',
-          marginBottom: 12,
-        }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-            {t.ticketsDropEachRound}
-          </div>
+        {(() => {
+          // Build full schedule including the pre-tournament row (before BONUS_TIERS[0].from)
+          const preTier = { label: 'preGroup', tickets: MAX_WINNER_TICKETS, isPre: true as const }
+          const allRowsActiveIdx = activeTierIdx + 1 // 0 = pre-tournament active, 1 = BONUS_TIERS[0] active, etc.
 
-          {/* Current tier (or max if before first tier) */}
-          {(() => {
-            const prevTickets = activeTierIdx === 0 ? MAX_WINNER_TICKETS : activeTierIdx > 0 ? BONUS_TIERS[activeTierIdx - 1].winnerTickets : null
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  {prevTickets !== null && (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text-dim)', letterSpacing: 1, lineHeight: 1, textDecoration: 'line-through', opacity: 0.5 }}>
-                      +{prevTickets}
+          return (
+            <div style={{
+              background: 'rgba(245,197,24,0.07)',
+              border: '1px solid rgba(245,197,24,0.4)',
+              borderRadius: 10,
+              padding: '14px 16px',
+              marginBottom: 12,
+            }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                {t.ticketsDropEachRound}
+              </div>
+
+              {/* Pre-tournament row */}
+              {(() => {
+                const rowIdx = 0
+                const isPast = rowIdx < allRowsActiveIdx
+                const isActive = rowIdx === allRowsActiveIdx
+                const untilDate = new Date(BONUS_TIERS[0].from.getTime() - 24 * 60 * 60 * 1000)
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 2 }}>
+                    <span style={{
+                      fontFamily: 'var(--font-display)', fontSize: isActive ? 28 : 18, letterSpacing: 1, lineHeight: 1, minWidth: 36, textAlign: 'right',
+                      color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)',
+                      textDecoration: isPast ? 'line-through' : 'none',
+                      opacity: isPast ? 0.6 : 1,
+                    }}>
+                      +{preTier.tickets}
                     </span>
-                  )}
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 1, lineHeight: 1 }}>
-                    +{currentTickets}
-                  </span>
-                </div>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
-                    {activeTierIdx >= 0 ? t[STAGE_LABEL_KEYS[BONUS_TIERS[activeTierIdx].label]] : t.bonusPickStageGroupMD3}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)', textDecoration: isPast ? 'line-through' : 'none', opacity: isPast ? 0.7 : 1 }}>
+                        {t.ticketBeforeDateStageN
+                          .replace('{date}', fmtTierDate(untilDate))
+                          .replace('{stage}', t.bonusPickStageGroupEarly)
+                          .replace('{n}', String(preTier.tickets))}
+                      </div>
+                    </div>
+                    {isPast && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--red)', opacity: 0.7, letterSpacing: 1, background: 'rgba(255,59,59,0.1)', borderRadius: 4, padding: '2px 5px' }}>{t.ticketExpiredBadge}</span>}
+                    {isActive && <span style={{ background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.ticketNowBadge}</span>}
                   </div>
-                  <span style={{ background: 'var(--gold)', color: '#000', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>
-                    {t.ticketNowBadge}
-                  </span>
-                </div>
-              </div>
-            )
-          })()}
+                )
+              })()}
 
-          {/* Future tiers */}
-          {BONUS_TIERS.filter((_, i) => i > activeTierIdx).map(tier => (
-            <div key={tier.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-muted)', letterSpacing: 1, minWidth: 36, textAlign: 'right', lineHeight: 1 }}>
-                +{tier.winnerTickets}
-              </span>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)' }}>
-                {t.ticketAfterDateStageN
-                  .replace('{date}', fmtTierDate(tier.from))
-                  .replace('{stage}', t[STAGE_LABEL_KEYS[tier.label]])
-                  .replace('{n}', String(tier.winnerTickets))}
-              </div>
+              {/* BONUS_TIERS rows */}
+              {BONUS_TIERS.map((tier, i) => {
+                const rowIdx = i + 1
+                const isPast = rowIdx < allRowsActiveIdx
+                const isActive = rowIdx === allRowsActiveIdx
+                return (
+                  <div key={tier.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{
+                      fontFamily: 'var(--font-display)', fontSize: isActive ? 28 : 18, letterSpacing: 1, lineHeight: 1, minWidth: 36, textAlign: 'right',
+                      color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)',
+                      textDecoration: isPast ? 'line-through' : 'none',
+                      opacity: isPast ? 0.6 : 1,
+                    }}>
+                      +{tier.winnerTickets}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)', textDecoration: isPast ? 'line-through' : 'none', opacity: isPast ? 0.7 : 1 }}>
+                        {t.ticketAfterDateStageN
+                          .replace('{date}', fmtTierDate(tier.from))
+                          .replace('{stage}', t[STAGE_LABEL_KEYS[tier.label]])
+                          .replace('{n}', String(tier.winnerTickets))}
+                      </div>
+                      {isActive && (
+                        <span style={{ background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1, display: 'inline-block', marginTop: 2 }}>{t.ticketNowBadge}</span>
+                      )}
+                    </div>
+                    {isPast && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--red)', opacity: 0.7, letterSpacing: 1, background: 'rgba(255,59,59,0.1)', borderRadius: 4, padding: '2px 5px', flexShrink: 0 }}>{t.ticketExpiredBadge}</span>}
+                  </div>
+                )
+              })}
             </div>
-          ))}
-        </div>
+          )
+        })()}
 
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
           {t.onceSubmitted}

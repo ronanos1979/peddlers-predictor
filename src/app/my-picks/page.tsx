@@ -319,8 +319,9 @@ function MyPicksContent() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)' }}>+{scorerPick.potential_raffle_entries ?? 10}</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold)', letterSpacing: 1, lineHeight: 1 }}>+{scorerPick.potential_raffle_entries ?? currentScorerTickets}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', marginTop: 2 }}>🔒 {t.ticketLocked}</div>
                   </>
                 )}
               </div>
@@ -379,8 +380,9 @@ function MyPicksContent() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>+{winnerPick.potential_raffle_entries ?? 15}</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--green)', letterSpacing: 1, lineHeight: 1 }}>+{winnerPick.potential_raffle_entries ?? currentWinnerTickets}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)' }}>{t.ifCorrect}</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', marginTop: 2 }}>🔒 {t.ticketLocked}</div>
                   </>
                 )}
               </div>

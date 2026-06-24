@@ -388,6 +388,7 @@ export const translations = {
     // My Picks
     searchByPhone: 'Search by phone →',
     ifCorrect: 'if correct',
+    ticketLocked: 'locked in',
     correctExclaim: 'correct!',
     pendingCouldEarn1: '+1 ticket if correct',
     pendingCouldEarnExact: '+3 if exact score · +1 if result only',
@@ -507,8 +508,11 @@ export const translations = {
     // Bonus pick ticket schedule
     ticketsDropEachRound: 'Ticket value drops each round — pick early for more!',
     ticketNowBadge: 'NOW',
+    ticketExpiredBadge: 'EXPIRED',
     ticketAfterDateStageN: 'From {date} ({stage}): +{n} tickets',
+    ticketBeforeDateStageN: 'Until {date} ({stage}): +{n} tickets',
     bonusPickStageGroupMD3: 'Group Stage',
+    bonusPickStageGroupEarly: 'Group Stage (days 1–2)',
     bonusPickStageR32: 'Round of 32',
     bonusPickStageR16: 'Round of 16',
     bonusPickStageQF: 'Quarter Finals',
@@ -1007,6 +1011,7 @@ export const translations = {
     // My Picks
     searchByPhone: 'Buscar por teléfono →',
     ifCorrect: 'si aciertas',
+    ticketLocked: 'bloqueado',
     correctExclaim: '¡correcto!',
     wrongLower: 'incorrecto',
     usesSameNumber: 'Usa el mismo número cada vez para mantener tus predicciones juntas.',
@@ -1126,8 +1131,11 @@ export const translations = {
     // Bonus pick ticket schedule
     ticketsDropEachRound: '¡El valor de los boletos baja cada ronda — elige pronto para ganar más!',
     ticketNowBadge: 'AHORA',
+    ticketExpiredBadge: 'EXPIRADO',
     ticketAfterDateStageN: 'Desde {date} ({stage}): +{n} boletos',
+    ticketBeforeDateStageN: 'Hasta {date} ({stage}): +{n} boletos',
     bonusPickStageGroupMD3: 'Fase de Grupos',
+    bonusPickStageGroupEarly: 'Fase de Grupos (días 1–2)',
     bonusPickStageR32: 'Ronda de 32',
     bonusPickStageR16: 'Ronda de 16',
     bonusPickStageQF: 'Cuartos de Final',
