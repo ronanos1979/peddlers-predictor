@@ -29,3 +29,15 @@ export function getWinnerPickTickets(now: Date = new Date()): number {
 export function getScorerPickTickets(now: Date = new Date()): number {
   return activeTier(now)?.scorerTickets ?? MAX_SCORER_TICKETS
 }
+
+export function getNextTier(now: Date = new Date()): BonusTier | null {
+  return BONUS_TIERS.find(t => now < t.from) ?? null
+}
+
+export function getActiveTierIndex(now: Date = new Date()): number {
+  let idx = -1
+  for (let i = 0; i < BONUS_TIERS.length; i++) {
+    if (now >= BONUS_TIERS[i].from) idx = i
+  }
+  return idx
+}

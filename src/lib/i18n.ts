@@ -504,6 +504,16 @@ export const translations = {
     lockingIn: 'Locking in…',
     backTeamToWin: '🏆 Back {name} to win it all',
 
+    // Bonus pick ticket schedule
+    ticketsDropEachRound: 'Ticket value drops each round — pick early for more!',
+    ticketNowBadge: 'NOW',
+    ticketAfterDateStageN: 'From {date} ({stage}): +{n} tickets',
+    bonusPickStageGroupMD3: 'Group Stage',
+    bonusPickStageR32: 'Round of 32',
+    bonusPickStageR16: 'Round of 16',
+    bonusPickStageQF: 'Quarter Finals',
+    bonusPickStageSF: 'Semi Finals',
+
     // Winner picks community page
     communityPicksTitle: 'Who Does the Pub Back?',
     communityPicksSectionLabel: '🏆 Community Picks',
@@ -1112,6 +1122,16 @@ export const translations = {
     noTeamsFound: 'No se encontraron países para "{search}"',
     lockingIn: 'Confirmando…',
     backTeamToWin: '🏆 Apostar por {name} para ganar todo',
+
+    // Bonus pick ticket schedule
+    ticketsDropEachRound: '¡El valor de los boletos baja cada ronda — elige pronto para ganar más!',
+    ticketNowBadge: 'AHORA',
+    ticketAfterDateStageN: 'Desde {date} ({stage}): +{n} boletos',
+    bonusPickStageGroupMD3: 'Fase de Grupos',
+    bonusPickStageR32: 'Ronda de 32',
+    bonusPickStageR16: 'Ronda de 16',
+    bonusPickStageQF: 'Cuartos de Final',
+    bonusPickStageSF: 'Semifinales',
 
     // Winner picks community page
     communityPicksTitle: '¿A Quién Apoya el Pub?',

@@ -4,11 +4,23 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
 import { useLocale } from '@/lib/useLocale'
-import { getWinnerPickTickets } from '@/lib/bonusTickets'
+import { getWinnerPickTickets, BONUS_TIERS, getActiveTierIndex } from '@/lib/bonusTickets'
 import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 type Team = { name: string; flag: string }
+
+const STAGE_LABEL_KEYS: Record<string, 'bonusPickStageGroupMD3' | 'bonusPickStageR32' | 'bonusPickStageR16' | 'bonusPickStageQF' | 'bonusPickStageSF'> = {
+  'Group Stage MD3': 'bonusPickStageGroupMD3',
+  'Round of 32':     'bonusPickStageR32',
+  'Round of 16':     'bonusPickStageR16',
+  'Quarter Finals':  'bonusPickStageQF',
+  'Semi Finals':     'bonusPickStageSF',
+}
+
+function fmtTierDate(d: Date) {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 function WinnerPickContent() {
   const { t } = useLocale()
@@ -16,6 +28,7 @@ function WinnerPickContent() {
   const pubId = searchParams.get('pub') || 'haverhill'
 
   const currentTickets = getWinnerPickTickets()
+  const activeTierIdx = getActiveTierIndex()
 
   const [teams, setTeams] = useState<Team[]>([])
   const [search, setSearch] = useState('')
@@ -158,11 +171,52 @@ function WinnerPickContent() {
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
           {t.bonusPickLabel}
         </div>
-        <h1>{t.predictChampion}</h1>
-        <p className="muted" style={{ marginBottom: 6 }}>
-          {t.whichTeamLifts}{' '}
-          <strong style={{ color: 'var(--gold)' }}>{t.correctPickN.replace('{n}', String(currentTickets))}</strong>
-        </p>
+        <h1 style={{ marginBottom: 4 }}>{t.predictChampion}</h1>
+        <p className="muted" style={{ marginBottom: 12 }}>{t.whichTeamLifts}</p>
+
+        {/* Ticket schedule */}
+        <div style={{
+          background: 'rgba(245,197,24,0.07)',
+          border: '1px solid rgba(245,197,24,0.4)',
+          borderRadius: 10,
+          padding: '14px 16px',
+          marginBottom: 12,
+        }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+            {t.ticketsDropEachRound}
+          </div>
+
+          {/* Current tier (or max if before first tier) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--gold)', letterSpacing: 1, lineHeight: 1 }}>
+              +{currentTickets}
+            </span>
+            <div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+                {activeTierIdx >= 0 ? t[STAGE_LABEL_KEYS[BONUS_TIERS[activeTierIdx].label]] : t.bonusPickStageGroupMD3}
+              </div>
+              <span style={{ background: 'var(--gold)', color: '#000', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>
+                {t.ticketNowBadge}
+              </span>
+            </div>
+          </div>
+
+          {/* Future tiers */}
+          {BONUS_TIERS.filter((_, i) => i > activeTierIdx).map(tier => (
+            <div key={tier.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--text-muted)', letterSpacing: 1, minWidth: 36, textAlign: 'right', lineHeight: 1 }}>
+                +{tier.winnerTickets}
+              </span>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)' }}>
+                {t.ticketAfterDateStageN
+                  .replace('{date}', fmtTierDate(tier.from))
+                  .replace('{stage}', t[STAGE_LABEL_KEYS[tier.label]])
+                  .replace('{n}', String(tier.winnerTickets))}
+              </div>
+            </div>
+          ))}
+        </div>
+
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
           {t.onceSubmitted}
         </p>
