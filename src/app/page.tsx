@@ -967,7 +967,7 @@ function HomeContent() {
                             </Link>
                           </div>
                           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                            {m.stage} · {fmtKickoff(m.kickoff_at)}
+                            {m.stage} · {fmtKickoff(m.kickoff_at)}{m.venue ? ` · ${m.venue}` : ''}
                           </div>
                           {total > 0 && (
                             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

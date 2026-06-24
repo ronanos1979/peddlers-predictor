@@ -124,7 +124,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
           <Flag emoji={match.away_flag} size={18} style={{ marginRight: 5 }} />{match.away_team}
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
-          {match.stage} · The Peddler&apos;s Daughter, {pubCity}
+          {match.stage}{match.venue ? ` · ${match.venue}` : ''} · The Peddler&apos;s Daughter, {pubCity}
         </div>
         <button
           className="btn btn-primary"
