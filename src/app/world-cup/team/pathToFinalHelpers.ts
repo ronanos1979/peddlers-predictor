@@ -50,26 +50,33 @@ export function getMatchNumber(sortedMatches: MatchRecord[], matchId: string): n
 
 // Find R32 entry matches for a given group + finish position.
 // Returns {match, isHome} — isHome = true means the team occupies the home slot.
+// schedName: actual team name — used as fallback when the placeholder was already replaced in DB
+// by updateKnockoutNames() after the group completed.
 export function getR32EntryMatches(
   sortedMatches: MatchRecord[],
   group: string,
   position: PathPosition,
+  schedName?: string,
 ): Array<{ match: MatchRecord; isHome: boolean }> {
   const g = group.toUpperCase()
   const r32 = sortedMatches.filter(m => m.stage === 'Round of 32')
 
   if (position === '1st') {
     const ph = `Group ${g} Winner`
-    return r32
-      .filter(m => m.home_team === ph || m.away_team === ph)
-      .map(m => ({ match: m, isHome: m.home_team === ph }))
+    const byPlaceholder = r32.filter(m => m.home_team === ph || m.away_team === ph)
+    if (byPlaceholder.length > 0) return byPlaceholder.map(m => ({ match: m, isHome: m.home_team === ph }))
+    // Placeholder was replaced with real team name after group completed
+    if (schedName) return r32.filter(m => m.home_team === schedName || m.away_team === schedName).map(m => ({ match: m, isHome: m.home_team === schedName }))
+    return []
   }
 
   if (position === '2nd') {
     const ph = `Group ${g} Runner-up`
-    return r32
-      .filter(m => m.home_team === ph || m.away_team === ph)
-      .map(m => ({ match: m, isHome: m.home_team === ph }))
+    const byPlaceholder = r32.filter(m => m.home_team === ph || m.away_team === ph)
+    if (byPlaceholder.length > 0) return byPlaceholder.map(m => ({ match: m, isHome: m.home_team === ph }))
+    // Placeholder was replaced with real team name after group completed
+    if (schedName) return r32.filter(m => m.home_team === schedName || m.away_team === schedName).map(m => ({ match: m, isHome: m.home_team === schedName }))
+    return []
   }
 
   // best_3rd — find all R32 matches whose "3rd Place (…)" slot includes this group letter
@@ -136,8 +143,9 @@ export function buildPathChains(
   sortedMatches: MatchRecord[],
   group: string,
   position: PathPosition,
+  schedName?: string,
 ): PathChain[] {
-  const entries = getR32EntryMatches(sortedMatches, group, position)
+  const entries = getR32EntryMatches(sortedMatches, group, position, schedName)
   return entries.map(({ match, isHome }) => {
     const rawSteps = tracePathToFinal(sortedMatches, match, isHome)
     return { entryIsHome: isHome, steps: computePathViability(rawSteps) }

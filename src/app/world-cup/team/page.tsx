@@ -576,9 +576,17 @@ function TeamContent() {
   const posSlot = qualified
     ? (finishPosition === 1 ? `Group ${currentGroup} Winner` : `Group ${currentGroup} Runner-up`)
     : null
-  const nextKnockoutMatch = posSlot
+  // Placeholder may have been replaced in DB by updateKnockoutNames() — fall back to actual team name
+  const nextKnockoutMatchByPlaceholder = posSlot
     ? (allSortedMatches.find(m => m.home_team === posSlot || m.away_team === posSlot) ?? null)
     : null
+  const nextKnockoutMatchByName = (!nextKnockoutMatchByPlaceholder && qualified && schedName)
+    ? (allSortedMatches.find(m => m.stage === 'Round of 32' && (m.home_team === schedName || m.away_team === schedName)) ?? null)
+    : null
+  const nextKnockoutMatch = nextKnockoutMatchByPlaceholder ?? nextKnockoutMatchByName
+  const nextKnockoutTeamIsHome = nextKnockoutMatch
+    ? (nextKnockoutMatchByPlaceholder ? nextKnockoutMatch.home_team === posSlot : nextKnockoutMatch.home_team === schedName)
+    : false
 
   // For 3rd-placed teams: find all R32 matches that could receive this team based on FIFA's
   // fixed allocation table. Each R32 slot stores "3rd Place (A/B/C/D/F)" in the DB — we check
@@ -750,7 +758,7 @@ function TeamContent() {
                   </div>
                 )}
                 {qualified && nextKnockoutMatch && (() => {
-                  const oSlot = nextKnockoutMatch.home_team === posSlot ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
+                  const oSlot = nextKnockoutTeamIsHome ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
                   const letters = parseGroupLetters(oSlot)
                   return (
                     <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
@@ -949,7 +957,7 @@ function TeamContent() {
                 </div>
               )}
               {qualified && nextKnockoutMatch && (() => {
-                const oSlot = nextKnockoutMatch.home_team === posSlot ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
+                const oSlot = nextKnockoutTeamIsHome ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
                 const letters = parseGroupLetters(oSlot)
                 return (
                   <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
@@ -1081,7 +1089,7 @@ function TeamContent() {
             const group = localScheduleTeamName
               ? getTeamGroup(allSortedMatches, localScheduleTeamName)
               : null
-            const chains = group ? buildPathChains(allSortedMatches, group, pathPosition) : []
+            const chains = group ? buildPathChains(allSortedMatches, group, pathPosition, localScheduleTeamName || teamName) : []
             const statusColor = (s: string) =>
               s === 'confirmed' ? 'var(--green)' :
               s === 'eliminated' ? 'var(--red)' :
@@ -1213,85 +1221,98 @@ function TeamContent() {
                     <p className="muted" style={{ margin: 0 }}>{t.pathNoPathFound}</p>
                   </div>
                 ) : (
-                  chains[0].steps.map((step, i) => {
-                    const isLast = i === chains[0].steps.length - 1
-                    const isFinal = step.match.stage === 'Final'
-                    return (
-                      <div key={step.match.id} style={{ position: 'relative', paddingLeft: 32, marginBottom: isLast ? 0 : 0 }}>
-                        {/* Vertical connector line */}
-                        {!isLast && (
-                          <div style={{
-                            position: 'absolute', left: 10, top: 32, bottom: -8,
-                            width: 2, background: step.status === 'confirmed' ? 'rgba(0,200,122,0.35)'
-                              : step.status === 'eliminated' || step.status === 'blocked' ? 'rgba(255,59,59,0.2)'
-                              : 'var(--border)'
-                          }} />
-                        )}
-                        {/* Circle node */}
-                        <div style={{
-                          position: 'absolute', left: 4, top: 18,
-                          width: 14, height: 14, borderRadius: '50%',
-                          background: statusColor(step.status),
-                          border: `2px solid ${step.status === 'upcoming' ? 'var(--border)' : statusColor(step.status)}`,
-                          zIndex: 1
-                        }} />
-
-                        <div style={{
-                          padding: '12px 14px',
-                          background: statusBg(step.status),
-                          border: `1px solid ${statusColor(step.status)}`,
-                          borderRadius: 10, marginBottom: 10,
-                          opacity: step.status === 'blocked' ? 0.5 : 1,
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-                            <div style={{
-                              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
-                              letterSpacing: 1.5, textTransform: 'uppercase',
-                              color: isFinal ? 'var(--gold)' : 'var(--text-muted)'
-                            }}>
-                              M{step.matchNum} · {step.match.stage}
-                            </div>
-                            <div style={{
-                              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
-                              letterSpacing: 0.5, textTransform: 'uppercase',
-                              color: statusColor(step.status), flexShrink: 0
-                            }}>
-                              {statusLabel(step.status)}
-                            </div>
+                  chains.map((chain, chainIdx) => (
+                    <div key={chainIdx}>
+                      {chains.length > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: chainIdx > 0 ? 20 : 0 }}>
+                          {chainIdx > 0 && <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />}
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)', flexShrink: 0 }}>
+                            {t.pathOptionOf.replace('{n}', String(chainIdx + 1)).replace('{total}', String(chains.length))}
                           </div>
-
-                          <div style={{
-                            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16,
-                            color: step.status === 'blocked' ? 'var(--text-muted)' : 'var(--text)',
-                            marginBottom: parseGroupLetters(step.opponentSlot).length > 0 ? 2 : 5,
-                            textDecoration: step.status === 'blocked' ? 'line-through' : 'none'
-                          }}>
-                            vs {isPlaceholderTeam(step.opponentSlot) ? formatPlaceholder(step.opponentSlot) : step.opponentSlot}
-                          </div>
-                          {step.status !== 'blocked' && parseGroupLetters(step.opponentSlot).map(l => (
-                            <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />
-                          ))}
-
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {fmtDate(step.match.kickoff_at)}
-                            {step.match.venue && (
-                              <span style={{ opacity: 0.7 }}> · {step.match.venue}</span>
-                            )}
-                          </div>
-
-                          {step.match.result && (
-                            <div style={{
-                              marginTop: 6,
-                              fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 2,
-                              color: step.status === 'confirmed' ? 'var(--green)' : 'var(--red)'
-                            }}>
-                              {step.match.home_score} – {step.match.away_score}
-                            </div>
-                          )}
+                          {chainIdx > 0 && <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />}
                         </div>
-                      </div>
-                    )
-                  })
+                      )}
+                      {chain.steps.map((step, i) => {
+                        const isLast = i === chain.steps.length - 1
+                        const isFinal = step.match.stage === 'Final'
+                        return (
+                          <div key={step.match.id} style={{ position: 'relative', paddingLeft: 32, marginBottom: isLast ? 0 : 0 }}>
+                            {/* Vertical connector line */}
+                            {!isLast && (
+                              <div style={{
+                                position: 'absolute', left: 10, top: 32, bottom: -8,
+                                width: 2, background: step.status === 'confirmed' ? 'rgba(0,200,122,0.35)'
+                                  : step.status === 'eliminated' || step.status === 'blocked' ? 'rgba(255,59,59,0.2)'
+                                  : 'var(--border)'
+                              }} />
+                            )}
+                            {/* Circle node */}
+                            <div style={{
+                              position: 'absolute', left: 4, top: 18,
+                              width: 14, height: 14, borderRadius: '50%',
+                              background: statusColor(step.status),
+                              border: `2px solid ${step.status === 'upcoming' ? 'var(--border)' : statusColor(step.status)}`,
+                              zIndex: 1
+                            }} />
+
+                            <div style={{
+                              padding: '12px 14px',
+                              background: statusBg(step.status),
+                              border: `1px solid ${statusColor(step.status)}`,
+                              borderRadius: 10, marginBottom: 10,
+                              opacity: step.status === 'blocked' ? 0.5 : 1,
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                                <div style={{
+                                  fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+                                  letterSpacing: 1.5, textTransform: 'uppercase',
+                                  color: isFinal ? 'var(--gold)' : 'var(--text-muted)'
+                                }}>
+                                  M{step.matchNum} · {step.match.stage}
+                                </div>
+                                <div style={{
+                                  fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+                                  letterSpacing: 0.5, textTransform: 'uppercase',
+                                  color: statusColor(step.status), flexShrink: 0
+                                }}>
+                                  {statusLabel(step.status)}
+                                </div>
+                              </div>
+
+                              <div style={{
+                                fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16,
+                                color: step.status === 'blocked' ? 'var(--text-muted)' : 'var(--text)',
+                                marginBottom: parseGroupLetters(step.opponentSlot).length > 0 ? 2 : 5,
+                                textDecoration: step.status === 'blocked' ? 'line-through' : 'none'
+                              }}>
+                                vs {isPlaceholderTeam(step.opponentSlot) ? formatPlaceholder(step.opponentSlot) : step.opponentSlot}
+                              </div>
+                              {step.status !== 'blocked' && parseGroupLetters(step.opponentSlot).map(l => (
+                                <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />
+                              ))}
+
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {fmtDate(step.match.kickoff_at)}
+                                {step.match.venue && (
+                                  <span style={{ opacity: 0.7 }}> · {step.match.venue}</span>
+                                )}
+                              </div>
+
+                              {step.match.result && (
+                                <div style={{
+                                  marginTop: 6,
+                                  fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 2,
+                                  color: step.status === 'confirmed' ? 'var(--green)' : 'var(--red)'
+                                }}>
+                                  {step.match.home_score} – {step.match.away_score}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))
                 )}
 
                 {pathPosition === 'best_3rd' && group && chains.length > 0 && (
