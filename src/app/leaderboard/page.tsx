@@ -203,14 +203,14 @@ function LeaderboardContent() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
-                <div style={{ fontSize: 11, marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: '0 6px', lineHeight: 1.6 }}>
-                  <span style={{ color: 'var(--green)', fontWeight: 600 }}>✓ {e.correct} {t.correct}</span>
+                <div style={{ fontSize: 11, marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: '0 6px', lineHeight: 1.8 }}>
+                  <span style={{ color: 'var(--green)', fontWeight: 600 }}>✓ {e.correct} {t.lbResultsCorrect}</span>
                   <span style={{ color: 'var(--text-dim)' }}>·</span>
                   <span style={{ color: e.score_exact > 0 ? 'var(--gold)' : 'var(--text-dim)' }}>🎯 {e.score_exact} {t.lbExactScores}</span>
                   <span style={{ color: 'var(--text-dim)' }}>·</span>
-                  <span style={{ color: e.wrong > 0 ? '#e05' : 'var(--text-dim)' }}>✗ {e.wrong} {t.wrongLower}</span>
+                  <span style={{ color: e.wrong > 0 ? '#e05' : 'var(--text-dim)' }}>✗ {e.wrong} {t.lbResultsWrong}</span>
                   <span style={{ color: 'var(--text-dim)' }}>·</span>
-                  <span style={{ color: 'var(--text-dim)' }}>{e.total} {t.lbPredicted}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>{e.total} {t.lbMatchesPredicted}</span>
                 </div>
                 {(e.pending > 0 || e.hasWinnerPending || e.hasScorerPending) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 8px', fontSize: 10, marginTop: 2, color: 'var(--text-dim)' }}>
