@@ -4,7 +4,7 @@ import { checkRateLimit, getIp } from '@/lib/rateLimit'
 import { FdRateLimitError } from '@/lib/footballData'
 import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 import { toEspnDate, toEspnTeamName } from '@/lib/espnEvents'
-import { syncResults, resyncMatchIds } from '@/lib/syncResults'
+import { syncResults, resyncMatchIds, updateKnockoutNames } from '@/lib/syncResults'
 
 export async function POST(req: NextRequest) {
   try {
@@ -196,6 +196,18 @@ export async function POST(req: NextRequest) {
       try {
         const result = await syncResults()
         return NextResponse.json({ success: true, ...result })
+      } catch (e) {
+        if (e instanceof FdRateLimitError) {
+          return NextResponse.json({ error: 'Football data rate limited — try again in a minute' }, { status: 429 })
+        }
+        throw e
+      }
+    }
+
+    if (action === 'update_knockout_names') {
+      try {
+        const names_updated = await updateKnockoutNames()
+        return NextResponse.json({ success: true, names_updated })
       } catch (e) {
         if (e instanceof FdRateLimitError) {
           return NextResponse.json({ error: 'Football data rate limited — try again in a minute' }, { status: 429 })

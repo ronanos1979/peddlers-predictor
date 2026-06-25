@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getFdFixtures, FdRateLimitError } from '@/lib/footballData'
+import { getFdFixtures, getFdStandings, FdRateLimitError } from '@/lib/footballData'
 import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 
 export { FdRateLimitError }
@@ -16,12 +16,84 @@ export type SyncResultsOutput = {
   updated: number
   entries_scored: number
   events_loaded: number
+  names_updated: number
   message?: string
   debug: {
     fdFinishedCount: number
     dbUnresolvedCount: number
     unmatched: SyncDebugUnmatched[]
   }
+}
+
+// FD team name → our schedule name
+const FD_TO_SCHED: Record<string, string> = {
+  'Czech Republic': 'Czechia',
+  'Korea Republic': 'South Korea',
+  'United States': 'USA',
+  'Turkey': 'Türkiye',
+  "Côte d'Ivoire": 'Ivory Coast',
+  'Cape Verde Islands': 'Cape Verde',
+  'Bosnia-Herzegovina': 'Bosnia & Herzegovina',
+  'Cabo Verde': 'Cape Verde',
+}
+
+type StandingRow = { team: { name: string }; all: { played: number } }
+
+// Resolve "Group X Winner" / "Group X Runner-up" placeholders in the matches table
+// to real team names once the group is complete. Also sets home_flag/away_flag from
+// existing group stage match records. Returns the number of match rows updated.
+export async function updateKnockoutNames(): Promise<number> {
+  const standingsData = await getFdStandings() as { response?: Array<{ league?: { standings?: StandingRow[][] } }> }
+  const groups: StandingRow[][] = standingsData.response?.[0]?.league?.standings ?? []
+  if (groups.length === 0) return 0
+
+  const resolution = new Map<string, string>()
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i]
+    if (group.length >= 4 && group.every(r => r.all.played >= 3)) {
+      const letter = String.fromCharCode(65 + i)
+      resolution.set(`Group ${letter} Winner`, FD_TO_SCHED[group[0].team.name] ?? group[0].team.name)
+      resolution.set(`Group ${letter} Runner-up`, FD_TO_SCHED[group[1].team.name] ?? group[1].team.name)
+    }
+  }
+  if (resolution.size === 0) return 0
+
+  // Build team name → flag emoji map from group stage matches
+  const { data: flagRows } = await supabaseAdmin
+    .from('matches').select('home_team, home_flag, away_team, away_flag')
+    .not('home_flag', 'is', null).neq('home_flag', '')
+  const flagMap = new Map<string, string>()
+  for (const m of flagRows || []) {
+    if (m.home_team && m.home_flag) flagMap.set(m.home_team, m.home_flag)
+    if (m.away_team && m.away_flag) flagMap.set(m.away_team, m.away_flag)
+  }
+
+  // Update all knockout matches that still have placeholder names we can now resolve
+  const { data: knockoutMatches } = await supabaseAdmin
+    .from('matches').select('id, home_team, away_team')
+    .not('stage', 'ilike', 'Group %').neq('stage', 'Demo Match')
+
+  let updated = 0
+  for (const m of knockoutMatches || []) {
+    const homeResolved = resolution.get(m.home_team)
+    const awayResolved = resolution.get(m.away_team)
+    if (!homeResolved && !awayResolved) continue
+
+    const updates: Record<string, string> = {}
+    if (homeResolved) {
+      updates.home_team = homeResolved
+      const flag = flagMap.get(homeResolved)
+      if (flag) updates.home_flag = flag
+    }
+    if (awayResolved) {
+      updates.away_team = awayResolved
+      const flag = flagMap.get(awayResolved)
+      if (flag) updates.away_flag = flag
+    }
+    await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
+    updated++
+  }
+  return updated
 }
 
 type FdFixture = {
@@ -140,7 +212,7 @@ export async function syncResults(): Promise<SyncResultsOutput> {
 
   if (fdFinished.length === 0) {
     return {
-      updated: 0, entries_scored: 0, events_loaded: 0,
+      updated: 0, entries_scored: 0, events_loaded: 0, names_updated: 0,
       message: 'No finished matches found from API',
       debug: { fdFinishedCount: 0, dbUnresolvedCount: 0, unmatched: [] },
     }
@@ -156,8 +228,9 @@ export async function syncResults(): Promise<SyncResultsOutput> {
     .neq('stage', 'Demo Match')
 
   if (!unresolved || unresolved.length === 0) {
+    const names_updated = await updateKnockoutNames().catch(() => 0)
     return {
-      updated: 0, entries_scored: 0, events_loaded: 0,
+      updated: 0, entries_scored: 0, events_loaded: 0, names_updated,
       message: 'No unresolved finished matches',
       debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: 0, unmatched: [] },
     }
@@ -202,8 +275,10 @@ export async function syncResults(): Promise<SyncResultsOutput> {
     events_loaded = espnResults.filter(r => r.status === 'fulfilled' && r.value !== null).length
   }
 
+  const names_updated = await updateKnockoutNames().catch(() => 0)
+
   return {
-    updated, entries_scored, events_loaded,
+    updated, entries_scored, events_loaded, names_updated,
     debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: unresolved.length, unmatched },
   }
 }
@@ -222,7 +297,7 @@ export async function resyncMatchIds(matchIds: string[]): Promise<SyncResultsOut
 
   if (!matches || matches.length === 0) {
     return {
-      updated: 0, entries_scored: 0, events_loaded: 0,
+      updated: 0, entries_scored: 0, events_loaded: 0, names_updated: 0,
       message: 'No matches found for given IDs',
       debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: 0, unmatched: [] },
     }
@@ -267,7 +342,7 @@ export async function resyncMatchIds(matchIds: string[]): Promise<SyncResultsOut
   }
 
   return {
-    updated, entries_scored, events_loaded: resolvedForEspn.length,
+    updated, entries_scored, events_loaded: resolvedForEspn.length, names_updated: 0,
     debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: matches.length, unmatched },
   }
 }
