@@ -58,7 +58,9 @@ export default function GroupsPage() {
 
       {/* 2-column grid of group cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {groups.map((group, gi) => (
+        {groups.map((group, gi) => {
+          const isDone = group.length >= 4 && group.every(r => r.all.played >= 3)
+          return (
           <div key={gi} style={{
             background: 'var(--surface)',
             border: '1px solid var(--border)',
@@ -70,7 +72,7 @@ export default function GroupsPage() {
               padding: '8px 12px',
               background: 'var(--surface2)',
               borderBottom: '1px solid var(--border)',
-              display: 'flex', alignItems: 'baseline', gap: 6,
+              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
             }}>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 1, color: 'var(--green)' }}>
                 {groupLabels[gi]}
@@ -78,6 +80,11 @@ export default function GroupsPage() {
               <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                 {t.groupLabel}
               </span>
+              {group.some(r => r.all.played > 0) && (
+                <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: isDone ? 'var(--green)' : 'var(--amber)', padding: '1px 5px', borderRadius: 3, border: `1px solid ${isDone ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: isDone ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+                  {isDone ? t.groupFinalStandings : t.groupInProgress}
+                </span>
+              )}
             </div>
 
             {/* Teams */}
@@ -125,7 +132,8 @@ export default function GroupsPage() {
               </Link>
             ))}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {groups.length > 0 && (

@@ -60,6 +60,7 @@ function GroupTable({
 }: { letter: string; groupMap: GroupMap; t: Record<string, string> }) {
   const [open, setOpen] = useState(false)
   const rows = groupMap[letter]
+  const done = rows ? groupDone(rows) : false
   return (
     <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 4 }}>
       <button
@@ -71,8 +72,15 @@ function GroupTable({
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}
       >
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: 1, color: open ? 'var(--green)' : 'var(--text-muted)' }}>
-          Group {letter}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: 1, color: open ? 'var(--green)' : 'var(--text-muted)' }}>
+            Group {letter}
+          </span>
+          {rows && rows.length > 0 && (
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: done ? 'var(--green)' : 'var(--amber)', padding: '1px 5px', borderRadius: 3, border: `1px solid ${done ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: done ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+              {done ? t.groupFinalStandings : t.groupInProgress}
+            </span>
+          )}
         </span>
         <span style={{ fontSize: 9, color: 'var(--green)' }}>{open ? '▲' : '▼'}</span>
       </button>

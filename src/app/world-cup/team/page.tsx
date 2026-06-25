@@ -70,21 +70,29 @@ type ResolvedOpponent = { label: string; confirmed: boolean; schedName: string |
 
 function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroupStandings: StandingRow[][] }) {
   const [open, setOpen] = useState(false)
+  const { t } = useLocale()
   const rows = allGroupStandings[letter.charCodeAt(0) - 65] ?? []
+  const done = rows.length >= 4 && rows.every(r => r.all.played >= 3)
   // Always show the button even while data is loading — content shows loading state when empty
   return (
     <div style={{ marginTop: 5 }}>
       <button
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
           background: 'var(--surface2)', border: '1px solid var(--border)',
           borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
           fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
           color: 'var(--text-muted)', letterSpacing: 0.5, textTransform: 'uppercase',
         }}
       >
-        See Group {letter} {open ? '▲' : '▼'}
+        See Group {letter}
+        {rows.length > 0 && (
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: done ? 'var(--green)' : 'var(--amber)', padding: '1px 4px', borderRadius: 3, border: `1px solid ${done ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: done ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+            {done ? t.groupFinalStandings : t.groupInProgress}
+          </span>
+        )}
+        {open ? '▲' : '▼'}
       </button>
       {open && (
         <div style={{ marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
@@ -537,6 +545,7 @@ function TeamContent() {
   const groupGamesPlayed = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage) && m.result !== null).length
   const groupGamesTotal = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage)).length
   const allGroupGamesDone = groupGamesTotal === 3 && groupGamesPlayed === 3
+  const standingsGroupDone = groupStandings.length >= 4 && groupStandings.every(r => r.all.played >= 3)
   const myStandingRow = currentGroup && groupStandings.length > 0
     ? groupStandings.find(r => normForStandings(r.team.name) === normForStandings(schedName))
     : null
@@ -680,8 +689,13 @@ function TeamContent() {
                 </div>
                 {standingsOpen && groupStandings.length > 0 && (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
-                    <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>
-                      Group {currentGroup}
+                    <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>Group {currentGroup}</span>
+                      {groupStandings.length >= 4 && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: standingsGroupDone ? 'var(--green)' : 'var(--amber)', padding: '2px 6px', borderRadius: 4, border: `1px solid ${standingsGroupDone ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: standingsGroupDone ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+                          {standingsGroupDone ? t.groupFinalStandings : t.groupInProgress}
+                        </span>
+                      )}
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

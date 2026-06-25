@@ -85,10 +85,18 @@ export default function StandingsPage() {
         </div>
       )}
 
-      {filtered.map((group, gi) => (
+      {filtered.map((group, gi) => {
+        const groupRows = group.standings[0] ?? []
+        const isDone = groupRows.length >= 4 && groupRows.every(s => s.all.played >= 3)
+        return (
         <div key={gi} className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '10px 14px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1 }}>
-            {groupLabels[groups.indexOf(group)]}
+          <div style={{ padding: '10px 14px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1 }}>{groupLabels[groups.indexOf(group)]}</span>
+            {groupRows.length > 0 && (
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: isDone ? 'var(--green)' : 'var(--amber)', padding: '2px 7px', borderRadius: 4, border: `1px solid ${isDone ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: isDone ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+                {isDone ? t.groupFinalStandings : t.groupInProgress}
+              </span>
+            )}
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -124,7 +132,8 @@ export default function StandingsPage() {
             <span style={{ fontSize: 11, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>■ {t.qualified}</span>
           </div>
         </div>
-      ))}
+        )
+      })}
 
       <Link href="/" className="btn btn-secondary" style={{ textDecoration: 'none', textAlign: 'center', marginTop: 8 }}>← {t.home}</Link>
     </div>

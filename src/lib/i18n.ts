@@ -268,6 +268,8 @@ export const translations = {
     best3rdInProgress: '{n} group(s) still in progress — standings may change',
     groupMatchProgress: '{played}/{total} played',
     groupAllComplete: 'All {total} played',
+    groupFinalStandings: 'Final Standings',
+    groupInProgress: 'In Progress',
     eliminatedGroupStage: 'This team finished 4th in their group and has been eliminated.',
 
     // Breadcrumb labels
@@ -912,6 +914,8 @@ export const translations = {
     best3rdInProgress: '{n} grupo(s) aún en curso — las posiciones pueden cambiar',
     groupMatchProgress: '{played}/{total} jugados',
     groupAllComplete: 'Los {total} jugados',
+    groupFinalStandings: 'Clasificación Final',
+    groupInProgress: 'En Curso',
     eliminatedGroupStage: 'Este equipo terminó 4.° en su grupo y ha sido eliminado.',
 
     // Breadcrumb labels
