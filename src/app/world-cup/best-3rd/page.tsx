@@ -26,6 +26,8 @@ const FD_TO_SCHED: Record<string, string> = {
   'United States': 'USA',
   'Turkey': 'Türkiye',
   'Cape Verde Islands': 'Cape Verde',
+  'Bosnia-Herzegovina': 'Bosnia & Herzegovina',
+  'Cabo Verde': 'Cape Verde',
 }
 function schedName(n: string) { return FD_TO_SCHED[n] ?? n }
 

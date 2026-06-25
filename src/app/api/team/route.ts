@@ -22,6 +22,21 @@ async function fetchLocalSchedule(teamName: string) {
   return data || []
 }
 
+// URL param → canonical schedule name (handles FD/ESPN hyphen variants and aliases)
+const NAME_ALIASES: Record<string, string> = {
+  'bosnia-herzegovina':  'Bosnia & Herzegovina',
+  'united states':       'USA',
+  'korea republic':      'South Korea',
+  "côte d'ivoire":       'Ivory Coast',
+  'turkey':              'Türkiye',
+  'czech republic':      'Czechia',
+  'cape verde islands':  'Cape Verde',
+  'cabo verde':          'Cape Verde',
+}
+function normalizeNameParam(name: string): string {
+  return NAME_ALIASES[name.toLowerCase()] ?? name
+}
+
 export async function GET(req: NextRequest) {
   const idParam   = req.nextUrl.searchParams.get('id')
   const nameParam = req.nextUrl.searchParams.get('name')
@@ -31,7 +46,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    let teamName  = nameParam || ''
+    let teamName  = nameParam ? normalizeNameParam(nameParam) : ''
     let cacheData: Record<string, unknown> | null = null
 
     if (idParam) {
