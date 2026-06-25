@@ -217,6 +217,9 @@ export const translations = {
     perCorrectPick: 'for exact score · 1 per correct result — draw July 19, more tickets = more chances',
     lbExactScores: 'exact scores',
     lbPredicted: 'predicted',
+    lbMatchesPending: 'matches pending',
+    lbChampionPick: '+15 champion pick',
+    lbGoldenBootPick: '+10 golden boot pick',
 
     // Leaderboard tabs
     predictionsTab: 'Predictions',
@@ -868,6 +871,9 @@ export const translations = {
     perCorrectPick: 'por marcador exacto · 1 por resultado correcto — sorteo 19 de julio, más boletos = más chances',
     lbExactScores: 'marcadores exactos',
     lbPredicted: 'predichos',
+    lbMatchesPending: 'partidos pendientes',
+    lbChampionPick: '+15 pick campeón',
+    lbGoldenBootPick: '+10 bota de oro',
 
     // Leaderboard tabs
     predictionsTab: 'Predicciones',

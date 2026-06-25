@@ -9,7 +9,8 @@ import Link from 'next/link'
 
 type LeaderEntry = {
   name: string; pub_id: string; total_pts: number
-  correct: number; score_exact: number; wrong: number; total: number
+  correct: number; score_exact: number; wrong: number; pending: number; total: number
+  hasWinnerPending: boolean; hasScorerPending: boolean
   last_pick: string; last_correct: boolean | null
 }
 
@@ -32,34 +33,39 @@ function LeaderboardContent() {
   const [topScorer, setTopScorer] = useState<TopPick | null>(null)
 
   async function load() {
-    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }, { data: scorerBonuses }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
+    const [{ data: matchData }, { data: rawEntries }, { data: allWinnerPicks }, { data: allScorerPicks }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
       supabase.from('matches').select('*').eq('is_active', true).single(),
       supabase.from('entries').select('*').order('created_at', { ascending: false }),
-      supabase.from('winner_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
-      supabase.from('scorer_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
+      supabase.from('winner_picks').select('phone, raffle_entries, is_correct'),
+      supabase.from('scorer_picks').select('phone, raffle_entries, is_correct'),
       supabase.from('winner_picks').select('team_name, team_flag'),
       supabase.from('scorer_picks').select('player_name, player_team'),
     ])
     setMatch(matchData)
     if (rawEntries) {
-      const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; score_exact: number; wrong: number; total: number; last_pick: string; last_correct: boolean | null }> = {}
+      const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; score_exact: number; wrong: number; pending: number; total: number; hasWinnerPending: boolean; hasScorerPending: boolean; last_pick: string; last_correct: boolean | null }> = {}
       rawEntries.forEach((e: Entry) => {
-        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, score_exact: 0, wrong: 0, total: 0, last_pick: e.pick, last_correct: e.is_correct }
+        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, score_exact: 0, wrong: 0, pending: 0, total: 0, hasWinnerPending: false, hasScorerPending: false, last_pick: e.pick, last_correct: e.is_correct }
         byPhone[e.phone].pts += e.raffle_entries
         byPhone[e.phone].total += 1
         if (e.is_correct === true) byPhone[e.phone].correct += 1
         if (e.is_correct === false) byPhone[e.phone].wrong += 1
+        if (e.is_correct === null) byPhone[e.phone].pending += 1
         // raffle_entries is 3 (result+score) or 10 (result+score+hat-trick) when exact score is correct
         if (e.is_correct === true && (e.raffle_entries === 3 || e.raffle_entries === 10)) byPhone[e.phone].score_exact += 1
       })
-      winnerBonuses?.forEach(wp => {
-        if (byPhone[wp.phone]) byPhone[wp.phone].pts += wp.raffle_entries
+      allWinnerPicks?.forEach(wp => {
+        if (!byPhone[wp.phone]) return
+        if (wp.raffle_entries > 0) byPhone[wp.phone].pts += wp.raffle_entries
+        if (wp.is_correct === null) byPhone[wp.phone].hasWinnerPending = true
       })
-      scorerBonuses?.forEach(sp => {
-        if (byPhone[sp.phone]) byPhone[sp.phone].pts += sp.raffle_entries
+      allScorerPicks?.forEach(sp => {
+        if (!byPhone[sp.phone]) return
+        if (sp.raffle_entries > 0) byPhone[sp.phone].pts += sp.raffle_entries
+        if (sp.is_correct === null) byPhone[sp.phone].hasScorerPending = true
       })
       const sorted = Object.values(byPhone)
-        .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, score_exact: e.score_exact, wrong: e.wrong, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))
+        .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, score_exact: e.score_exact, wrong: e.wrong, pending: e.pending, total: e.total, hasWinnerPending: e.hasWinnerPending, hasScorerPending: e.hasScorerPending, last_pick: e.last_pick, last_correct: e.last_correct }))
         .sort((a, b) => b.total_pts - a.total_pts || b.correct - a.correct)
       setEntries(sorted)
       setLastUpdated(new Date().toLocaleTimeString())
@@ -206,6 +212,13 @@ function LeaderboardContent() {
                   <span style={{ color: 'var(--text-dim)' }}>·</span>
                   <span style={{ color: 'var(--text-dim)' }}>{e.total} {t.lbPredicted}</span>
                 </div>
+                {(e.pending > 0 || e.hasWinnerPending || e.hasScorerPending) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 8px', fontSize: 10, marginTop: 2, color: 'var(--text-dim)' }}>
+                    {e.pending > 0 && <span>⏳ {e.pending} {t.lbMatchesPending}</span>}
+                    {e.hasWinnerPending && <span style={{ color: 'rgba(245,197,24,0.7)' }}>🏆 {t.lbChampionPick}</span>}
+                    {e.hasScorerPending && <span style={{ color: 'rgba(245,197,24,0.7)' }}>⚽ {t.lbGoldenBootPick}</span>}
+                  </div>
+                )}
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
                   {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
                 </div>
