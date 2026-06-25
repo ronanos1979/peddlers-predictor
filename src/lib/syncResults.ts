@@ -30,6 +30,20 @@ type FdFixture = {
   goals: { home: number | null; away: number | null }
 }
 
+// FD uses different names for some teams than our schedule
+const FD_NAME_ALIASES: Record<string, string> = {
+  'Czech Republic': 'Czechia',
+  'Korea Republic': 'South Korea',
+  'United States': 'USA',
+  'Turkey': 'Türkiye',
+  "Côte d'Ivoire": 'Ivory Coast',
+  'Cape Verde Islands': 'Cape Verde',
+}
+function normFdName(name: string): string {
+  const resolved = FD_NAME_ALIASES[name] ?? name
+  return resolved.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+}
+
 // Throws FdRateLimitError if rate-limited; callers should handle it.
 export async function syncResults(): Promise<SyncResultsOutput> {
   const data = await getFdFixtures({ status: 'FT' }) as { response?: FdFixture[] }
@@ -67,9 +81,12 @@ export async function syncResults(): Promise<SyncResultsOutput> {
 
   for (const match of unresolved) {
     const matchMs = new Date(match.kickoff_at).getTime()
-    const fdMatch = fdFinished.find(f => Math.abs(new Date(f.fixture.date).getTime() - matchMs) <= 5 * 60 * 1000)
+    const candidates = fdFinished.filter(f => Math.abs(new Date(f.fixture.date).getTime() - matchMs) <= 5 * 60 * 1000)
 
-    if (!fdMatch) {
+    let fdMatch: FdFixture | undefined
+    let homeAwayFlipped = false
+
+    if (candidates.length === 0) {
       let nearestDiff = Infinity
       let nearestFd: FdFixture | null = null
       for (const f of fdFinished) {
@@ -84,13 +101,34 @@ export async function syncResults(): Promise<SyncResultsOutput> {
         diffMin: nearestFd ? Math.round(nearestDiff / 60000) : null,
       })
       continue
+    } else if (candidates.length === 1) {
+      fdMatch = candidates[0]
+    } else {
+      // Multiple FD matches at the same kickoff (simultaneous group-stage games).
+      // Use team names to pick the right one.
+      const nh = normFdName(match.home_team)
+      const na = normFdName(match.away_team)
+      fdMatch = candidates.find(f => normFdName(f.teams.home.name) === nh && normFdName(f.teams.away.name) === na)
+      if (!fdMatch) {
+        const flipped = candidates.find(f => normFdName(f.teams.home.name) === na && normFdName(f.teams.away.name) === nh)
+        if (flipped) { fdMatch = flipped; homeAwayFlipped = true }
+      }
+      if (!fdMatch) fdMatch = candidates[0]
     }
 
-    const result: 'home' | 'draw' | 'away' =
-      fdMatch.teams.home.winner === true ? 'home' :
-      fdMatch.teams.away.winner === true ? 'away' : 'draw'
-    const homeScore = fdMatch.goals.home ?? null
-    const awayScore = fdMatch.goals.away ?? null
+    // Detect home/away flip for any match (FD may list teams in opposite order to our DB)
+    if (!homeAwayFlipped) {
+      const nh = normFdName(match.home_team)
+      const fdHome = normFdName(fdMatch.teams.home.name)
+      const fdAway = normFdName(fdMatch.teams.away.name)
+      if (fdHome !== nh && fdAway === nh) homeAwayFlipped = true
+    }
+
+    const result: 'home' | 'draw' | 'away' = homeAwayFlipped
+      ? (fdMatch.teams.home.winner === true ? 'away' : fdMatch.teams.away.winner === true ? 'home' : 'draw')
+      : (fdMatch.teams.home.winner === true ? 'home' : fdMatch.teams.away.winner === true ? 'away' : 'draw')
+    const homeScore = homeAwayFlipped ? (fdMatch.goals.away ?? null) : (fdMatch.goals.home ?? null)
+    const awayScore = homeAwayFlipped ? (fdMatch.goals.home ?? null) : (fdMatch.goals.away ?? null)
 
     await supabaseAdmin.from('matches').update({ result, home_score: homeScore, away_score: awayScore }).eq('id', match.id)
 
