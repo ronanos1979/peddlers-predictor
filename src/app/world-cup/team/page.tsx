@@ -1266,13 +1266,13 @@ function TeamContent() {
                   return (
                   <>
                   {chains.length > 1 && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 16 }}>
                       {chains.map((_, chainIdx) => (
                         <button
                           key={chainIdx}
                           onClick={() => setSelectedChainIdx(chainIdx)}
                           style={{
-                            flexShrink: 0, padding: '6px 14px', borderRadius: 20,
+                            padding: '6px 8px', borderRadius: 20,
                             border: `1px solid ${chainIdx === safeIdx ? 'var(--amber)' : 'var(--border)'}`,
                             background: chainIdx === safeIdx ? 'rgba(245,197,24,0.12)' : 'transparent',
                             color: chainIdx === safeIdx ? 'var(--amber)' : 'var(--text-muted)',
