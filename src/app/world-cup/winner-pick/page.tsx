@@ -81,9 +81,16 @@ function WinnerPickContent() {
     const name  = patron?.name  || guestName.trim()
     const phone = patron?.phone || guestPhone.trim()
     if (!name || !phone) { setError(t.pleaseEnterNamePhone); return }
-    const raw = phone.replace(/\D/g, '')
-    const cleanPhone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
-    if (cleanPhone.length !== 10) { setError('Enter a valid 10-digit US phone number.'); return }
+    const trimmedPhone = phone.trim()
+    let cleanPhone: string
+    if (trimmedPhone.startsWith('+')) {
+      cleanPhone = '+' + trimmedPhone.replace(/\D/g, '')
+      if (cleanPhone.length < 8) { setError('Enter a valid phone number.'); return }
+    } else {
+      const raw = trimmedPhone.replace(/\D/g, '')
+      cleanPhone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+      if (cleanPhone.length !== 10) { setError('Enter a valid US or international phone number.'); return }
+    }
 
     setSubmitting(true)
     setError('')

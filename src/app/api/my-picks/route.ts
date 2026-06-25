@@ -5,9 +5,16 @@ export async function GET(req: NextRequest) {
   const rawPhone = req.nextUrl.searchParams.get('phone')
   if (!rawPhone) return NextResponse.json({ error: 'Phone required' }, { status: 400 })
 
-  const digits = rawPhone.replace(/\D/g, '')
-  const phone = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
-  if (phone.length !== 10) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+  const trimmed = rawPhone.trim()
+  let phone: string
+  if (trimmed.startsWith('+')) {
+    phone = '+' + trimmed.replace(/\D/g, '')
+    if (phone.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+  } else {
+    const digits = trimmed.replace(/\D/g, '')
+    phone = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+    if (phone.length !== 10) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+  }
 
   const { data: entries, error } = await supabaseAdmin
     .from('entries')

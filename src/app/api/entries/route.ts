@@ -30,12 +30,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Please enter your full first and last name' }, { status: 400 })
     }
 
-    const normalizedPhone = String(phone).replace(/\D/g, '')
-    const digits = normalizedPhone.length === 11 && normalizedPhone.startsWith('1')
-      ? normalizedPhone.slice(1)
-      : normalizedPhone
-    if (digits.length !== 10) {
-      return NextResponse.json({ error: 'Enter a valid 10-digit US phone number' }, { status: 400 })
+    const rawPhone = String(phone).trim()
+    let digits: string
+    if (rawPhone.startsWith('+')) {
+      digits = '+' + rawPhone.replace(/\D/g, '')
+      if (digits.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+    } else {
+      const stripped = rawPhone.replace(/\D/g, '')
+      digits = stripped.length === 11 && stripped.startsWith('1') ? stripped.slice(1) : stripped
+      if (digits.length !== 10) return NextResponse.json({ error: 'Enter a valid US or international phone number' }, { status: 400 })
     }
 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {

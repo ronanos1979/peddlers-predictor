@@ -16,6 +16,9 @@ type Props = { pubId: string; match: Match; pub: Pub | null; isDemo?: boolean; o
 const GEO_REQUIRED = process.env.NEXT_PUBLIC_GEO_REQUIRED === 'true'
 
 function formatPhone(raw: string): string {
+  if (raw.trimStart().startsWith('+')) {
+    return raw.replace(/[^\d+\s\-()]/g, '').slice(0, 20)
+  }
   const digits = raw.replace(/\D/g, '').slice(0, 10)
   if (digits.length <= 3) return digits
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
@@ -23,12 +26,17 @@ function formatPhone(raw: string): string {
 }
 
 function normalizePhone(raw: string): string {
+  if (raw.trimStart().startsWith('+')) {
+    return '+' + raw.replace(/\D/g, '')
+  }
   const digits = raw.replace(/\D/g, '')
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
 }
 
 function isValidPhone(raw: string): boolean {
-  return normalizePhone(raw).length === 10
+  const norm = normalizePhone(raw)
+  if (norm.startsWith('+')) return norm.length >= 8
+  return norm.length === 10
 }
 
 function isValidName(raw: string): boolean {
@@ -666,7 +674,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 </span>
               </label>
               <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))}
-                type="tel" placeholder="(555) 867-5309" inputMode="numeric" />
+                type="tel" placeholder="(555) 867-5309 or +353..." inputMode="tel" />
               {phone && !phoneValid && (
                 <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 4, fontFamily: 'var(--font-cond)' }}>
                   {t.enter10DigitPhone}

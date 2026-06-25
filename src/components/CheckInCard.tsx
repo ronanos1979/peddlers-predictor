@@ -10,6 +10,9 @@ import { useLocale } from '@/lib/useLocale'
 type Props = { pubId: string; match: Match; pubCity: string }
 
 function formatPhone(raw: string): string {
+  if (raw.trimStart().startsWith('+')) {
+    return raw.replace(/[^\d+\s\-()]/g, '').slice(0, 20)
+  }
   const d = raw.replace(/\D/g, '').slice(0, 10)
   if (d.length <= 3) return d
   if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
@@ -17,8 +20,15 @@ function formatPhone(raw: string): string {
 }
 
 function normalizePhone(raw: string): string {
+  if (raw.trimStart().startsWith('+')) return '+' + raw.replace(/\D/g, '')
   const d = raw.replace(/\D/g, '')
   return d.length === 11 && d.startsWith('1') ? d.slice(1) : d
+}
+
+function isValidPhone(raw: string): boolean {
+  const norm = normalizePhone(raw)
+  if (norm.startsWith('+')) return norm.length >= 8
+  return norm.length === 10
 }
 
 export default function CheckInCard({ pubId, match, pubCity }: Props) {
@@ -103,7 +113,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
     }
   }
 
-  const canSubmit = name.trim().length >= 2 && normalizePhone(phone).length === 10 && !submitting
+  const canSubmit = name.trim().length >= 2 && isValidPhone(phone) && !submitting
 
   if (step === 'idle') {
     return (
@@ -220,7 +230,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
       </div>
       <div className="field">
         <label>{t.phoneNumber} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInPhoneNote}</span></label>
-        <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))} type="tel" placeholder={t.phonePlaceholder} inputMode="numeric" />
+        <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))} type="tel" placeholder={t.phonePlaceholder} inputMode="tel" />
       </div>
       <div className="field">
         <label>{t.email} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInEmailNote}</span></label>
