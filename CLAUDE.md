@@ -70,6 +70,7 @@ Full schema in: `supabase/master.sql` — run this on a fresh project to set eve
 - `hat_trick_scored` (boolean, nullable — set by `fetchEspnEvents` after events load)
 - `hat_trick_scorer` (text, nullable — name of the player who scored the hat-trick, set alongside `hat_trick_scored`)
 - All 104 World Cup 2026 matches pre-loaded. entries_close_at = kickoff + 105 minutes.
+- **Knockout match team names**: R32 matches are initially stored with placeholder names (`"Group A Winner"`, `"Group B Runner-up"`, etc.). When a group completes, `updateKnockoutNames()` in `src/lib/syncResults.ts` writes the real team name and flag emoji directly into the `matches` table. This runs automatically on every "⟳ Sync" and is also available via the "🏷 Resolve names" admin button. Do NOT do client-side placeholder resolution for display — the DB is the source of truth.
 
 **entries**
 - `id`, `pub_id`, `match_id`, `name`, `phone`, `email` (nullable)
@@ -372,7 +373,7 @@ Known name aliases:
 
 1. Nothing needed before kick-off — match activates automatically
 2. Patron code is automatic (`{prefix}` + day number) — tell bar staff
-3. After full time → go to `/admin` → click **⟳ Sync** to auto-fetch results AND auto-load ESPN match events (goals/cards) in one step. Or set results manually via the dropdowns.
+3. After full time → go to `/admin` → click **⟳ Sync** to auto-fetch results, auto-load ESPN match events (goals/cards), AND auto-resolve any newly-complete group names into R32 knockout matches — all in one step. Or set results manually via the dropdowns.
 4. Admin panel has 7 tabs: Results, Entrants, Stats, Feedback, Raffle, Teams, Analytics
 
 ### Name validation
@@ -383,8 +384,9 @@ Known name aliases:
 
 ### Admin panel features
 - **Results tab**: today's matches, all matches from the past 7 days (scored or not), upcoming 3 days, daily code display
-  - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp (±5 min tolerance), sets result + score, scores all entries, and **auto-loads ESPN match events** (goals/cards) for every newly resolved match in parallel. Reports updated matches, entries scored, and events loaded.
+  - **"⟳ Sync results from API"** button — calls `sync_results` action, fetches all finished WC matches from football-data.org, matches them by kickoff timestamp (±5 min tolerance), sets result + score, scores all entries, **auto-loads ESPN match events** (goals/cards) for every newly resolved match in parallel, and **resolves knockout team names** from standings. Reports updated matches, entries scored, events loaded, and team names resolved. `SyncResultsOutput` type includes `names_updated: number`.
   - **Sync debug panel** — shown after every sync. Displays: FD finished count, DB unresolved count, and for any unmatched DB matches: the DB kickoff time, the nearest FD match, and the time difference in minutes (red if >5 min, meaning outside the pairing tolerance). Use this to diagnose kickoff time mismatches — fix by updating `kickoff_at` in Supabase, then re-sync.
+  - **"🏷 Resolve names" button** — calls `update_knockout_names` action, fetches standings, and writes real team names + flag emojis into any R32+ matches that still have placeholder names for now-complete groups. Runs automatically on every Sync; use this button only when you need to update names without running a full sync.
   - **"⟳ scorers" button** per completed match — manually triggers `load_match_events` (ESPN fetch). Events now load automatically on sync or manual confirm, so this button is mainly for refreshing stale data or retrying a failed auto-load.
   - Manual fallback: each match row has a result dropdown + optional score inputs (home − away) before confirming. Confirming also auto-loads ESPN events (fire-and-forget).
   - **Auto-scores `winner_picks` when stage is 'Final'**: after setting the Final result, the `set_result` action automatically sets `is_correct=true, raffle_entries=15` for the champion pick and `is_correct=false, raffle_entries=0` for all other pending winner_picks
@@ -410,6 +412,20 @@ Known name aliases:
 - **🍺 Most Attended tab**: ranked by number of match check-ins; data from `/api/checkin-leaders` (public, no private data); lazy-loaded on first tab switch
 - **"What the Pub is Backing" section**: shown at the bottom of the predictions tab when at least one bonus pick exists — two cards showing the leading World Cup Winner pick and Golden Boot pick, with vote counts and links to the full community pages (`/world-cup/winner-picks` and `/world-cup/scorer-picks`)
 - Pub filter ("All locations" / "This pub") applies to both tabs
+
+## Group Standings Status Badges
+
+All places that display a group standings table show a small badge in the group header:
+- **Green "Final Standings"** — all 4 teams have played all 3 of their group games (`group.length >= 4 && group.every(r => r.all.played >= 3)`)
+- **Amber "In Progress"** — group still has matches to play
+
+This is shown in four locations:
+- `/world-cup/standings` — each group card header
+- `/world-cup/groups` — each compact group card header (only shown once any match has been played)
+- `/world-cup/bracket` — the `GroupTable` dropdown button
+- `/world-cup/team` — the inline standings table header and the `GroupDropdown` button
+
+i18n keys: `groupFinalStandings` / `groupInProgress` (Spanish: `groupFinalStandings` / `groupInProgress`).
 
 ## Best 3rd Place Page UX (`/world-cup/best-3rd`)
 
@@ -458,7 +474,7 @@ Known name aliases:
 ## Bracket Page UX (`/world-cup/bracket`)
 
 - Stage tabs: R32 → R16 → QF → SF → 3rd → Final; auto-advances to the first stage with real team names or a result
-- **Placeholder labels**: DB stores `"Group A Winner"`, `"Group B Runner-up"`, `"3rd Place (A/B/C/D/F)"` for R32; `"Match 73 Winner"` / `"Match 101 Loser"` for R16 onward. Formatted as `"1st · Group A"`, `"2nd · Group B"`, `"Best 3rd · A / B / C / D / F"`; match-number references kept as-is (fall-through)
+- **Placeholder labels**: DB initially stores `"Group A Winner"`, `"Group B Runner-up"`, `"3rd Place (A/B/C/D/F)"` for R32; `"Match 73 Winner"` / `"Match 101 Loser"` for R16 onward. Group Winner/Runner-up slots are replaced with real team names in the DB once the group completes (via `updateKnockoutNames()` — runs on every Sync). Match-number slots remain as placeholders until those knockout matches are played. Formatted as `"1st · Group A"`, `"2nd · Group B"`, `"Best 3rd · A / B / C / D / F"`; match-number references kept as-is (fall-through)
 - **Confirmed team auto-fill**: `resolveGroupCandidates()` checks if a group is complete (`all 4 teams × 3 games`). For done groups returns the confirmed winner/runner-up with logo + `✓ confirmed` badge; for in-progress groups returns the current top-2 as candidates.
 - **Recursive candidate resolution** (`resolveCandidates(slot, matchByNum, groupMap, depth=0)`): traces any placeholder slot back to real team names. Depth limit is `>5` (Final → SF → QF → R16 → R32 → group = 5 hops). Returns all unique candidates from both sides of an unplayed match, deduped by name.
   - R32 slot → 1–2 teams (confirmed winner or current top-2)
