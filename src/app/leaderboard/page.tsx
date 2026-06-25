@@ -9,7 +9,8 @@ import Link from 'next/link'
 
 type LeaderEntry = {
   name: string; pub_id: string; total_pts: number
-  correct: number; total: number; last_pick: string; last_correct: boolean | null
+  correct: number; score_exact: number; wrong: number; total: number
+  last_pick: string; last_correct: boolean | null
 }
 
 type AttendanceEntry = { name: string; pub_id: string; match_count: number }
@@ -41,12 +42,15 @@ function LeaderboardContent() {
     ])
     setMatch(matchData)
     if (rawEntries) {
-      const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; total: number; last_pick: string; last_correct: boolean | null }> = {}
+      const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; score_exact: number; wrong: number; total: number; last_pick: string; last_correct: boolean | null }> = {}
       rawEntries.forEach((e: Entry) => {
-        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, total: 0, last_pick: e.pick, last_correct: e.is_correct }
+        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, score_exact: 0, wrong: 0, total: 0, last_pick: e.pick, last_correct: e.is_correct }
         byPhone[e.phone].pts += e.raffle_entries
         byPhone[e.phone].total += 1
-        if (e.is_correct) byPhone[e.phone].correct += 1
+        if (e.is_correct === true) byPhone[e.phone].correct += 1
+        if (e.is_correct === false) byPhone[e.phone].wrong += 1
+        // raffle_entries is 3 (result+score) or 10 (result+score+hat-trick) when exact score is correct
+        if (e.is_correct === true && (e.raffle_entries === 3 || e.raffle_entries === 10)) byPhone[e.phone].score_exact += 1
       })
       winnerBonuses?.forEach(wp => {
         if (byPhone[wp.phone]) byPhone[wp.phone].pts += wp.raffle_entries
@@ -55,7 +59,7 @@ function LeaderboardContent() {
         if (byPhone[sp.phone]) byPhone[sp.phone].pts += sp.raffle_entries
       })
       const sorted = Object.values(byPhone)
-        .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))
+        .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, score_exact: e.score_exact, wrong: e.wrong, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))
         .sort((a, b) => b.total_pts - a.total_pts || b.correct - a.correct)
       setEntries(sorted)
       setLastUpdated(new Date().toLocaleTimeString())
@@ -193,8 +197,17 @@ function LeaderboardContent() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
-                  {e.correct}/{e.total} {t.correct} · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                <div style={{ fontSize: 11, marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: '0 6px', lineHeight: 1.6 }}>
+                  <span style={{ color: 'var(--green)', fontWeight: 600 }}>✓ {e.correct} {t.correct}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>·</span>
+                  <span style={{ color: e.score_exact > 0 ? 'var(--gold)' : 'var(--text-dim)' }}>🎯 {e.score_exact} {t.lbExactScores}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>·</span>
+                  <span style={{ color: e.wrong > 0 ? '#e05' : 'var(--text-dim)' }}>✗ {e.wrong} {t.wrongLower}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>·</span>
+                  <span style={{ color: 'var(--text-dim)' }}>{e.total} {t.lbPredicted}</span>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
+                  {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
                 </div>
                 {match && (
                   <span className={`pick-pill ${e.last_correct === true ? 'correct' : e.last_correct === false ? 'wrong' : ''}`}>

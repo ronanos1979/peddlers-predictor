@@ -214,7 +214,9 @@ export const translations = {
     correct: 'correct',
     tickets: 'tickets',
     raffleEntries: 'raffle entries',
-    perCorrectPick: 'per correct pick · Raffle draw after the Final on July 19 — more tickets = more chances',
+    perCorrectPick: 'for exact score · 1 per correct result — draw July 19, more tickets = more chances',
+    lbExactScores: 'exact scores',
+    lbPredicted: 'predicted',
 
     // Leaderboard tabs
     predictionsTab: 'Predictions',
@@ -863,7 +865,9 @@ export const translations = {
     correct: 'correctas',
     tickets: 'boletos',
     raffleEntries: 'boletos de rifa',
-    perCorrectPick: 'por cada acierto · Sorteo después de la Final el 19 de julio — más boletos = más chances',
+    perCorrectPick: 'por marcador exacto · 1 por resultado correcto — sorteo 19 de julio, más boletos = más chances',
+    lbExactScores: 'marcadores exactos',
+    lbPredicted: 'predichos',
 
     // Leaderboard tabs
     predictionsTab: 'Predicciones',
