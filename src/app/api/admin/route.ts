@@ -4,7 +4,7 @@ import { checkRateLimit, getIp } from '@/lib/rateLimit'
 import { FdRateLimitError } from '@/lib/footballData'
 import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 import { toEspnDate, toEspnTeamName } from '@/lib/espnEvents'
-import { syncResults } from '@/lib/syncResults'
+import { syncResults, resyncMatchIds } from '@/lib/syncResults'
 
 export async function POST(req: NextRequest) {
   try {
@@ -195,6 +195,22 @@ export async function POST(req: NextRequest) {
     if (action === 'sync_results') {
       try {
         const result = await syncResults()
+        return NextResponse.json({ success: true, ...result })
+      } catch (e) {
+        if (e instanceof FdRateLimitError) {
+          return NextResponse.json({ error: 'Football data rate limited — try again in a minute' }, { status: 429 })
+        }
+        throw e
+      }
+    }
+
+    if (action === 'force_resync') {
+      const { match_ids } = payload as { match_ids: string[] }
+      if (!Array.isArray(match_ids) || match_ids.length === 0) {
+        return NextResponse.json({ error: 'match_ids array required' }, { status: 400 })
+      }
+      try {
+        const result = await resyncMatchIds(match_ids)
         return NextResponse.json({ success: true, ...result })
       } catch (e) {
         if (e instanceof FdRateLimitError) {

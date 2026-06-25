@@ -73,6 +73,8 @@ export default function AdminPage() {
   const [loadAllShirtsRunning, setLoadAllShirtsRunning] = useState(false)
   const [loadAllShirtsProgress, setLoadAllShirtsProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [forceResyncing, setForceResyncing] = useState(false)
+  const [forceResyncResult, setForceResyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
   const [refreshingEvents, setRefreshingEvents] = useState(false)
   const [refreshEventsResult, setRefreshEventsResult] = useState<{ updated: number; failed: number; detail: string[] } | null>(null)
   const [reloadingResults, setReloadingResults] = useState(false)
@@ -482,6 +484,30 @@ export default function AdminPage() {
       flash('Network error during sync', 'error')
     }
     setSyncing(false)
+  }
+
+  async function forceResync() {
+    const resolvedIds = [...recentMatches, ...todaysMatches]
+      .filter(m => m.result !== null)
+      .map(m => m.id)
+    if (resolvedIds.length === 0) { flash('No resolved matches in the recent window', 'error'); return }
+    setForceResyncing(true)
+    setForceResyncResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'force_resync', payload: { match_ids: resolvedIds } })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Force resync failed', 'error'); setForceResyncing(false); return }
+      setForceResyncResult(data)
+      loadMatches(); loadStats(); loadEntrants()
+      flash(`Fixed ${data.updated} match${data.updated !== 1 ? 'es' : ''} · ${data.entries_scored} entries re-scored`, 'success')
+    } catch {
+      flash('Network error during force resync', 'error')
+    }
+    setForceResyncing(false)
   }
 
   async function refreshAllEvents() {
@@ -1011,6 +1037,27 @@ export default function AdminPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Fix resolved results</div>
+                <div className="muted" style={{ fontSize: 12 }}>Re-syncs all recently-resolved matches from FD and re-scores every entry — fixes wrong results caused by simultaneous kickoffs</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={forceResyncing} onClick={forceResync}>
+                {forceResyncing ? 'Fixing…' : '⟳ Fix results'}
+              </button>
+            </div>
+            {forceResyncResult && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                background: forceResyncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
+                color: forceResyncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
+                border: `1px solid ${forceResyncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
+                {forceResyncResult.message || `✅ ${forceResyncResult.updated} match${forceResyncResult.updated !== 1 ? 'es' : ''} corrected · ${forceResyncResult.entries_scored} entries re-scored`}
               </div>
             )}
           </div>
