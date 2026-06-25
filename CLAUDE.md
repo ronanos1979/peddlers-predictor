@@ -187,6 +187,7 @@ Fully automatic based on datetime — no admin needed:
 - `getPredictableWindowEnd(now)` in `src/lib/matchSchedule.ts` computes the upper bound
 - Already-picked matches stay visible at 55% opacity with a "✓ Picked" badge
 - Demo match (stage = 'Demo Match') is excluded from real match queries
+- **What's New banner** (`WhatsNew` component in `src/app/page.tsx`): dismissible amber card shown once per browser. localStorage key `peddlers_bracket_v2` — update this key whenever the banner content changes to re-show it for all users. Currently links to `/world-cup/bracket` (bracket team names) and `/world-cup/best-3rd` (best 3rd tracker). Clicking either link or the ✕ button dismisses permanently.
 
 ### Scoring
 - Correct result only → `is_correct = true`, `raffle_entries = 1`
@@ -301,6 +302,10 @@ Fully automatic based on datetime — no admin needed:
 - Handles both `?id=X` (FD team ID) and `?name=USA` (schedule name) lookups
 - Returns empty squad/coach if team not yet loaded by admin — frontend shows "Squad not yet announced"
 - Always appends `localSchedule` from Supabase matches table
+- **`normalizeNameParam()`** maps FD/ESPN name variants to schedule names before lookup. Aliases:
+  - `bosnia-herzegovina` → `Bosnia & Herzegovina` (ESPN/FD use hyphen, DB uses ampersand)
+  - `united states` → `USA`, `korea republic` → `South Korea`, `côte d'ivoire` → `Ivory Coast`
+  - `turkey` → `Türkiye`, `czech republic` → `Czechia`, `cabo verde` / `cape verde islands` → `Cape Verde`
 
 ### Admin team loading route: `/api/admin-teams`
 - **GET** (password required): lists all 48 teams from matches table with `fd_loaded`, player/photo/club counts — player counts come from `player_cache_stats` view to avoid PostgREST 1000-row limit
@@ -406,6 +411,33 @@ Known name aliases:
 - **"What the Pub is Backing" section**: shown at the bottom of the predictions tab when at least one bonus pick exists — two cards showing the leading World Cup Winner pick and Golden Boot pick, with vote counts and links to the full community pages (`/world-cup/winner-picks` and `/world-cup/scorer-picks`)
 - Pub filter ("All locations" / "This pub") applies to both tabs
 
+## Best 3rd Place Page UX (`/world-cup/best-3rd`)
+
+- Ranks all 12 groups' current 3rd-placed teams by FIFA tiebreakers (Pts → GD → GF → GA). Top 8 qualify for R32.
+- **Group position**: uses array index within the group's sub-array (`group[2]`), NOT `row.rank` (which is global 1–48). This is the correct group-rank for all group-position logic across the codebase.
+- **`getContenders(group)`**: for unfinished groups, finds teams in 2nd or 4th that could mathematically swap into 3rd. Shown as "Could still be 3rd" chips on the card.
+- **`sortThirds(a, b)`**: FIFA tiebreaker sort — Pts → GD → GF → GA (fewer) → disciplinary (not available from FD).
+- **Prediction row**: each card shows the team's current qualifying status:
+  - Group complete + top 8: `✓ Qualified for Round of 32`
+  - Group incomplete + top 8: `→ On course for Round of 32 · may change`
+  - Group complete + outside top 8: `✗ Did not qualify`
+  - Group incomplete + outside top 8: `→ Currently outside top 8 · may change`
+- **`FD_TO_SCHED` map**: converts FD team names (e.g. `Bosnia-Herzegovina`, `United States`) to schedule names before linking to `/world-cup/team?name=...`
+- Linked from WC hub nav, leaderboard community section, team page 3rd-place widget, and What's New home banner
+
+## Team Page UX (`/world-cup/team`)
+
+- **`finishPosition`**: uses `groupStandings.indexOf(myStandingRow) + 1` (1-based group rank). Never use `myStandingRow.rank` — that is the global FD rank (1–48 across all 48 teams), not the group position.
+- **`allGroupStandings: StandingRow[][]`**: fetched alongside the team's own group standings; stores all 12 groups. Index 0 = Group A … index 11 = Group L. Used by `GroupDropdown` and `resolveOpponent`.
+- **Group match progress**: standings widget header shows `n/6 played` (amber) or `All 6 played` (green). Total played = sum of each team's `all.played` divided by 2 (each match counted twice).
+- **Standings rank column**: uses `i + 1` (array index), not `row.rank`.
+- **Eliminated teams** (`finishPosition === 4`): Path to Final promo and chain are hidden; shows a red "Eliminated" message.
+- **3rd-placed teams** (`finishPosition === 3`): shows amber `🥉 Best 3rd Place →` link card. `possible3rdMatches` scans all R32 DB matches for `"3rd Place (X/Y/Z)"` slots containing the team's group letter (FIFA's fixed allocation baked into the DB).
+- **`Possible3rdOpponents` component**: lists the 2–3 possible R32 opponents for a 3rd-placed team. `resolveOpponent(slot)` checks `allGroupStandings` — confirmed when that group is done, label-only otherwise. Each unconfirmed slot shows a `GroupDropdown` for that group's standings.
+- **`GroupDropdown` component**: expandable inline standings table shown on the Next Match card, Path to Final chain steps, and Possible3rd Opponents. Always renders the toggle button (shows "Loading…" when `allGroupStandings` not yet populated — never returns null).
+- **Next Match card**: opponent slot uses `parseGroupLetters()` to detect group references and renders a `GroupDropdown` for each. Already-confirmed opponents (group done) show the team name with link and no dropdown.
+- **Path to Final chain**: each upcoming step's `vs {opponentSlot}` uses `formatPlaceholder()` for the label and renders `GroupDropdown` for any group letter found. Skipped for blocked steps.
+
 ## Results Page UX (`/world-cup/results`)
 
 - Shows all completed matches from football-data.org (scores/logos), newest first, filterable by stage
@@ -427,11 +459,19 @@ Known name aliases:
 
 - Stage tabs: R32 → R16 → QF → SF → 3rd → Final; auto-advances to the first stage with real team names or a result
 - **Placeholder labels**: DB stores `"Group A Winner"`, `"Group B Runner-up"`, `"3rd Place (A/B/C/D/F)"` for R32; `"Match 73 Winner"` / `"Match 101 Loser"` for R16 onward. Formatted as `"1st · Group A"`, `"2nd · Group B"`, `"Best 3rd · A / B / C / D / F"`; match-number references kept as-is (fall-through)
-- **Inline group standings widget (R32)**: each R32 match card shows a "See groups — Group A · Group B" toggle. Expands a compact P/W/D/L/Pts table per group with top-2 rows highlighted green. Country names link to `/world-cup/team`
+- **Confirmed team auto-fill**: `resolveGroupCandidates()` checks if a group is complete (`all 4 teams × 3 games`). For done groups returns the confirmed winner/runner-up with logo + `✓ confirmed` badge; for in-progress groups returns the current top-2 as candidates.
+- **Recursive candidate resolution** (`resolveCandidates(slot, matchByNum, groupMap, depth=0)`): traces any placeholder slot back to real team names. Depth limit is `>5` (Final → SF → QF → R16 → R32 → group = 5 hops). Returns all unique candidates from both sides of an unplayed match, deduped by name.
+  - R32 slot → 1–2 teams (confirmed winner or current top-2)
+  - R16 slot → up to 4 teams (2 from each R32 source match)
+  - QF slot → up to 8 teams (all candidates from both R16 source matches)
+  - SF slot → up to 16 teams; Final slot → up to ~30 teams
+  - `"3rd Place (A/B/C/D/F)"` → returns `"Best 3rd · A / B / C / D / F"` as a text candidate (no team link)
+- **`TeamSlot` component**: 3 states — real DB team (flag + link), confirmed-from-standings (logo + `✓ confirmed`), candidates list. Candidate display shows up to 4 names with `/ ` separators; a green `+N more ▼` button expands inline to show all remaining candidates; `show less ▲` collapses. Font scales 14→13→11px as count grows.
+- **Inline group standings widget (R32)**: each R32 match card shows a "See groups — Group A · Group B" toggle. Expands a compact P/W/D/L/Pts table per group with top-2 rows highlighted green. Country names link to `/world-cup/team`. Only shown for unresolved slots (confirmed teams skip the widget).
 - **Drill-down for R16**: each R16 match card shows a `SourceMatchPanel` for each slot — expands to show the relevant R32 match with labels and, if those R32 teams are still placeholders, nested group widgets
-- **QF/SF/Final**: no automatic drill-down (placeholders are `"Match N Winner"` with no group reference)
 - **Venue display**: shown in match card header when `match.venue` is non-null
 - Standings fetched once on page load from `/api/football?endpoint=standings` (5-min server cache). Pre-tournament shows "Standings not available yet"
+- `matchByNum` map built from all matches ordered by `kickoff_at` — match number N = the Nth non-demo match; used by `SourceMatchPanel` and `resolveCandidates` to look up source R32/R16 matches
 - Helper functions (`bracketHelpers.ts`): `parseMatchNumber(name)` → number|null (handles `Match N Winner/Loser` and legacy `R32 M73 Winner`); `isPlaceholder(name)` (matches Winner/Loser/Runner-up/3rd Place/TBD/Group/Match/R32/QF/SF); `parseGroupLetters(name)` → string[]; `formatPlaceholder(name)` → readable label
 
 ### Match numbering (global, by kickoff_at ascending, excl. Demo Match)
