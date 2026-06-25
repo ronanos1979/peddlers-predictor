@@ -11,7 +11,7 @@ import {
   type MatchRecord,
   type PathPosition,
 } from './pathToFinalHelpers'
-import { formatPlaceholder } from '@/app/world-cup/bracket/bracketHelpers'
+import { formatPlaceholder, parseGroupLetters } from '@/app/world-cup/bracket/bracketHelpers'
 
 type TeamInfo = { team: { id: number; name: string; country: string; logo: string; founded: number; national: boolean }; venue: { name: string; city: string; capacity: number } }
 type Player = { id: number; name: string; age: number; number: number; position: string; photo: string; club?: { name: string; logo?: string } }
@@ -68,11 +68,68 @@ function isPlaceholderTeam(name: string) {
 
 type ResolvedOpponent = { label: string; confirmed: boolean; schedName: string | null }
 
+function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroupStandings: StandingRow[][] }) {
+  const [open, setOpen] = useState(false)
+  const rows = allGroupStandings[letter.charCodeAt(0) - 65] ?? []
+  if (rows.length === 0) return null
+  return (
+    <div style={{ marginTop: 5 }}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          background: 'var(--surface2)', border: '1px solid var(--border)',
+          borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
+          fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+          color: 'var(--text-muted)', letterSpacing: 0.5, textTransform: 'uppercase',
+        }}
+      >
+        See Group {letter} {open ? '▲' : '▼'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['#', 'Team', 'P', 'W', 'D', 'L', 'Pts'].map((h, hi) => (
+                  <th key={hi} style={{ padding: '5px 6px', textAlign: hi <= 1 ? 'left' : 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={row.team.id} style={{ background: i < 2 ? 'rgba(0,200,122,0.05)' : 'transparent', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
+                  <td style={{ padding: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
+                      <Link href={`/world-cup/team?id=${row.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                        {row.team.name}
+                      </Link>
+                    </div>
+                  </td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.played}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.win}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.draw}</td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.lose}</td>
+                  <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--green)' }}>{row.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ padding: '4px 8px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>■ Qualified (top 2)</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Possible3rdOpponents({
-  matches, resolveOpponent, t,
+  matches, resolveOpponent, allGroupStandings, t,
 }: {
   matches: MatchRecord[]
   resolveOpponent: (slot: string) => ResolvedOpponent
+  allGroupStandings: StandingRow[][]
   t: ReturnType<typeof useLocale>['t']
 }) {
   if (matches.length === 0) return null
@@ -85,24 +142,24 @@ function Possible3rdOpponents({
         The exact opponent depends on which 8 of the 12 third-placed teams qualify. FIFA uses a fixed allocation table.
       </div>
       {matches.map(m => {
-        const third3slot  = isPlaceholderTeam(m.home_team) && /3rd Place/i.test(m.home_team) ? m.home_team : m.away_team
+        const third3slot   = isPlaceholderTeam(m.home_team) && /3rd Place/i.test(m.home_team) ? m.home_team : m.away_team
         const opponentSlot = third3slot === m.home_team ? m.away_team : m.home_team
-        const opp = resolveOpponent(opponentSlot)
+        const opp          = resolveOpponent(opponentSlot)
+        const letters      = opp.confirmed ? [] : parseGroupLetters(opponentSlot)
         return (
-          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: opp.confirmed ? 'var(--text)' : 'var(--text-muted)' }}>
-                {opp.schedName
-                  ? <Link href={`/world-cup/team?name=${encodeURIComponent(opp.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{opp.label}</Link>
-                  : opp.label
-                }
-                {opp.confirmed && <span style={{ marginLeft: 5, fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>✓ confirmed</span>}
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
-                {m.stage} · {new Date(m.kickoff_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                {m.venue && <span style={{ opacity: 0.7 }}> · {m.venue}</span>}
-              </div>
+          <div key={m.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: opp.confirmed ? 'var(--text)' : 'var(--text-muted)' }}>
+              {opp.schedName
+                ? <Link href={`/world-cup/team?name=${encodeURIComponent(opp.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{opp.label}</Link>
+                : opp.label
+              }
+              {opp.confirmed && <span style={{ marginLeft: 5, fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>✓ confirmed</span>}
             </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+              {m.stage} · {new Date(m.kickoff_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {m.venue && <span style={{ opacity: 0.7 }}> · {m.venue}</span>}
+            </div>
+            {letters.map(l => <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />)}
           </div>
         )
       })}
@@ -658,22 +715,25 @@ function TeamContent() {
                     </div>
                   </div>
                 )}
-                {qualified && nextKnockoutMatch && (
-                  <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 5 }}>
-                      {t.nextMatch} · {nextKnockoutMatch.stage}
+                {qualified && nextKnockoutMatch && (() => {
+                  const oSlot = nextKnockoutMatch.home_team === posSlot ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
+                  const letters = parseGroupLetters(oSlot)
+                  return (
+                    <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 5 }}>
+                        {t.nextMatch} · {nextKnockoutMatch.stage}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, marginBottom: letters.length > 0 ? 2 : 4 }}>
+                        vs {isPlaceholderTeam(oSlot) ? formatPlaceholder(oSlot) : oSlot}
+                      </div>
+                      {letters.map(l => <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />)}
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: letters.length > 0 ? 6 : 0 }}>
+                        {fmtDate(nextKnockoutMatch.kickoff_at)}
+                        {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
+                      </div>
                     </div>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                      {nextKnockoutMatch.home_team === posSlot
-                        ? `vs ${formatPlaceholder(nextKnockoutMatch.away_team)}`
-                        : `vs ${formatPlaceholder(nextKnockoutMatch.home_team)}`}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {fmtDate(nextKnockoutMatch.kickoff_at)}
-                      {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
-                    </div>
-                  </div>
-                )}
+                  )
+                })()}
                 {finishPosition === 3 && (
                   <>
                     <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
@@ -684,7 +744,7 @@ function TeamContent() {
                       </div>
                       <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
                     </Link>
-                    {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} t={t} />}
+                    {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} allGroupStandings={allGroupStandings} t={t} />}
                   </>
                 )}
               </div>
@@ -854,22 +914,25 @@ function TeamContent() {
                   </div>
                 </div>
               )}
-              {qualified && nextKnockoutMatch && (
-                <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 5 }}>
-                    {t.nextMatch} · {nextKnockoutMatch.stage}
+              {qualified && nextKnockoutMatch && (() => {
+                const oSlot = nextKnockoutMatch.home_team === posSlot ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
+                const letters = parseGroupLetters(oSlot)
+                return (
+                  <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 5 }}>
+                      {t.nextMatch} · {nextKnockoutMatch.stage}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, marginBottom: letters.length > 0 ? 2 : 4 }}>
+                      vs {isPlaceholderTeam(oSlot) ? formatPlaceholder(oSlot) : oSlot}
+                    </div>
+                    {letters.map(l => <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />)}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: letters.length > 0 ? 6 : 0 }}>
+                      {fmtDate(nextKnockoutMatch.kickoff_at)}
+                      {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
+                    </div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                    {nextKnockoutMatch.home_team === posSlot
-                      ? `vs ${formatPlaceholder(nextKnockoutMatch.away_team)}`
-                      : `vs ${formatPlaceholder(nextKnockoutMatch.home_team)}`}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {fmtDate(nextKnockoutMatch.kickoff_at)}
-                    {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
-                  </div>
-                </div>
-              )}
+                )
+              })()}
               {finishPosition === 3 && (
                 <>
                   <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
@@ -880,7 +943,7 @@ function TeamContent() {
                     </div>
                     <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
                   </Link>
-                  {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} t={t} />}
+                  {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} allGroupStandings={allGroupStandings} t={t} />}
                 </>
               )}
             </div>
@@ -1166,11 +1229,14 @@ function TeamContent() {
                           <div style={{
                             fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16,
                             color: step.status === 'blocked' ? 'var(--text-muted)' : 'var(--text)',
-                            marginBottom: 5,
+                            marginBottom: parseGroupLetters(step.opponentSlot).length > 0 ? 2 : 5,
                             textDecoration: step.status === 'blocked' ? 'line-through' : 'none'
                           }}>
-                            vs {step.opponentSlot}
+                            vs {isPlaceholderTeam(step.opponentSlot) ? formatPlaceholder(step.opponentSlot) : step.opponentSlot}
                           </div>
+                          {step.status !== 'blocked' && parseGroupLetters(step.opponentSlot).map(l => (
+                            <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />
+                          ))}
 
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                             {fmtDate(step.match.kickoff_at)}
