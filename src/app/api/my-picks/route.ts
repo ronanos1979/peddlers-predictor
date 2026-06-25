@@ -8,8 +8,13 @@ export async function GET(req: NextRequest) {
   const trimmed = rawPhone.trim()
   let phone: string
   if (trimmed.startsWith('+')) {
-    phone = '+' + trimmed.replace(/\D/g, '')
-    if (phone.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+    const stripped = trimmed.replace(/\D/g, '')
+    if (stripped.startsWith('1') && stripped.length === 11) {
+      phone = stripped.slice(1) // US +1 country code
+    } else {
+      phone = '+' + stripped
+      if (phone.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+    }
   } else {
     const digits = trimmed.replace(/\D/g, '')
     phone = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits

@@ -45,6 +45,18 @@ type CachedTeamPayload = {
   cachedAt: string
 }
 
+function groupRemainingLabel(rows: StandingRow[], t: Record<string, string>): string | null {
+  if (rows.length < 4) return null
+  const totalPlayed = rows.reduce((s, r) => s + r.all.played, 0) / 2
+  const remaining = 6 - totalPlayed
+  if (remaining <= 0) return null
+  if (remaining === 1) {
+    const notDone = rows.filter(r => r.all.played < 3)
+    if (notDone.length === 2) return `${notDone[0].team.name} vs ${notDone[1].team.name}`
+  }
+  return t.groupMatchesLeft.replace('{n}', String(remaining))
+}
+
 const POSITION_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Attacker']
 const SAVED_TEAM_KEY = 'peddlers_home_team'
 const TEAM_CACHE_PREFIX = 'peddlers_team_cache_'
@@ -73,6 +85,7 @@ function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroup
   const { t } = useLocale()
   const rows = allGroupStandings[letter.charCodeAt(0) - 65] ?? []
   const done = rows.length >= 4 && rows.every(r => r.all.played >= 3)
+  const remainingLabel = rows.length > 0 && !done ? groupRemainingLabel(rows, t) : null
   // Always show the button even while data is loading — content shows loading state when empty
   return (
     <div style={{ marginTop: 5 }}>
@@ -89,7 +102,7 @@ function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroup
         See Group {letter}
         {rows.length > 0 && (
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: done ? 'var(--green)' : 'var(--amber)', padding: '1px 4px', borderRadius: 3, border: `1px solid ${done ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: done ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
-            {done ? t.groupFinalStandings : t.groupInProgress}
+            {done ? t.groupFinalStandings : t.groupInProgress}{remainingLabel && ` · ${remainingLabel}`}
           </span>
         )}
         {open ? '▲' : '▼'}
@@ -546,6 +559,7 @@ function TeamContent() {
   const groupGamesTotal = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage)).length
   const allGroupGamesDone = groupGamesTotal === 3 && groupGamesPlayed === 3
   const standingsGroupDone = groupStandings.length >= 4 && groupStandings.every(r => r.all.played >= 3)
+  const standingsRemainingLabel = standingsGroupDone ? null : groupRemainingLabel(groupStandings, t)
   const myStandingRow = currentGroup && groupStandings.length > 0
     ? groupStandings.find(r => normForStandings(r.team.name) === normForStandings(schedName))
     : null
@@ -693,7 +707,7 @@ function TeamContent() {
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>Group {currentGroup}</span>
                       {groupStandings.length >= 4 && (
                         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: standingsGroupDone ? 'var(--green)' : 'var(--amber)', padding: '2px 6px', borderRadius: 4, border: `1px solid ${standingsGroupDone ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: standingsGroupDone ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
-                          {standingsGroupDone ? t.groupFinalStandings : t.groupInProgress}
+                          {standingsGroupDone ? t.groupFinalStandings : t.groupInProgress}{standingsRemainingLabel && ` · ${standingsRemainingLabel}`}
                         </span>
                       )}
                     </div>

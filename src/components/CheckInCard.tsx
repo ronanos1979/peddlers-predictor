@@ -20,7 +20,11 @@ function formatPhone(raw: string): string {
 }
 
 function normalizePhone(raw: string): string {
-  if (raw.trimStart().startsWith('+')) return '+' + raw.replace(/\D/g, '')
+  if (raw.trimStart().startsWith('+')) {
+    const digits = raw.replace(/\D/g, '')
+    if (digits.startsWith('1') && digits.length === 11) return digits.slice(1)
+    return '+' + digits
+  }
   const d = raw.replace(/\D/g, '')
   return d.length === 11 && d.startsWith('1') ? d.slice(1) : d
 }

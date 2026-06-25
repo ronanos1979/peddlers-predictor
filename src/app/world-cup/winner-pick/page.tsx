@@ -84,8 +84,13 @@ function WinnerPickContent() {
     const trimmedPhone = phone.trim()
     let cleanPhone: string
     if (trimmedPhone.startsWith('+')) {
-      cleanPhone = '+' + trimmedPhone.replace(/\D/g, '')
-      if (cleanPhone.length < 8) { setError('Enter a valid phone number.'); return }
+      const stripped = trimmedPhone.replace(/\D/g, '')
+      if (stripped.startsWith('1') && stripped.length === 11) {
+        cleanPhone = stripped.slice(1) // US +1 country code
+      } else {
+        cleanPhone = '+' + stripped
+        if (cleanPhone.length < 8) { setError('Enter a valid phone number.'); return }
+      }
     } else {
       const raw = trimmedPhone.replace(/\D/g, '')
       cleanPhone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw

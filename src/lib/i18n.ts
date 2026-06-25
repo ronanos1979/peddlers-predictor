@@ -270,6 +270,7 @@ export const translations = {
     groupAllComplete: 'All {total} played',
     groupFinalStandings: 'Final Standings',
     groupInProgress: 'In Progress',
+    groupMatchesLeft: '{n} left',
     eliminatedGroupStage: 'This team finished 4th in their group and has been eliminated.',
 
     // Breadcrumb labels
@@ -916,6 +917,7 @@ export const translations = {
     groupAllComplete: 'Los {total} jugados',
     groupFinalStandings: 'Clasificación Final',
     groupInProgress: 'En Curso',
+    groupMatchesLeft: '{n} restantes',
     eliminatedGroupStage: 'Este equipo terminó 4.° en su grupo y ha sido eliminado.',
 
     // Breadcrumb labels

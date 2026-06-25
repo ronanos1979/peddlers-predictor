@@ -37,8 +37,13 @@ export async function POST(req: NextRequest) {
     const rawPhone = String(phone).trim()
     let digits: string
     if (rawPhone.startsWith('+')) {
-      digits = '+' + rawPhone.replace(/\D/g, '')
-      if (digits.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+      const stripped = rawPhone.replace(/\D/g, '')
+      if (stripped.startsWith('1') && stripped.length === 11) {
+        digits = stripped.slice(1) // US +1 country code
+      } else {
+        digits = '+' + stripped
+        if (digits.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+      }
     } else {
       const stripped = rawPhone.replace(/\D/g, '')
       digits = stripped.length === 11 && stripped.startsWith('1') ? stripped.slice(1) : stripped

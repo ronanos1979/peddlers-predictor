@@ -27,7 +27,10 @@ function formatPhone(raw: string): string {
 
 function normalizePhone(raw: string): string {
   if (raw.trimStart().startsWith('+')) {
-    return '+' + raw.replace(/\D/g, '')
+    const digits = raw.replace(/\D/g, '')
+    // +1XXXXXXXXXX — US number with country code
+    if (digits.startsWith('1') && digits.length === 11) return digits.slice(1)
+    return '+' + digits
   }
   const digits = raw.replace(/\D/g, '')
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits

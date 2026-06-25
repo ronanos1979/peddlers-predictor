@@ -24,6 +24,18 @@ function groupDone(group: Standing[]): boolean {
   return group.length >= 4 && group.every(r => r.all.played >= 3)
 }
 
+function groupRemainingLabel(rows: Standing[], t: Record<string, string>): string | null {
+  if (rows.length < 4) return null
+  const totalPlayed = rows.reduce((s, r) => s + r.all.played, 0) / 2
+  const remaining = 6 - totalPlayed
+  if (remaining <= 0) return null
+  if (remaining === 1) {
+    const notDone = rows.filter(r => r.all.played < 3)
+    if (notDone.length === 2) return `${fdSched(notDone[0].team.name)} vs ${fdSched(notDone[1].team.name)}`
+  }
+  return t.groupMatchesLeft.replace('{n}', String(remaining))
+}
+
 const KNOCKOUT_STAGES = [
   'Round of 32',
   'Round of 16',
@@ -61,6 +73,7 @@ function GroupTable({
   const [open, setOpen] = useState(false)
   const rows = groupMap[letter]
   const done = rows ? groupDone(rows) : false
+  const remainingLabel = rows && !done ? groupRemainingLabel(rows, t) : null
   return (
     <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 4 }}>
       <button
@@ -78,7 +91,7 @@ function GroupTable({
           </span>
           {rows && rows.length > 0 && (
             <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: done ? 'var(--green)' : 'var(--amber)', padding: '1px 5px', borderRadius: 3, border: `1px solid ${done ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: done ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
-              {done ? t.groupFinalStandings : t.groupInProgress}
+              {done ? t.groupFinalStandings : t.groupInProgress}{remainingLabel && ` · ${remainingLabel}`}
             </span>
           )}
         </span>
