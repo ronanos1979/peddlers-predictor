@@ -220,6 +220,12 @@ function resolveCandidates(
   const group = resolveGroupCandidates(slot, groupMap)
   if (group) return group
 
+  // 3rd-place slot — can't resolve to one team yet, return formatted label as text candidate
+  const thirdM = slot.match(/^3rd Place \(([^)]+)\)/i)
+  if (thirdM) {
+    return { teams: [{ name: formatPlaceholder(slot), schedName: '', logo: '' }], confirmed: false }
+  }
+
   // Match-number reference (R16, QF, SF, Final)
   const matchNum = parseMatchNumber(slot)
   if (matchNum) {
@@ -321,7 +327,10 @@ function TeamSlot({
             {candidates.map((c, ci) => (
               <span key={c.name}>
                 {ci > 0 && <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}> / </span>}
-                <Link href={`/world-cup/team?name=${encodeURIComponent(c.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{c.name}</Link>
+                {c.schedName
+                  ? <Link href={`/world-cup/team?name=${encodeURIComponent(c.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{c.name}</Link>
+                  : <span>{c.name}</span>
+                }
               </span>
             ))}
           </div>

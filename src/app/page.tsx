@@ -323,7 +323,7 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   )
 }
 
-const WHATS_NEW_KEY = 'peddlers_best3rd_new'
+const WHATS_NEW_KEY = 'peddlers_bracket_v2'
 
 function WhatsNew() {
   const { t } = useLocale()
@@ -334,6 +334,8 @@ function WhatsNew() {
       setShow(true)
     }
   }, [])
+
+  const dismiss = () => { localStorage.setItem(WHATS_NEW_KEY, '1'); setShow(false) }
 
   if (!show) return null
 
@@ -346,30 +348,45 @@ function WhatsNew() {
       marginBottom: 12,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 22, flexShrink: 0, lineHeight: 1.2 }}>🥉</span>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)' }}>
-                {t.whatsNewTitle}
-              </span>
-            </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
+            {t.whatsNewTitle}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Link
+              href="/world-cup/bracket"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'flex-start', gap: 8 }}
+              onClick={dismiss}
+            >
+              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3 }}>🏆</span>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 1 }}>
+                  {t.whatsNewBracketTitle} →
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  {t.whatsNewBracketDesc}
+                </div>
+              </div>
+            </Link>
             <Link
               href="/world-cup/best-3rd"
-              style={{ textDecoration: 'none', color: 'inherit' }}
-              onClick={() => { localStorage.setItem(WHATS_NEW_KEY, '1'); setShow(false) }}
+              style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'flex-start', gap: 8 }}
+              onClick={dismiss}
             >
-              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 2 }}>
-                {t.whatsNewBest3rdTitle} →
-              </div>
-              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                {t.whatsNewBest3rdDesc}
+              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3 }}>🥉</span>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 1 }}>
+                  {t.whatsNewBest3rdTitle} →
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  {t.whatsNewBest3rdDesc}
+                </div>
               </div>
             </Link>
           </div>
         </div>
         <button
-          onClick={() => { localStorage.setItem(WHATS_NEW_KEY, '1'); setShow(false) }}
+          onClick={dismiss}
           style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 4px', flexShrink: 0 }}
           aria-label="Dismiss"
         >
