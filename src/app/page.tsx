@@ -168,6 +168,50 @@ function MyTeamWidget({ t }: { t: Translations }) {
   )
 }
 
+function NextMatchWidget({ t }: { t: Translations }) {
+  const [match, setMatch] = useState<Match | null>(null)
+
+  useEffect(() => {
+    supabase.from('matches')
+      .select('*')
+      .gt('kickoff_at', new Date().toISOString())
+      .neq('stage', 'Demo Match')
+      .order('kickoff_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setMatch(data))
+  }, [])
+
+  if (!match) return null
+
+  return (
+    <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #0d1520, #111)', borderColor: 'rgba(0,200,122,0.2)', textAlign: 'center' }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 10 }}>
+        {t.nextMatch}
+      </div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: 1, marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Flag emoji={match.home_flag} size={22} />
+          {match.home_team}
+        </span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {match.away_team}
+          <Flag emoji={match.away_flag} size={22} />
+        </span>
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>{match.stage}</div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+        {fmtDate(match.kickoff_at)} · {fmtKickoff(match.kickoff_at)}
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 14, marginBottom: 2 }}>
+        {t.nextMatchKickoffIn}
+      </div>
+      <MatchCountdown kickoffAt={match.kickoff_at} t={t} />
+    </div>
+  )
+}
+
 function Countdown({ t }: { t: Translations }) {
   const [time, setTime] = useState({ days: 0, hours: 0, mins: 0, secs: 0, started: false })
   useEffect(() => {
@@ -933,8 +977,11 @@ function HomeContent() {
       {/* First-time visitor explainer */}
       <FirstTimeCard />
 
-      {/* Countdown */}
+      {/* Countdown to tournament start — hidden once tournament begins */}
       <Countdown t={t} />
+
+      {/* Next match countdown — shown once tournament is underway */}
+      <NextMatchWidget t={t} />
 
       {/* Winner pick callout — shown before matches so it's the first thing seen */}
       {selectedPub && <WinnerPickCallout selectedPub={selectedPub} />}
