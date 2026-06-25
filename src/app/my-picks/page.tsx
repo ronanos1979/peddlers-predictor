@@ -125,9 +125,15 @@ function MyPicksContent() {
     }
   }, []) // eslint-disable-line
 
-  function pickLabel(pick: string, m: EntryWithMatch['matches']) {
-    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.home_team)}</>
-    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.away_team)}</>
+  function predictionLabel(pick: string, m: EntryWithMatch['matches']) {
+    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.home_team)}</>
+    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.away_team)}</>
+    return <>{t.draw}</>
+  }
+
+  function resultLabel(result: string, m: EntryWithMatch['matches']) {
+    if (result === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.home_team)}</>
+    if (result === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.away_team)}</>
     return <>{t.draw}</>
   }
 
@@ -445,8 +451,8 @@ function MyPicksContent() {
                     flexWrap: 'wrap', gap: 6
                   }}>
                     <div>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.yourPick}: </span>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(e.pick, m)}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.yourPrediction}: </span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{predictionLabel(e.pick, m)}</span>
                       {e.home_score_pred != null && e.away_score_pred != null && (
                         <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
                           ({e.home_score_pred}–{e.away_score_pred})
@@ -455,8 +461,8 @@ function MyPicksContent() {
                     </div>
                     {m.result && (
                       <div>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.result}: </span>
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{pickLabel(m.result, m)}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.actualResult}: </span>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{resultLabel(m.result, m)}</span>
                         {m.home_score != null && m.away_score != null && (
                           <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
                             ({m.home_score}–{m.away_score})

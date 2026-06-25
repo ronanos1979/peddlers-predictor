@@ -331,6 +331,8 @@ export const translations = {
     sameNumberHint: 'Make sure you use the same number you entered at the pub.',
     wrong: 'Wrong',
     yourPick: 'Your pick',
+    actualResult: 'Actual result',
+    teamToWin: '{team} to win',
     result: 'Result',
 
     // Home - discovery strip & onboarding
@@ -954,6 +956,8 @@ export const translations = {
     sameNumberHint: 'Asegúrate de usar el mismo número que ingresaste en el pub.',
     wrong: 'Incorrecto',
     yourPick: 'Tu pick',
+    actualResult: 'Resultado final',
+    teamToWin: '{team} para ganar',
     result: 'Resultado',
 
     // Home - discovery strip & onboarding
