@@ -131,14 +131,14 @@ function WinnerPickContent() {
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>
               {t.yourWCChampionPick}
             </div>
-            {pick?.team_flag && (
-              <div style={{ marginBottom: 10 }}>
-                <Flag emoji={pick.team_flag} size={52} />
-              </div>
+            {pick?.team_name && (
+              <Link href={`/world-cup/team?name=${encodeURIComponent(pick.team_name)}`} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-block' }}>
+                {pick.team_flag && <div style={{ marginBottom: 10 }}><Flag emoji={pick.team_flag} size={52} /></div>}
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 1, color: 'var(--gold)', marginBottom: 8 }}>
+                  {pick.team_name}
+                </div>
+              </Link>
             )}
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 1, color: 'var(--gold)', marginBottom: 8 }}>
-              {pick?.team_name}
-            </div>
             {pick?.is_correct === true && (
               <span style={{ background: 'rgba(0,200,122,0.15)', color: 'var(--green)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 6, padding: '5px 14px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>
                 {t.correctPlusN.replace('{n}', String(pickTickets))}

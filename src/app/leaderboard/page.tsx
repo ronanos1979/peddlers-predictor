@@ -115,8 +115,8 @@ function LeaderboardContent() {
 
   function pickLabel(pick: string, m: Match | null) {
     if (!m) return <>{pick}</>
-    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{m.home_team}</>
-    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{m.away_team}</>
+    if (pick === 'home') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{m.home_team}</Link></>
+    if (pick === 'away') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{m.away_team}</Link></>
     return <>{t.draw}</>
   }
 
@@ -129,7 +129,7 @@ function LeaderboardContent() {
         <h1>{t.leaderboard}</h1>
         <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>{t.leaderboardSub}</p>
         {match && view === 'predictions' && (
-          <p className="muted">{t.current}: <Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team} vs <Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</p>
+          <p className="muted">{t.current}: <Link href={`/world-cup/team?name=${encodeURIComponent(match.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team}</Link> vs <Link href={`/world-cup/team?name=${encodeURIComponent(match.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</Link></p>
         )}
       </div>
 

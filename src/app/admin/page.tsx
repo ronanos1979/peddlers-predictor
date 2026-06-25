@@ -618,7 +618,9 @@ export default function AdminPage() {
       <div className="admin-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>
-            {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
+            <a href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>{m.home_flag} {m.home_team}</a>
+            {' vs '}
+            <a href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>{m.away_flag} {m.away_team}</a>
           </div>
           <div className="muted" style={{ fontSize: 12 }}>
             {m.stage} · {fmt(m.kickoff_at)}
@@ -726,7 +728,7 @@ export default function AdminPage() {
                 )}
                 {patron.winner_pick && (
                   <span style={{ fontSize: 11, color: 'var(--amber)' }}>
-                    🏆 {patron.winner_pick.team_flag} {patron.winner_pick.team_name}
+                    🏆 <a href={`/world-cup/team?name=${encodeURIComponent(patron.winner_pick.team_name)}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>{patron.winner_pick.team_flag} {patron.winner_pick.team_name}</a>
                     {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓ +{patron.winner_pick.raffle_entries}</span>}
                     {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
                     {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)', opacity: 0.8 }}> ⏳+{patron.winner_pick.potential_raffle_entries ?? 15}</span>}

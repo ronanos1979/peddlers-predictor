@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { type Match } from '@/lib/supabase'
 import { isValidOverrideCode } from '@/lib/matchSchedule'
 import { loadPatron } from '@/lib/patron'
@@ -119,9 +120,9 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
           )}
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 1, marginBottom: 6 }}>
-          <Flag emoji={match.home_flag} size={18} style={{ marginRight: 5 }} />{match.home_team}
+          <Link href={`/world-cup/team?name=${encodeURIComponent(match.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.home_flag} size={18} style={{ marginRight: 5 }} />{match.home_team}</Link>
           <span style={{ color: 'var(--text-muted)', fontSize: 15, fontFamily: 'var(--font-cond)', fontWeight: 400 }}> vs </span>
-          <Flag emoji={match.away_flag} size={18} style={{ marginRight: 5 }} />{match.away_team}
+          <Link href={`/world-cup/team?name=${encodeURIComponent(match.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.away_flag} size={18} style={{ marginRight: 5 }} />{match.away_team}</Link>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
           {match.stage}{match.venue ? ` · ${match.venue}` : ''} · The Peddler&apos;s Daughter, {pubCity}

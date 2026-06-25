@@ -126,14 +126,14 @@ function MyPicksContent() {
   }, []) // eslint-disable-line
 
   function predictionLabel(pick: string, m: EntryWithMatch['matches']) {
-    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.home_team)}</>
-    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.away_team)}</>
+    if (pick === 'home') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.home_team)}</Link></>
+    if (pick === 'away') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.away_team)}</Link></>
     return <>{t.draw}</>
   }
 
   function resultLabel(result: string, m: EntryWithMatch['matches']) {
-    if (result === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.home_team)}</>
-    if (result === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.away_team)}</>
+    if (result === 'home') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.home_team)}</Link></>
+    if (result === 'away') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{t.teamWon.replace('{team}', m.away_team)}</Link></>
     return <>{t.draw}</>
   }
 
