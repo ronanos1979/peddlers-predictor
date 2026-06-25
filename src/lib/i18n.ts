@@ -266,6 +266,9 @@ export const translations = {
     best3rdNotQualifying: 'Currently Not Qualifying',
     best3rdComplete: '{done}/12 groups complete',
     best3rdInProgress: '{n} group(s) still in progress — standings may change',
+    groupMatchProgress: '{played}/{total} played',
+    groupAllComplete: 'All {total} played',
+    eliminatedGroupStage: 'This team finished 4th in their group and has been eliminated.',
 
     // Breadcrumb labels
     crumbFeedback: 'Feedback',
@@ -905,6 +908,9 @@ export const translations = {
     best3rdNotQualifying: 'Actualmente Sin Clasificar',
     best3rdComplete: '{done}/12 grupos completados',
     best3rdInProgress: '{n} grupo(s) aún en curso — las posiciones pueden cambiar',
+    groupMatchProgress: '{played}/{total} jugados',
+    groupAllComplete: 'Los {total} jugados',
+    eliminatedGroupStage: 'Este equipo terminó 4.° en su grupo y ha sido eliminado.',
 
     // Breadcrumb labels
     crumbFeedback: 'Comentarios',

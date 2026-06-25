@@ -246,6 +246,23 @@ function GroupEntryCard({ entry, qualifying, t }: CardProps) {
           </div>
         </div>
       </div>
+      {/* Current prediction row */}
+      <div style={{ padding: '7px 14px 8px 54px', borderTop: '1px solid var(--border)', background: qualifying ? 'rgba(0,200,122,0.04)' : 'transparent', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: qualifying ? 'var(--green)' : 'var(--text-muted)', fontWeight: 700 }}>
+          {qualifying
+            ? groupComplete
+              ? '✓ Qualified for Round of 32'
+              : '→ On course for Round of 32'
+            : groupComplete
+              ? '✗ Did not qualify'
+              : '→ Currently outside top 8'}
+        </span>
+        {!groupComplete && (
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)' }}>
+            · may change
+          </span>
+        )}
+      </div>
 
       {/* Contenders row for incomplete groups */}
       {!groupComplete && contenders.length > 0 && (

@@ -136,7 +136,9 @@ function TeamContent() {
       .catch(() => {})
   }, [localScheduleTeamName, teamName, allSortedMatches])
 
-  // Auto-set path position to confirmed finish position once all group games are done
+  // Auto-set path position to confirmed finish position once all group games are done.
+  // groupStandings is sorted by global rank ascending — array index = group position (0=1st, 1=2nd, 2=3rd, 3=4th).
+  // Do NOT use myRow.rank (global 1-48); use groupStandings.indexOf(myRow) instead.
   useEffect(() => {
     const sched = localScheduleTeamName || teamName || ''
     if (!sched || groupStandings.length === 0) return
@@ -144,8 +146,9 @@ function TeamContent() {
     if (groupMatches.length !== 3 || groupMatches.some(m => !m.result)) return
     const myRow = groupStandings.find(r => normForStandings(r.team.name) === normForStandings(sched))
     if (!myRow) return
-    if (myRow.rank === 1) setPathPosition('1st')
-    else if (myRow.rank === 2) setPathPosition('2nd')
+    const groupPos = groupStandings.indexOf(myRow) // 0=1st, 1=2nd, 2=3rd, 3=4th
+    if (groupPos === 0) setPathPosition('1st')
+    else if (groupPos === 1) setPathPosition('2nd')
     else setPathPosition('best_3rd')
   }, [localMatches, groupStandings, localScheduleTeamName, teamName])
 
@@ -428,8 +431,16 @@ function TeamContent() {
   const myStandingRow = currentGroup && groupStandings.length > 0
     ? groupStandings.find(r => normForStandings(r.team.name) === normForStandings(schedName))
     : null
-  const finishPosition = allGroupGamesDone ? (myStandingRow?.rank ?? null) : null
+  // groupStandings is sorted by global rank — use array index for GROUP position (0=1st … 3=4th).
+  // myStandingRow.rank is the GLOBAL rank (1-48) and must NOT be used for group position logic.
+  const myGroupPos = myStandingRow ? groupStandings.indexOf(myStandingRow) : -1 // 0-based
+  const finishPosition = allGroupGamesDone && myGroupPos >= 0 ? (myGroupPos + 1) : null // 1-based (1–4)
   const qualified = finishPosition !== null && finishPosition <= 2
+  // Count total group matches played across all 4 teams (each match adds 1 to both teams' played count)
+  const groupTotalPlayed = groupStandings.length > 0
+    ? Math.round(groupStandings.reduce((s, r) => s + r.all.played, 0) / 2)
+    : groupGamesPlayed
+  const GROUP_TOTAL_MATCHES = 6 // 4 teams, C(4,2) = 6 round-robin matches
   const posSlot = qualified
     ? (finishPosition === 1 ? `Group ${currentGroup} Winner` : `Group ${currentGroup} Runner-up`)
     : null
@@ -536,7 +547,7 @@ function TeamContent() {
                             const isThis = normForStandings(row.team.name) === normForStandings(schedName)
                             return (
                               <tr key={row.team.id} style={{ borderBottom: i < groupStandings.length - 1 ? '1px solid var(--border)' : 'none', background: isThis ? 'rgba(245,197,24,0.07)' : i < 2 ? 'rgba(0,200,122,0.04)' : 'transparent' }}>
-                                <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{row.rank}</td>
+                                <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
                                 <td style={{ padding: '9px 8px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }} />}
@@ -575,6 +586,16 @@ function TeamContent() {
                       {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
                     </div>
                   </div>
+                )}
+                {finishPosition === 3 && (
+                  <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
+                    </div>
+                    <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
+                  </Link>
                 )}
               </div>
             )}
@@ -697,8 +718,13 @@ function TeamContent() {
               </div>
               {standingsOpen && groupStandings.length > 0 && (
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
-                  <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>
-                    Group {currentGroup}
+                  <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>Group {currentGroup}</span>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: groupTotalPlayed >= GROUP_TOTAL_MATCHES ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>
+                      {groupTotalPlayed >= GROUP_TOTAL_MATCHES
+                        ? t.groupAllComplete.replace('{total}', String(GROUP_TOTAL_MATCHES))
+                        : t.groupMatchProgress.replace('{played}', String(groupTotalPlayed)).replace('{total}', String(GROUP_TOTAL_MATCHES))}
+                    </span>
                   </div>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -714,7 +740,7 @@ function TeamContent() {
                           const isThis = normForStandings(row.team.name) === normForStandings(schedName)
                           return (
                             <tr key={row.team.id} style={{ borderBottom: i < groupStandings.length - 1 ? '1px solid var(--border)' : 'none', background: isThis ? 'rgba(245,197,24,0.07)' : i < 2 ? 'rgba(0,200,122,0.04)' : 'transparent' }}>
-                              <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{row.rank}</td>
+                              <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
                               <td style={{ padding: '9px 8px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }} />}
@@ -754,6 +780,16 @@ function TeamContent() {
                   </div>
                 </div>
               )}
+              {finishPosition === 3 && (
+                <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
+                  </div>
+                  <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
+                </Link>
+              )}
             </div>
           )}
 
@@ -783,8 +819,8 @@ function TeamContent() {
             </button>
           </div>
 
-          {/* Path to Final promo — shown when on Squad tab to surface the feature */}
-          {tab === 'squad' && (
+          {/* Path to Final promo — shown when on Squad tab to surface the feature (hidden if eliminated) */}
+          {tab === 'squad' && finishPosition !== 4 && (
             <button onClick={() => setTab('fixtures')} style={{
               width: '100%', marginBottom: 16,
               padding: '13px 16px',
@@ -921,6 +957,18 @@ function TeamContent() {
                   </div>
                 )}
 
+                {/* Eliminated — hide selector and path chains */}
+                {finishPosition === 4 ? (
+                  <div style={{ padding: '14px 16px', background: 'rgba(255,59,59,0.07)', border: '1px solid rgba(255,59,59,0.25)', borderRadius: 10, marginBottom: 16 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--red)', marginBottom: 4 }}>
+                      {t.eliminated}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      {t.eliminatedGroupStage}
+                    </div>
+                  </div>
+                ) : (
+                <>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, marginTop: 0 }}>
                   {t.pathToFinalSub}
                 </p>
@@ -1071,6 +1119,8 @@ function TeamContent() {
                 }}>
                   {t.pathLinkHowToQualify}
                 </Link>
+              </>
+                )}
               </>
             )
           })()}
