@@ -237,6 +237,7 @@ function TeamContent() {
   const [allGroupStandings, setAllGroupStandings] = useState<StandingRow[][]>([])
   const [standingsOpen, setStandingsOpen] = useState(false)
   const [selectedChainIdx, setSelectedChainIdx] = useState(0)
+  const [groupStageOpen, setGroupStageOpen] = useState(false)
 
   useEffect(() => {
     setSavedTeam(readSavedTeam())
@@ -1109,52 +1110,89 @@ function TeamContent() {
             return (
               <>
                 {/* Group stage results */}
-                {groupStageMatches.length > 0 && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-                      {t.groupStage}
-                    </div>
-                    {groupStageMatches.map(match => {
-                      const isHome = match.home_team === localScheduleTeamName
-                      const opponent = isHome ? match.away_team : match.home_team
-                      const opponentFlag = isHome ? match.away_flag : match.home_flag
-                      const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
-                      const resultLabel = match.result ? resultMap[match.result] : null
-                      const borderColor = resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
-                      const resultColor = resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
-                      return (
-                        <div key={match.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '12px 14px', background: 'var(--surface)',
-                          border: `1px solid ${borderColor}`,
-                          borderRadius: 8, marginBottom: 6
-                        }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
-                              {match.stage}
-                            </div>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} />{opponent}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
+                {groupStageMatches.length > 0 && (() => {
+                  const matchRows = groupStageMatches.map(match => {
+                    const isHome = match.home_team === localScheduleTeamName
+                    const opponent = isHome ? match.away_team : match.home_team
+                    const opponentFlag = isHome ? match.away_flag : match.home_flag
+                    const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
+                    const resultLabel = match.result ? resultMap[match.result] : null
+                    const borderColor = resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
+                    const resultColor = resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
+                    return (
+                      <div key={match.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 14px', background: 'var(--surface)',
+                        border: `1px solid ${borderColor}`,
+                        borderRadius: 8, marginBottom: 6
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
+                            {match.stage}
                           </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            {match.result ? (
-                              <>
-                                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
-                                  {isHome ? match.home_score : match.away_score} – {isHome ? match.away_score : match.home_score}
-                                </div>
-                                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor }}>
-                                  {resultLabel}
-                                </div>
-                              </>
-                            ) : null}
+                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} />{opponent}
                           </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {match.result ? (
+                            <>
+                              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
+                                {isHome ? match.home_score : match.away_score} – {isHome ? match.away_score : match.home_score}
+                              </div>
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor }}>
+                                {resultLabel}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })
+                  if (!allGroupGamesDone) {
+                    // Group still in progress — show inline, no toggle
+                    return (
+                      <div style={{ marginBottom: 22 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                          {t.groupStage}
+                        </div>
+                        {matchRows}
+                      </div>
+                    )
+                  }
+                  // Group complete — collapsible, default closed
+                  const wins = groupStageMatches.filter(m => { const r = m.home_team === localScheduleTeamName ? m.result === 'home' : m.result === 'away'; return r }).length
+                  const draws = groupStageMatches.filter(m => m.result === 'draw').length
+                  const losses = groupStageMatches.filter(m => m.result && !( m.home_team === localScheduleTeamName ? m.result === 'home' : m.result === 'away') && m.result !== 'draw').length
+                  return (
+                    <div style={{ marginBottom: 22 }}>
+                      <button
+                        onClick={() => setGroupStageOpen(o => !o)}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: groupStageOpen ? '8px 8px 0 0' : 8,
+                          padding: '10px 14px', cursor: 'pointer', marginBottom: 0,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            {t.groupStage}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: 0.5 }}>
+                            {wins}W · {draws}D · {losses}L
+                          </span>
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>{groupStageOpen ? '▲' : '▼'}</span>
+                      </button>
+                      {groupStageOpen && (
+                        <div style={{ border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '10px 0 4px', marginBottom: 0 }}>
+                          <div style={{ padding: '0 0 6px' }}>{matchRows}</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Eliminated — hide selector and path chains */}
                 {finishPosition === 4 ? (
