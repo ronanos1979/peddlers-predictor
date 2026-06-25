@@ -66,6 +66,51 @@ function isPlaceholderTeam(name: string) {
   return /\b(TBD|Winner|Runner-up|3rd Place|R32|QF|SF)\b/i.test(name)
 }
 
+type ResolvedOpponent = { label: string; confirmed: boolean; schedName: string | null }
+type MatchRecord = Match
+
+function Possible3rdOpponents({
+  matches, resolveOpponent, t,
+}: {
+  matches: MatchRecord[]
+  resolveOpponent: (slot: string) => ResolvedOpponent
+  t: ReturnType<typeof useLocale>['t']
+}) {
+  if (matches.length === 0) return null
+  return (
+    <div style={{ marginTop: 8, padding: '12px 14px', background: 'rgba(245,197,24,0.05)', border: '1px solid rgba(245,197,24,0.2)', borderRadius: 10 }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
+        Possible Round of 32 Opponent
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+        The exact opponent depends on which 8 of the 12 third-placed teams qualify. FIFA uses a fixed allocation table.
+      </div>
+      {matches.map(m => {
+        const third3slot  = isPlaceholderTeam(m.home_team) && /3rd Place/i.test(m.home_team) ? m.home_team : m.away_team
+        const opponentSlot = third3slot === m.home_team ? m.away_team : m.home_team
+        const opp = resolveOpponent(opponentSlot)
+        return (
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: opp.confirmed ? 'var(--text)' : 'var(--text-muted)' }}>
+                {opp.schedName
+                  ? <Link href={`/world-cup/team?name=${encodeURIComponent(opp.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{opp.label}</Link>
+                  : opp.label
+                }
+                {opp.confirmed && <span style={{ marginLeft: 5, fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>✓ confirmed</span>}
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                {m.stage} · {new Date(m.kickoff_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {m.venue && <span style={{ opacity: 0.7 }}> · {m.venue}</span>}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function savedTeamHref(team: SavedTeam) {
   return team.id.startsWith('name:')
     ? `/world-cup/team?name=${encodeURIComponent(team.name)}`
@@ -106,6 +151,7 @@ function TeamContent() {
   const [allSortedMatches, setAllSortedMatches] = useState<MatchRecord[]>([])
   const [pathPosition, setPathPosition] = useState<PathPosition>('1st')
   const [groupStandings, setGroupStandings] = useState<StandingRow[]>([])
+  const [allGroupStandings, setAllGroupStandings] = useState<StandingRow[][]>([])
   const [standingsOpen, setStandingsOpen] = useState(false)
 
   useEffect(() => {
@@ -132,6 +178,7 @@ function TeamContent() {
       .then(data => {
         const raw: StandingRow[][] = data.response?.[0]?.league?.standings ?? []
         setGroupStandings(raw[idx] ?? [])
+        setAllGroupStandings(raw)
       })
       .catch(() => {})
   }, [localScheduleTeamName, teamName, allSortedMatches])
@@ -448,6 +495,47 @@ function TeamContent() {
     ? (allSortedMatches.find(m => m.home_team === posSlot || m.away_team === posSlot) ?? null)
     : null
 
+  // For 3rd-placed teams: find all R32 matches that could receive this team based on FIFA's
+  // fixed allocation table. Each R32 slot stores "3rd Place (A/B/C/D/F)" in the DB — we check
+  // if currentGroup appears in that list. The other side of the match is the potential opponent.
+  const FD_TO_SCHED_MAP: Record<string, string> = {
+    'United States': 'USA', 'Korea Republic': 'South Korea',
+    "Côte d'Ivoire": 'Ivory Coast', 'Turkey': 'Türkiye',
+    'Czech Republic': 'Czechia', 'Cape Verde Islands': 'Cape Verde',
+    'Bosnia-Herzegovina': 'Bosnia & Herzegovina', 'Cabo Verde': 'Cape Verde',
+  }
+  function resolveOpponent(slot: string): { label: string; confirmed: boolean; schedName: string | null } {
+    const winnerM = slot.match(/^Group ([A-L]) Winner$/i)
+    if (winnerM) {
+      const g = allGroupStandings[winnerM[1].toUpperCase().charCodeAt(0) - 65]
+      if (g && g.length >= 4 && g.every(r => r.all.played >= 3)) {
+        const name = g[0].team.name
+        return { label: FD_TO_SCHED_MAP[name] ?? name, confirmed: true, schedName: FD_TO_SCHED_MAP[name] ?? name }
+      }
+      return { label: `1st · Group ${winnerM[1].toUpperCase()}`, confirmed: false, schedName: null }
+    }
+    const runnerM = slot.match(/^Group ([A-L]) Runner-up$/i)
+    if (runnerM) {
+      const g = allGroupStandings[runnerM[1].toUpperCase().charCodeAt(0) - 65]
+      if (g && g.length >= 4 && g.every(r => r.all.played >= 3)) {
+        const name = g[1].team.name
+        return { label: FD_TO_SCHED_MAP[name] ?? name, confirmed: true, schedName: FD_TO_SCHED_MAP[name] ?? name }
+      }
+      return { label: `2nd · Group ${runnerM[1].toUpperCase()}`, confirmed: false, schedName: null }
+    }
+    return { label: formatPlaceholder(slot), confirmed: false, schedName: null }
+  }
+  const possible3rdMatches = (finishPosition === 3 && currentGroup && allGroupGamesDone)
+    ? allSortedMatches.filter(m => m.stage === 'Round of 32' && (() => {
+        const checkSlot = (slot: string) => {
+          const mm = slot.match(/^3rd Place \(([^)]+)\)/i)
+          return mm ? mm[1].split('/').map(s => s.trim()).includes(currentGroup) : false
+        }
+        return (isPlaceholderTeam(m.home_team) && checkSlot(m.home_team))
+            || (isPlaceholderTeam(m.away_team) && checkSlot(m.away_team))
+      })())
+    : []
+
   function statusLabel() {
     if (finishPosition === 1) return t.pathAs1st.replace('{group}', currentGroup ?? '')
     if (finishPosition === 2) return t.pathAs2nd.replace('{group}', currentGroup ?? '')
@@ -588,14 +676,17 @@ function TeamContent() {
                   </div>
                 )}
                 {finishPosition === 3 && (
-                  <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
-                    <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
-                    </div>
-                    <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
-                  </Link>
+                  <>
+                    <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
+                      </div>
+                      <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
+                    </Link>
+                    {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} t={t} />}
+                  </>
                 )}
               </div>
             )}
@@ -781,14 +872,17 @@ function TeamContent() {
                 </div>
               )}
               {finishPosition === 3 && (
-                <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
-                  </div>
-                  <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
-                </Link>
+                <>
+                  <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
+                    </div>
+                    <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
+                  </Link>
+                  {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} t={t} />}
+                </>
               )}
             </div>
           )}

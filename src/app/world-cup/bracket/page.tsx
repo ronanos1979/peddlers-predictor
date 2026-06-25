@@ -6,6 +6,49 @@ import Flag from '@/components/Flag'
 import Link from 'next/link'
 import { isPlaceholder, parseGroupLetters, formatPlaceholder, parseMatchNumber } from './bracketHelpers'
 
+// FD team name → our schedule name
+const FD_TO_SCHED: Record<string, string> = {
+  'United States': 'USA',
+  'Korea Republic': 'South Korea',
+  "Côte d'Ivoire": 'Ivory Coast',
+  'Turkey': 'Türkiye',
+  'Czech Republic': 'Czechia',
+  'Cape Verde Islands': 'Cape Verde',
+  'Bosnia-Herzegovina': 'Bosnia & Herzegovina',
+  'Cabo Verde': 'Cape Verde',
+}
+function fdSched(n: string): string { return FD_TO_SCHED[n] ?? n }
+
+// A group is confirmed complete when all 4 teams have played all 3 games
+function groupDone(group: Standing[]): boolean {
+  return group.length >= 4 && group.every(r => r.all.played >= 3)
+}
+
+// Resolve "Group A Winner" / "Group A Runner-up" to the actual team when the group is finished.
+// Returns null if the slot is a 3rd-place slot or a match-number reference, or the group isn't done yet.
+function resolveGroupSlot(
+  name: string,
+  groupMap: GroupMap,
+): { name: string; schedName: string; logo: string } | null {
+  const winnerM = name.match(/^Group ([A-L]) Winner$/i)
+  if (winnerM) {
+    const g = groupMap[winnerM[1].toUpperCase()]
+    if (g && groupDone(g)) {
+      const t = g[0].team
+      return { name: t.name, schedName: fdSched(t.name), logo: t.logo }
+    }
+  }
+  const runnerM = name.match(/^Group ([A-L]) Runner-up$/i)
+  if (runnerM) {
+    const g = groupMap[runnerM[1].toUpperCase()]
+    if (g && groupDone(g)) {
+      const t = g[1].team
+      return { name: t.name, schedName: fdSched(t.name), logo: t.logo }
+    }
+  }
+  return null
+}
+
 const KNOCKOUT_STAGES = [
   'Round of 32',
   'Round of 16',
@@ -80,7 +123,7 @@ function GroupTable({
               <tbody>
                 {rows.map((s, ri) => (
                   <tr key={s.team.id} style={{ background: ri < 2 ? 'rgba(0,200,122,0.05)' : 'transparent' }}>
-                    <td style={{ padding: '5px 5px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: ri < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{s.rank}</td>
+                    <td style={{ padding: '5px 5px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: ri < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{ri + 1}</td>
                     <td style={{ padding: '5px 5px' }}>
                       <Link href={`/world-cup/team?id=${s.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                         {s.team.logo && <img src={s.team.logo} alt="" style={{ width: 12, height: 12, objectFit: 'contain', flexShrink: 0 }} />}
@@ -157,6 +200,75 @@ function SourceMatchPanel({
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+type ResolvedTeam = { name: string; schedName: string; logo: string }
+
+function TeamSlot({
+  dbName, isPlaceholder: isPH, resolved, flag, result, noBorderBottom,
+}: {
+  dbName: string
+  isPlaceholder: boolean
+  resolved: ResolvedTeam | null
+  flag: string
+  result: string | null
+  noBorderBottom?: boolean
+}) {
+  const borderStyle = noBorderBottom ? {} : { borderBottom: '1px solid var(--border)' }
+
+  if (!isPH) {
+    // Confirmed real team from DB
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle }}>
+        <Link href={`/world-cup/team?name=${encodeURIComponent(dbName)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none' }}>
+          <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Flag emoji={flag} size={22} />
+          </span>
+          <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: result === 'W' ? 'var(--green)' : result === 'L' ? 'var(--text-muted)' : 'var(--text)' }}>
+            {dbName}
+          </span>
+        </Link>
+        {result && (
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: result === 'W' ? 'var(--green)' : result === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
+            {result}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  if (resolved) {
+    // Group is complete — confirmed team from standings, not yet written to DB
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle }}>
+        <Link href={`/world-cup/team?name=${encodeURIComponent(resolved.schedName)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none' }}>
+          <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            {resolved.logo
+              ? <img src={resolved.logo} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} />
+              : <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span>
+            }
+          </span>
+          <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
+            {resolved.name}
+          </span>
+        </Link>
+        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)', opacity: 0.8 }}>
+          ✓ confirmed
+        </span>
+      </div>
+    )
+  }
+
+  // Unknown placeholder
+  const label = formatPlaceholder(dbName)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle, opacity: 0.7 }}>
+      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span>
+      </span>
+      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>{label}</span>
+    </div>
+  )
+}
 
 function resultLabel(m: Match, side: 'home' | 'away') {
   if (!m.result) return null
@@ -296,13 +408,16 @@ export default function BracketPage() {
           const awayRes = resultLabel(m, 'away')
           const expanded = expandedCards.has(m.id)
 
-          const homeLabel = homePH ? formatPlaceholder(m.home_team) : m.home_team
-          const awayLabel = awayPH ? formatPlaceholder(m.away_team) : m.away_team
+          // Resolve confirmed group winners/runners-up from completed standings
+          const homeResolved = homePH ? resolveGroupSlot(m.home_team, groupMap) : null
+          const awayResolved = awayPH ? resolveGroupSlot(m.away_team, groupMap) : null
+          const homeLabel = homeResolved ? homeResolved.name : homePH ? formatPlaceholder(m.home_team) : m.home_team
+          const awayLabel = awayResolved ? awayResolved.name : awayPH ? formatPlaceholder(m.away_team) : m.away_team
 
-          // R32: extract group letters from placeholder slots
+          // R32: extract group letters from placeholder slots (only unresolved ones need the widget)
           const involvedGroups = [
-            ...(homePH ? parseGroupLetters(m.home_team) : []),
-            ...(awayPH ? parseGroupLetters(m.away_team) : []),
+            ...(homePH && !homeResolved ? parseGroupLetters(m.home_team) : []),
+            ...(awayPH && !awayResolved ? parseGroupLetters(m.away_team) : []),
           ].filter((g, idx, arr) => arr.indexOf(g) === idx).sort()
 
           // R16: check if slots reference R32 match numbers
@@ -348,56 +463,15 @@ export default function BracketPage() {
               {/* Teams */}
               <div style={{ padding: '0 14px' }}>
                 {/* Home */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: '1px solid var(--border)', opacity: homePH ? 0.7 : 1 }}>
-                  {homePH ? (
-                    <>
-                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span>
-                      </span>
-                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>{homeLabel}</span>
-                    </>
-                  ) : (
-                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none' }}>
-                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Flag emoji={m.home_flag} size={22} />
-                      </span>
-                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--text-muted)' : 'var(--text)' }}>
-                        {homeLabel}
-                      </span>
-                    </Link>
-                  )}
-                  {homeRes && (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: homeRes === 'W' ? 'var(--green)' : homeRes === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
-                      {homeRes}
-                    </span>
-                  )}
-                </div>
-
+                <TeamSlot
+                  dbName={m.home_team} isPlaceholder={homePH} resolved={homeResolved}
+                  flag={m.home_flag} result={homeRes}
+                />
                 {/* Away */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', opacity: awayPH ? 0.7 : 1 }}>
-                  {awayPH ? (
-                    <>
-                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontSize: 22, lineHeight: 1 }}>🏳</span>
-                      </span>
-                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>{awayLabel}</span>
-                    </>
-                  ) : (
-                    <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none' }}>
-                      <span style={{ width: 28, textAlign: 'center', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Flag emoji={m.away_flag} size={22} />
-                      </span>
-                      <span style={{ flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--text-muted)' : 'var(--text)' }}>
-                        {awayLabel}
-                      </span>
-                    </Link>
-                  )}
-                  {awayRes && (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: 1, color: awayRes === 'W' ? 'var(--green)' : awayRes === 'L' ? 'var(--red)' : 'var(--text-muted)' }}>
-                      {awayRes}
-                    </span>
-                  )}
-                </div>
+                <TeamSlot
+                  dbName={m.away_team} isPlaceholder={awayPH} resolved={awayResolved}
+                  flag={m.away_flag} result={awayRes} noBorderBottom
+                />
               </div>
 
               {/* Expandable drill-down widget (R32: groups · R16: source R32 matches) */}
