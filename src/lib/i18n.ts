@@ -399,6 +399,8 @@ export const translations = {
 
     // Leaderboard
     leaderboardSub: 'Raffle ticket standings — more tickets = more chances, but anyone can win the draw',
+    totalTicketsPool: '{n} total tickets in the pool',
+    oddsLabel: '{pct}% odds',
     matchSingular: 'match',
     matchPlural: 'matches',
 
@@ -1046,6 +1048,8 @@ export const translations = {
 
     // Leaderboard
     leaderboardSub: 'Clasificación de boletos — más boletos = más chances, pero cualquiera puede ganar',
+    totalTicketsPool: '{n} boletos en total en el sorteo',
+    oddsLabel: '{pct}% probabilidad',
     matchSingular: 'partido',
     matchPlural: 'partidos',
 

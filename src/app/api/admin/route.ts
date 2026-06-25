@@ -342,6 +342,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, count: result.events.length, events: result.events, espn_event_id: result.espnEventId })
     }
 
+    if (action === 'mark_ineligible') {
+      const { phone, name } = payload as { phone: string; name: string }
+      if (!phone) return NextResponse.json({ error: 'phone required' }, { status: 400 })
+      await supabaseAdmin.from('ineligible_patrons').upsert({ phone, name }, { onConflict: 'phone' })
+      return NextResponse.json({ success: true })
+    }
+
+    if (action === 'mark_eligible') {
+      const { phone } = payload as { phone: string }
+      if (!phone) return NextResponse.json({ error: 'phone required' }, { status: 400 })
+      await supabaseAdmin.from('ineligible_patrons').delete().eq('phone', phone)
+      return NextResponse.json({ success: true })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err) {
     console.error('Admin API error:', err)

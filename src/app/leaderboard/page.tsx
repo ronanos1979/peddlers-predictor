@@ -111,6 +111,7 @@ function LeaderboardContent() {
   const filteredAttendance = filter === 'this_pub' && pubId
     ? attendanceEntries.filter(e => e.pub_id === pubId)
     : attendanceEntries
+  const totalPoolTickets = filtered.reduce((s, e) => s + e.total_pts, 0)
   const medals = ['🥇', '🥈', '🥉']
 
   function pickLabel(pick: string, m: Match | null) {
@@ -128,6 +129,13 @@ function LeaderboardContent() {
         </div>
         <h1>{t.leaderboard}</h1>
         <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>{t.leaderboardSub}</p>
+        {view === 'predictions' && totalPoolTickets > 0 && (
+          <div style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px', background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.25)', borderRadius: 20 }}>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>
+              🎟 {t.totalTicketsPool.replace('{n}', totalPoolTickets.toLocaleString())}
+            </span>
+          </div>
+        )}
         {match && view === 'predictions' && (
           <p className="muted">{t.current}: <Link href={`/world-cup/team?name=${encodeURIComponent(match.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team}</Link> vs <Link href={`/world-cup/team?name=${encodeURIComponent(match.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</Link></p>
         )}
@@ -197,6 +205,11 @@ function LeaderboardContent() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="lb-pts">{e.total_pts}</div>
+                {totalPoolTickets > 0 && (
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.3, color: 'var(--text-dim)', marginTop: 1 }}>
+                    / {totalPoolTickets.toLocaleString()} · {(e.total_pts / totalPoolTickets * 100).toFixed(1)}%
+                  </div>
+                )}
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{t.tickets}</div>
               </div>
             </div>

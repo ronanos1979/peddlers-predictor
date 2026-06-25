@@ -111,5 +111,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ feedback: data || [] })
   }
 
+  if (action === 'ineligible') {
+    const { data } = await supabaseAdmin
+      .from('ineligible_patrons')
+      .select('phone, name, created_at')
+      .order('created_at', { ascending: false })
+    return NextResponse.json({ ineligible: data || [] })
+  }
+
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }

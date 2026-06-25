@@ -94,6 +94,8 @@ export default function AdminPage() {
     typeof window !== 'undefined' ? parseInt(localStorage.getItem('checkin_min_draw') || '10', 10) : 10
   )
   const [drawingMatchId, setDrawingMatchId] = useState<string | null>(null)
+  const [ineligiblePhones, setIneligiblePhones] = useState<Set<string>>(new Set())
+  const [togglingIneligible, setTogglingIneligible] = useState<string | null>(null)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -194,6 +196,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
     if (authed && tab === 'analytics' && analyticsEvents === null) loadAnalytics(analyticsDays)
+    if (authed && (tab === 'entrants' || tab === 'raffle') && ineligiblePhones.size === 0) loadIneligible()
   }, [authed, tab]) // eslint-disable-line
 
   useEffect(() => {
@@ -270,10 +273,40 @@ export default function AdminPage() {
     })
   }
 
+  async function loadIneligible() {
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=ineligible`)
+    const data = await res.json()
+    setIneligiblePhones(new Set((data.ineligible || []).map((r: { phone: string }) => r.phone)))
+  }
+
+  async function toggleIneligible(phone: string, name: string) {
+    setTogglingIneligible(phone)
+    const isCurrentlyIneligible = ineligiblePhones.has(phone)
+    const action = isCurrentlyIneligible ? 'mark_eligible' : 'mark_ineligible'
+    await fetch('/api/admin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action, payload: { phone, name } }),
+    })
+    setIneligiblePhones(prev => {
+      const next = new Set(prev)
+      if (isCurrentlyIneligible) next.delete(phone)
+      else next.add(phone)
+      return next
+    })
+    setRafflePoolLoaded(false) // force raffle pool refresh
+    setTogglingIneligible(null)
+  }
+
   async function loadRafflePool() {
     setRafflePoolLoaded(false)
-    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=entrants`)
-    const data = await res.json()
+    const [entrantsRes, ineligibleRes] = await Promise.all([
+      fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=entrants`),
+      fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=ineligible`),
+    ])
+    const data = await entrantsRes.json()
+    const ineligibleData = await ineligibleRes.json()
+    const blocked = new Set<string>((ineligibleData.ineligible || []).map((r: { phone: string }) => r.phone))
+    setIneligiblePhones(blocked)
     const rows: EntryRow[] = data.entries || []
     const winnerPicks: WinnerPickRow[] = data.winner_picks || []
     const scorerPicks: ScorerPickRow[] = data.scorer_picks || []
@@ -296,7 +329,7 @@ export default function AdminPage() {
       }
     }
     const pool = Array.from(byPhone.values())
-      .filter(p => p.tickets > 0)
+      .filter(p => p.tickets > 0 && !blocked.has(p.phone))
       .sort((a, b) => b.tickets - a.tickets)
     setRafflePool(pool)
     setRafflePoolLoaded(true)
@@ -720,8 +753,10 @@ export default function AdminPage() {
 
   function PatronSummaryRow({ patron }: { patron: PatronSummary }) {
     const [expanded, setExpanded] = useState(false)
+    const isIneligible = ineligiblePhones.has(patron.phone)
+    const isToggling = togglingIneligible === patron.phone
     return (
-      <div style={{ background: 'var(--white)', border: '1px solid var(--gray-border)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--white)', border: `1px solid ${isIneligible ? 'rgba(255,59,59,0.4)' : 'var(--gray-border)'}`, borderRadius: 10, marginBottom: 8, overflow: 'hidden', opacity: isIneligible ? 0.75 : 1 }}>
         <div onClick={() => setExpanded(e => !e)} style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▶</span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -770,9 +805,17 @@ export default function AdminPage() {
               <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>✗</div>
             </div>
             <div style={{ textAlign: 'center', minWidth: 36, borderLeft: '1px solid var(--border)', paddingLeft: 8 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gold)' }}>{patron.raffle_entries}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: isIneligible ? 'var(--text-dim)' : 'var(--gold)', textDecoration: isIneligible ? 'line-through' : 'none' }}>{patron.raffle_entries}</div>
               <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>tickets</div>
             </div>
+            <button
+              onClick={e => { e.stopPropagation(); toggleIneligible(patron.phone, patron.name) }}
+              disabled={isToggling}
+              title={isIneligible ? 'Remove ineligibility' : 'Mark ineligible (hidden from patron)'}
+              style={{ padding: '4px 7px', borderRadius: 6, border: `1px solid ${isIneligible ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`, background: isIneligible ? 'rgba(255,59,59,0.15)' : 'transparent', cursor: 'pointer', fontSize: 14, opacity: isToggling ? 0.5 : 1 }}
+            >
+              {isIneligible ? '🚫' : '☑'}
+            </button>
           </div>
         </div>
         {expanded && (
@@ -1502,8 +1545,14 @@ export default function AdminPage() {
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 6 }}>
               How it works
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-              Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Wrong = 0 tickets. The draw is weighted — more tickets = better odds. Draw 1st, 2nd, and 3rd place winners.
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.6 }}>
+              Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Hat-trick bonus = <strong style={{ color: 'var(--gold)' }}>+7 tickets</strong>. Winner pick = <strong style={{ color: 'var(--gold)' }}>+15</strong>. Golden Boot = <strong style={{ color: 'var(--gold)' }}>+10</strong>. Wrong = 0 tickets.
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.6 }}>
+              The draw is <strong style={{ color: 'var(--gold)' }}>weighted</strong> — each ticket is one entry in a virtual drum. A ticket is drawn at random. That patron wins 1st place and is removed. Repeat for 2nd and 3rd.
+            </p>
+            <p style={{ fontSize: 12, color: 'rgba(0,200,122,0.8)', margin: 0 }}>
+              ✓ <strong>Safe to test:</strong> Results are not saved anywhere and no email is sent from this draw. Re-draw as many times as you need before the official night.
             </p>
           </div>
 
@@ -1581,6 +1630,11 @@ export default function AdminPage() {
             return (
               <>
                 {/* Pool stats */}
+                {ineligiblePhones.size > 0 && (
+                  <div style={{ padding: '8px 12px', background: 'rgba(255,59,59,0.08)', border: '1px solid rgba(255,59,59,0.25)', borderRadius: 8, marginBottom: 12, fontSize: 12, color: 'var(--red)' }}>
+                    🚫 {ineligiblePhones.size} patron{ineligiblePhones.size !== 1 ? 's' : ''} marked ineligible and excluded from this pool
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
                   {[
                     { label: 'Eligible players', value: filtered.length },
