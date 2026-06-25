@@ -71,7 +71,7 @@ type ResolvedOpponent = { label: string; confirmed: boolean; schedName: string |
 function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroupStandings: StandingRow[][] }) {
   const [open, setOpen] = useState(false)
   const rows = allGroupStandings[letter.charCodeAt(0) - 65] ?? []
-  if (rows.length === 0) return null
+  // Always show the button even while data is loading — content shows loading state when empty
   return (
     <div style={{ marginTop: 5 }}>
       <button
@@ -88,36 +88,42 @@ function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroup
       </button>
       {open && (
         <div style={{ marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['#', 'Team', 'P', 'W', 'D', 'L', 'Pts'].map((h, hi) => (
-                  <th key={hi} style={{ padding: '5px 6px', textAlign: hi <= 1 ? 'left' : 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={row.team.id} style={{ background: i < 2 ? 'rgba(0,200,122,0.05)' : 'transparent', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
-                  <td style={{ padding: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
-                      <Link href={`/world-cup/team?id=${row.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                        {row.team.name}
-                      </Link>
-                    </div>
-                  </td>
-                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.played}</td>
-                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.win}</td>
-                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.draw}</td>
-                  <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.lose}</td>
-                  <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--green)' }}>{row.points}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ padding: '4px 8px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>■ Qualified (top 2)</div>
+          {rows.length === 0 ? (
+            <div style={{ padding: '10px 12px', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)' }}>Loading…</div>
+          ) : (
+            <>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['#', 'Team', 'P', 'W', 'D', 'L', 'Pts'].map((h, hi) => (
+                      <th key={hi} style={{ padding: '5px 6px', textAlign: hi <= 1 ? 'left' : 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={row.team.id} style={{ background: i < 2 ? 'rgba(0,200,122,0.05)' : 'transparent', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
+                      <td style={{ padding: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
+                          <Link href={`/world-cup/team?id=${row.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            {row.team.name}
+                          </Link>
+                        </div>
+                      </td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.played}</td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.win}</td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.draw}</td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.lose}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--green)' }}>{row.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ padding: '4px 8px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>■ Qualified (top 2)</div>
+            </>
+          )}
         </div>
       )}
     </div>

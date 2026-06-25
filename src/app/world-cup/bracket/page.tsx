@@ -24,31 +24,6 @@ function groupDone(group: Standing[]): boolean {
   return group.length >= 4 && group.every(r => r.all.played >= 3)
 }
 
-// Resolve "Group A Winner" / "Group A Runner-up" to the actual team when the group is finished.
-// Returns null if the slot is a 3rd-place slot or a match-number reference, or the group isn't done yet.
-function resolveGroupSlot(
-  name: string,
-  groupMap: GroupMap,
-): { name: string; schedName: string; logo: string } | null {
-  const winnerM = name.match(/^Group ([A-L]) Winner$/i)
-  if (winnerM) {
-    const g = groupMap[winnerM[1].toUpperCase()]
-    if (g && groupDone(g)) {
-      const t = g[0].team
-      return { name: t.name, schedName: fdSched(t.name), logo: t.logo }
-    }
-  }
-  const runnerM = name.match(/^Group ([A-L]) Runner-up$/i)
-  if (runnerM) {
-    const g = groupMap[runnerM[1].toUpperCase()]
-    if (g && groupDone(g)) {
-      const t = g[1].team
-      return { name: t.name, schedName: fdSched(t.name), logo: t.logo }
-    }
-  }
-  return null
-}
-
 const KNOCKOUT_STAGES = [
   'Round of 32',
   'Round of 16',
@@ -202,9 +177,80 @@ function SourceMatchPanel({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type ResolvedTeam = { name: string; schedName: string; logo: string }
+type Candidate    = { name: string; schedName: string; logo: string }
+
+// Resolve a group slot to candidates. For a complete group returns the confirmed single team;
+// for an in-progress group returns the current top-2 as potential candidates.
+function resolveGroupCandidates(
+  slot: string,
+  groupMap: GroupMap,
+): { teams: Candidate[]; confirmed: boolean } | null {
+  const winnerM = slot.match(/^Group ([A-L]) Winner$/i)
+  const runnerM = slot.match(/^Group ([A-L]) Runner-up$/i)
+  const letter  = (winnerM || runnerM)?.[1].toUpperCase()
+  if (!letter) return null
+  const g = groupMap[letter]
+  if (!g || g.length < 2) return { teams: [], confirmed: false }
+  if (groupDone(g)) {
+    const t = winnerM ? g[0].team : g[1].team
+    return { teams: [{ name: fdSched(t.name), schedName: fdSched(t.name), logo: t.logo }], confirmed: true }
+  }
+  return {
+    teams: [g[0], g[1]].map(r => ({ name: fdSched(r.team.name), schedName: fdSched(r.team.name), logo: r.team.logo })),
+    confirmed: false,
+  }
+}
+
+// Recursively resolve a bracket slot to known candidate team names.
+// Returns 1 confirmed team, or 2 potentials (one from each side of the source match), or [].
+function resolveCandidates(
+  slot: string,
+  matchByNum: Record<number, Match>,
+  groupMap: GroupMap,
+  depth = 0,
+): { teams: Candidate[]; confirmed: boolean } {
+  if (depth > 4) return { teams: [], confirmed: false }
+
+  // Real team already in DB
+  if (!isPlaceholder(slot)) {
+    return { teams: [{ name: slot, schedName: slot, logo: '' }], confirmed: true }
+  }
+
+  // Group-stage slot
+  const group = resolveGroupCandidates(slot, groupMap)
+  if (group) return group
+
+  // Match-number reference (R16, QF, SF, Final)
+  const matchNum = parseMatchNumber(slot)
+  if (matchNum) {
+    const m = matchByNum[matchNum]
+    if (!m) return { teams: [], confirmed: false }
+    if (m.result) {
+      const winner = m.result === 'home' ? m.home_team : m.result === 'away' ? m.away_team : null
+      if (!winner) return { teams: [], confirmed: false }
+      return resolveCandidates(winner, matchByNum, groupMap, depth + 1)
+    }
+    // Match not yet played — take one representative from each side
+    const homeC = resolveCandidates(m.home_team, matchByNum, groupMap, depth + 1)
+    const awayC = resolveCandidates(m.away_team, matchByNum, groupMap, depth + 1)
+    return {
+      teams: [...homeC.teams.slice(0, 1), ...awayC.teams.slice(0, 1)],
+      confirmed: false,
+    }
+  }
+
+  return { teams: [], confirmed: false }
+}
+
+// Keep for backwards compat with resolveGroupSlot call below
+function resolveGroupSlot(name: string, groupMap: GroupMap): ResolvedTeam | null {
+  const r = resolveGroupCandidates(name, groupMap)
+  if (!r || !r.confirmed || r.teams.length === 0) return null
+  return r.teams[0]
+}
 
 function TeamSlot({
-  dbName, isPlaceholder: isPH, resolved, flag, result, noBorderBottom,
+  dbName, isPlaceholder: isPH, resolved, flag, result, noBorderBottom, candidates,
 }: {
   dbName: string
   isPlaceholder: boolean
@@ -212,6 +258,7 @@ function TeamSlot({
   flag: string
   result: string | null
   noBorderBottom?: boolean
+  candidates?: Candidate[]
 }) {
   const borderStyle = noBorderBottom ? {} : { borderBottom: '1px solid var(--border)' }
 
@@ -258,7 +305,35 @@ function TeamSlot({
     )
   }
 
-  // Unknown placeholder
+  // Potential candidates — show team names instead of opaque placeholder
+  if (candidates && candidates.length > 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle }}>
+        <span style={{ width: 28, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
+          {candidates.slice(0, 2).map(c =>
+            c.logo
+              ? <img key={c.name} src={c.logo} alt="" style={{ width: candidates.length === 1 ? 22 : 13, height: candidates.length === 1 ? 22 : 13, objectFit: 'contain' }} />
+              : <span key={c.name} style={{ fontSize: candidates.length === 1 ? 22 : 14, lineHeight: 1 }}>🏳</span>
+          )}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-muted)' }}>
+            {candidates.map((c, ci) => (
+              <span key={c.name}>
+                {ci > 0 && <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}> / </span>}
+                <Link href={`/world-cup/team?name=${encodeURIComponent(c.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{c.name}</Link>
+              </span>
+            ))}
+          </div>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2, fontStyle: 'italic' }}>
+            {formatPlaceholder(dbName)}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Totally unknown placeholder
   const label = formatPlaceholder(dbName)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle, opacity: 0.7 }}>
@@ -414,7 +489,11 @@ export default function BracketPage() {
           const homeLabel = homeResolved ? homeResolved.name : homePH ? formatPlaceholder(m.home_team) : m.home_team
           const awayLabel = awayResolved ? awayResolved.name : awayPH ? formatPlaceholder(m.away_team) : m.away_team
 
-          // R32: extract group letters from placeholder slots (only unresolved ones need the widget)
+          // Resolve potential candidates for unresolved placeholder slots (R16, QF, SF, Final)
+          const homeC = (!homeResolved && homePH) ? resolveCandidates(m.home_team, matchByNum, groupMap) : null
+          const awayC = (!awayResolved && awayPH) ? resolveCandidates(m.away_team, matchByNum, groupMap) : null
+
+          // R32: extract group letters from placeholder slots (only still-unresolved ones need the widget)
           const involvedGroups = [
             ...(homePH && !homeResolved ? parseGroupLetters(m.home_team) : []),
             ...(awayPH && !awayResolved ? parseGroupLetters(m.away_team) : []),
@@ -466,11 +545,13 @@ export default function BracketPage() {
                 <TeamSlot
                   dbName={m.home_team} isPlaceholder={homePH} resolved={homeResolved}
                   flag={m.home_flag} result={homeRes}
+                  candidates={homeC?.teams}
                 />
                 {/* Away */}
                 <TeamSlot
                   dbName={m.away_team} isPlaceholder={awayPH} resolved={awayResolved}
                   flag={m.away_flag} result={awayRes} noBorderBottom
+                  candidates={awayC?.teams}
                 />
               </div>
 
