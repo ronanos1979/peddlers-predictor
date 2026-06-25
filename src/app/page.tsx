@@ -1003,28 +1003,6 @@ function HomeContent() {
       {selectedPub && !loading && pub && (() => {
         const pubObj = { id: pub.id, name: pub.name, city: `${pub.city}, ${pub.state}`, lat: pub.lat, lng: pub.lng, radius_m: pub.radius_m, daily_code: '' }
 
-        if (selectedMatch) {
-          return (
-            <div>
-              <button
-                onClick={() => setSelectedMatch(null)}
-                style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-muted)', cursor: 'pointer', padding: '8px 0 12px 0', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                {t.backToMatches}
-              </button>
-              <EntryForm
-                pubId={selectedPub}
-                match={selectedMatch}
-                pub={pubObj}
-                onComplete={() => {
-                  setCompletedIds(prev => new Set(Array.from(prev).concat(selectedMatch.id)))
-                  setSelectedMatch(null)
-                }}
-              />
-            </div>
-          )
-        }
-
         if (predictableMatches.length === 0) {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 4 }}>
@@ -1072,46 +1050,64 @@ function HomeContent() {
                     return (
                       <div key={m.id} style={{
                         background: done ? 'rgba(255,255,255,0.02)' : 'var(--surface)',
-                        border: `1px solid ${done ? 'rgba(255,255,255,0.06)' : 'var(--border)'}`,
+                        border: `1px solid ${selectedMatch?.id === m.id ? 'var(--green)' : done ? 'rgba(255,255,255,0.06)' : 'var(--border)'}`,
                         borderRadius: 10,
-                        padding: '14px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        opacity: done ? 0.55 : 1,
+                        opacity: done && selectedMatch?.id !== m.id ? 0.55 : 1,
+                        overflow: 'hidden',
                       }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
-                            <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
-                              <Flag emoji={m.home_flag} size={16} />{m.home_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
-                            </Link>
-                            <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>vs</span>
-                            <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
-                              <Flag emoji={m.away_flag} size={16} />{m.away_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
-                            </Link>
-                          </div>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                            {m.stage} · {fmtKickoff(m.kickoff_at)}{m.venue ? ` · ${m.venue}` : ''}
-                          </div>
-                          {total > 0 && (
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}{t.pctHome}</span>
-                              <span>·</span>
-                              <span>{dp}{t.pctDraw}</span>
-                              <span>·</span>
-                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}{t.pctAway}</span>
-                              <span style={{ marginLeft: 2 }}>({total})</span>
+                        {/* Match header row — always visible */}
+                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
+                              <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
+                                <Flag emoji={m.home_flag} size={16} />{m.home_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
+                              </Link>
+                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>vs</span>
+                              <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
+                                <Flag emoji={m.away_flag} size={16} />{m.away_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
+                              </Link>
                             </div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                              {m.stage} · {fmtKickoff(m.kickoff_at)}{m.venue ? ` · ${m.venue}` : ''}
+                            </div>
+                            {total > 0 && (
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}{t.pctHome}</span>
+                                <span>·</span>
+                                <span>{dp}{t.pctDraw}</span>
+                                <span>·</span>
+                                <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}{t.pctAway}</span>
+                                <span style={{ marginLeft: 2 }}>({total})</span>
+                              </div>
+                            )}
+                          </div>
+                          {done ? (
+                            <span style={{ flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 6, padding: '4px 10px' }}>
+                              {t.pickedBadge}
+                            </span>
+                          ) : selectedMatch?.id === m.id ? (
+                            <button onClick={() => setSelectedMatch(null)} style={{ flexShrink: 0, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>
+                              ✕
+                            </button>
+                          ) : (
+                            <button onClick={() => setSelectedMatch(m)} className="btn btn-primary" style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}>
+                              {t.pickArrow}
+                            </button>
                           )}
                         </div>
-                        {done ? (
-                          <span style={{ flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 6, padding: '4px 10px' }}>
-                            {t.pickedBadge}
-                          </span>
-                        ) : (
-                          <button onClick={() => setSelectedMatch(m)} className="btn btn-primary" style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}>
-                            {t.pickArrow}
-                          </button>
+                        {/* Inline entry form — shown when this match is selected */}
+                        {selectedMatch?.id === m.id && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '16px 16px 4px' }}>
+                            <EntryForm
+                              pubId={selectedPub}
+                              match={m}
+                              pub={pubObj}
+                              onComplete={() => {
+                                setCompletedIds(prev => new Set(Array.from(prev).concat(m.id)))
+                                setSelectedMatch(null)
+                              }}
+                            />
+                          </div>
                         )}
                       </div>
                     )

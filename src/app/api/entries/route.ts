@@ -5,8 +5,8 @@ import { checkRateLimit, getIp } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
   try {
-    // 5 submissions per IP per hour
-    if (!checkRateLimit(`entries:${getIp(req)}`, 5, 60 * 60 * 1000)) {
+    // 20 submissions per IP per hour (covers a full day of matches with retries)
+    if (!checkRateLimit(`entries:${getIp(req)}`, 20, 60 * 60 * 1000)) {
       return NextResponse.json({ error: 'Too many submissions — try again later' }, { status: 429 })
     }
 
