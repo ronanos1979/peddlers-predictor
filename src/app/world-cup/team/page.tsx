@@ -76,6 +76,16 @@ function isImageSrc(value?: string) {
   return !!value && /^https?:\/\//.test(value)
 }
 
+function normForStandings(s: string): string {
+  const map: Record<string, string> = {
+    'czech republic': 'czechia', 'korea republic': 'south korea',
+    "côte d'ivoire": 'ivory coast', 'united states': 'usa',
+    'turkey': 'türkiye', 'cape verde islands': 'cape verde',
+  }
+  const lower = s.toLowerCase()
+  return (map[lower] ?? lower).replace(/[^a-z0-9]/g, '')
+}
+
 function TeamContent() {
   const { t } = useLocale()
   const searchParams = useSearchParams()
@@ -125,6 +135,19 @@ function TeamContent() {
       })
       .catch(() => {})
   }, [localScheduleTeamName, teamName, allSortedMatches])
+
+  // Auto-set path position to confirmed finish position once all group games are done
+  useEffect(() => {
+    const sched = localScheduleTeamName || teamName || ''
+    if (!sched || groupStandings.length === 0) return
+    const groupMatches = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage))
+    if (groupMatches.length !== 3 || groupMatches.some(m => !m.result)) return
+    const myRow = groupStandings.find(r => normForStandings(r.team.name) === normForStandings(sched))
+    if (!myRow) return
+    if (myRow.rank === 1) setPathPosition('1st')
+    else if (myRow.rank === 2) setPathPosition('2nd')
+    else setPathPosition('best_3rd')
+  }, [localMatches, groupStandings, localScheduleTeamName, teamName])
 
   useEffect(() => {
     if (teamId || teamName) return
@@ -395,16 +418,6 @@ function TeamContent() {
 
   function fmtDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-  }
-
-  function normForStandings(s: string): string {
-    const map: Record<string, string> = {
-      'czech republic': 'czechia', 'korea republic': 'south korea',
-      "côte d'ivoire": 'ivory coast', 'united states': 'usa',
-      'turkey': 'türkiye', 'cape verde islands': 'cape verde',
-    }
-    const lower = s.toLowerCase()
-    return (map[lower] ?? lower).replace(/[^a-z0-9]/g, '')
   }
 
   const schedName = localScheduleTeamName || teamName || ''
@@ -916,15 +929,29 @@ function TeamContent() {
                       pos === '2nd' ? t.pathAs2nd.replace('{group}', group || '?') :
                       t.pathAsBest3rd
                     const active = pathPosition === pos
+                    // A position is "no longer possible" once all group games are settled
+                    const invalid = allGroupGamesDone && finishPosition !== null && (
+                      finishPosition === 1 ? pos !== '1st' :
+                      finishPosition === 2 ? pos !== '2nd' :
+                      finishPosition === 3 ? pos !== 'best_3rd' :
+                      true // 4th place: all paths gone
+                    )
                     return (
-                      <button key={pos} onClick={() => setPathPosition(pos)} style={{
-                        padding: '7px 14px', borderRadius: 20,
-                        border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`,
-                        background: active ? 'rgba(0,200,122,0.12)' : 'transparent',
-                        color: active ? 'var(--green)' : 'var(--text-muted)',
-                        fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
-                        letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
-                      }}>
+                      <button
+                        key={pos}
+                        onClick={() => { if (!invalid) setPathPosition(pos) }}
+                        style={{
+                          padding: '7px 14px', borderRadius: 20,
+                          border: `1px solid ${invalid ? 'rgba(255,59,59,0.35)' : active ? 'var(--green)' : 'var(--border)'}`,
+                          background: invalid ? 'rgba(255,59,59,0.07)' : active ? 'rgba(0,200,122,0.12)' : 'transparent',
+                          color: invalid ? 'var(--red)' : active ? 'var(--green)' : 'var(--text-muted)',
+                          fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                          letterSpacing: 0.5, textTransform: 'uppercase',
+                          cursor: invalid ? 'default' : 'pointer',
+                          textDecoration: invalid ? 'line-through' : 'none',
+                          opacity: invalid ? 0.75 : 1,
+                        }}
+                      >
                         {label}
                       </button>
                     )
