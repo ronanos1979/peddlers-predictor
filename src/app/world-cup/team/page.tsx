@@ -440,7 +440,8 @@ function TeamContent() {
   function statusLabel() {
     if (finishPosition === 1) return t.pathAs1st.replace('{group}', currentGroup ?? '')
     if (finishPosition === 2) return t.pathAs2nd.replace('{group}', currentGroup ?? '')
-    if (finishPosition !== null && allGroupGamesDone) return t.eliminated
+    if (finishPosition === 3) return t.finishedThird.replace('{group}', currentGroup ?? '')
+    if (finishPosition === 4) return t.eliminated
     if (currentGroup && groupGamesTotal > 0)
       return t.groupProgress.replace('{group}', currentGroup).replace('{played}', String(groupGamesPlayed))
     return null
@@ -448,15 +449,18 @@ function TeamContent() {
   const groupStatusLabel = statusLabel()
   const groupStatusColor = finishPosition === 1 ? 'var(--green)'
     : finishPosition === 2 ? 'var(--green)'
-    : finishPosition !== null && allGroupGamesDone ? 'var(--red)'
+    : finishPosition === 3 ? 'var(--amber)'
+    : finishPosition === 4 ? 'var(--red)'
     : 'var(--text-muted)'
   const groupStatusBorder = finishPosition === 1 ? 'var(--green)'
     : finishPosition === 2 ? 'rgba(0,200,122,0.45)'
-    : finishPosition !== null && allGroupGamesDone ? 'rgba(255,59,59,0.35)'
+    : finishPosition === 3 ? 'rgba(245,197,24,0.5)'
+    : finishPosition === 4 ? 'rgba(255,59,59,0.35)'
     : 'var(--border)'
   const groupStatusBg = finishPosition === 1 ? 'rgba(0,200,122,0.12)'
     : finishPosition === 2 ? 'rgba(0,200,122,0.08)'
-    : finishPosition !== null && allGroupGamesDone ? 'rgba(255,59,59,0.08)'
+    : finishPosition === 3 ? 'rgba(245,197,24,0.08)'
+    : finishPosition === 4 ? 'rgba(255,59,59,0.08)'
     : 'var(--surface)'
 
   const positionGroups = POSITION_ORDER.reduce((acc, pos) => {

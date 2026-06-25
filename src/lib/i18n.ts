@@ -257,6 +257,15 @@ export const translations = {
     pathLinkHowToQualify: 'How do third-placed teams qualify? →',
     groupProgress: 'Group {group} · {played}/3',
     nextMatch: 'Next Match',
+    finishedThird: '3rd · Group {group}',
+    best3rdNavLabel: 'Best 3rd Place',
+    best3rdNavDesc: 'Track which 3rd-placed teams are on track to qualify',
+    best3rdTitle: 'Best 3rd Place Teams',
+    best3rdSub: '8 of the 12 third-placed teams advance to the Round of 32 — ranked by points, goal difference, and goals scored.',
+    best3rdQualifying: 'Currently Qualifying',
+    best3rdNotQualifying: 'Currently Not Qualifying',
+    best3rdComplete: '{done}/12 groups complete',
+    best3rdInProgress: '{n} group(s) still in progress — standings may change',
 
     // Breadcrumb labels
     crumbFeedback: 'Feedback',
@@ -884,6 +893,15 @@ export const translations = {
     pathLinkHowToQualify: '¿Cómo clasifican los terceros? →',
     groupProgress: 'Grupo {group} · {played}/3',
     nextMatch: 'Próximo partido',
+    finishedThird: '3.° · Grupo {group}',
+    best3rdNavLabel: 'Mejores 3.°',
+    best3rdNavDesc: 'Seguimiento de los equipos en 3.er puesto en camino de clasificar',
+    best3rdTitle: 'Mejores Equipos en 3.er Puesto',
+    best3rdSub: '8 de los 12 equipos en 3.er puesto avanzan a la Ronda de 32 — ordenados por puntos, diferencia de goles y goles marcados.',
+    best3rdQualifying: 'Actualmente Clasificando',
+    best3rdNotQualifying: 'Actualmente Sin Clasificar',
+    best3rdComplete: '{done}/12 grupos completados',
+    best3rdInProgress: '{n} grupo(s) aún en curso — las posiciones pueden cambiar',
 
     // Breadcrumb labels
     crumbFeedback: 'Comentarios',

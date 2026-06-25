@@ -252,6 +252,7 @@ export default function WorldCupHub() {
   const sections = [
     { href: '/world-cup/groups',      icon: '🗂️', label: t.groupsNavLabel,     desc: t.groupsNavDesc },
     { href: '/world-cup/standings',   icon: '📊', label: t.standings,           desc: t.standingsSub },
+    { href: '/world-cup/best-3rd',    icon: '🥉', label: t.best3rdNavLabel,     desc: t.best3rdNavDesc },
     { href: '/world-cup/bracket',     icon: '🏆', label: t.bracket,             desc: t.bracketSub },
     { href: '/world-cup/results',     icon: '⚽', label: t.results,             desc: t.resultsSub },
     { href: '/schedule',              icon: '📅', label: t.allMatches104,        desc: t.allMatches104Desc },
