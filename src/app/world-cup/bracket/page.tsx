@@ -209,7 +209,7 @@ function resolveCandidates(
   groupMap: GroupMap,
   depth = 0,
 ): { teams: Candidate[]; confirmed: boolean } {
-  if (depth > 4) return { teams: [], confirmed: false }
+  if (depth > 5) return { teams: [], confirmed: false }
 
   // Real team already in DB
   if (!isPlaceholder(slot)) {
@@ -245,7 +245,7 @@ function resolveCandidates(
       seen.add(t.name)
       return true
     })
-    return { teams: unique.slice(0, 6), confirmed: false }
+    return { teams: unique, confirmed: false }
   }
 
   return { teams: [], confirmed: false }
@@ -315,38 +315,65 @@ function TeamSlot({
   }
 
   // Potential candidates — show team names instead of opaque placeholder
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const [showAll, setShowAll] = useState(false)
   if (candidates && candidates.length > 0) {
     const SHOW_MAX = 4
-    const visible  = candidates.slice(0, SHOW_MAX)
+    const visible  = showAll ? candidates : candidates.slice(0, SHOW_MAX)
     const overflow = candidates.length - SHOW_MAX
-    const fontSize = visible.length <= 2 ? 14 : visible.length <= 3 ? 13 : 12
-    const logoSize = visible.length === 1 ? 22 : 13
+    const fontSize = visible.length <= 2 ? 14 : visible.length <= 4 ? 13 : 11
+    const logoSize = candidates.length === 1 ? 22 : 13
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle }}>
-        <span style={{ width: 28, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-          {visible.slice(0, 2).map(c =>
-            c.logo
-              ? <img key={c.name} src={c.logo} alt="" style={{ width: logoSize, height: logoSize, objectFit: 'contain' }} />
-              : <span key={c.name} style={{ fontSize: logoSize, lineHeight: 1 }}>🏳</span>
-          )}
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-            {visible.map((c, ci) => (
-              <span key={c.name}>
-                {ci > 0 && <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}> / </span>}
-                {c.schedName
-                  ? <Link href={`/world-cup/team?name=${encodeURIComponent(c.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{c.name}</Link>
-                  : <span>{c.name}</span>
-                }
-              </span>
-            ))}
-            {overflow > 0 && (
-              <span style={{ fontWeight: 400, color: 'var(--text-dim)', fontSize: 11 }}> +{overflow} more</span>
+      <div style={{ ...borderStyle }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 0' }}>
+          <span style={{ width: 28, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexWrap: 'wrap', paddingTop: 1 }}>
+            {candidates.slice(0, 2).map(c =>
+              c.logo
+                ? <img key={c.name} src={c.logo} alt="" style={{ width: logoSize, height: logoSize, objectFit: 'contain' }} />
+                : <span key={c.name} style={{ fontSize: logoSize, lineHeight: 1 }}>🏳</span>
             )}
-          </div>
-          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2, fontStyle: 'italic' }}>
-            {formatPlaceholder(dbName)}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              {visible.map((c, ci) => (
+                <span key={c.name}>
+                  {ci > 0 && <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}> / </span>}
+                  {c.schedName
+                    ? <Link href={`/world-cup/team?name=${encodeURIComponent(c.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{c.name}</Link>
+                    : <span>{c.name}</span>
+                  }
+                </span>
+              ))}
+            </div>
+            {overflow > 0 && !showAll && (
+              <button
+                onClick={e => { e.stopPropagation(); setShowAll(true) }}
+                style={{
+                  marginTop: 4, background: 'none', border: '1px solid var(--border)',
+                  borderRadius: 5, padding: '2px 7px', cursor: 'pointer',
+                  fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+                  color: 'var(--green)', letterSpacing: 0.5,
+                }}
+              >
+                +{overflow} more ▼
+              </button>
+            )}
+            {showAll && overflow > 0 && (
+              <button
+                onClick={e => { e.stopPropagation(); setShowAll(false) }}
+                style={{
+                  marginTop: 4, background: 'none', border: 'none',
+                  padding: 0, cursor: 'pointer',
+                  fontFamily: 'var(--font-cond)', fontSize: 10,
+                  color: 'var(--text-dim)',
+                }}
+              >
+                show less ▲
+              </button>
+            )}
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 3, fontStyle: 'italic' }}>
+              {formatPlaceholder(dbName)}
+            </div>
           </div>
         </div>
       </div>
