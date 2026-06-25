@@ -618,7 +618,7 @@ export default function AdminPage() {
   }
 
   function fmt(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })
   }
   function fmtDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -1086,11 +1086,11 @@ export default function AdminPage() {
                         {syncResult.debug.unmatched.map((u, i) => (
                           <div key={i} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: i < syncResult.debug!.unmatched.length - 1 ? '1px solid var(--border)' : 'none' }}>
                             <div style={{ color: 'var(--text)', fontSize: 12 }}>{u.match}</div>
-                            <div>DB kickoff: {new Date(u.dbKickoff).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</div>
+                            <div>DB kickoff: {new Date(u.dbKickoff).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })}</div>
                             {u.nearestFd ? (
                               <>
                                 <div>Nearest FD: {u.nearestFd}</div>
-                                <div>FD kickoff: {new Date(u.nearestFdKickoff!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })} <span style={{ color: u.diffMin! > 5 ? 'var(--red)' : 'var(--green)' }}>({u.diffMin}m off)</span></div>
+                                <div>FD kickoff: {new Date(u.nearestFdKickoff!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })} <span style={{ color: u.diffMin! > 5 ? 'var(--red)' : 'var(--green)' }}>({u.diffMin}m off)</span></div>
                               </>
                             ) : (
                               <div style={{ color: 'var(--red)' }}>No FD finished matches at all</div>

@@ -369,7 +369,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                   {t.checkBackResult}
                 </div>
                 <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)' }}>
-                  Kickoff: {new Date(match.kickoff_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+                  Kickoff: {new Date(match.kickoff_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })}
                 </div>
               </div>
             </div>

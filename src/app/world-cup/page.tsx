@@ -54,7 +54,7 @@ function MatchCard({ m, norm, eventsById, t }: {
   const awayEvents = (events || []).filter(e => e.teamSide === 'away')
 
   function fmtTime(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })
   }
 
   return (

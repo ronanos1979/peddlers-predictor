@@ -13,7 +13,7 @@ type Match = {
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', {
-    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'long',
     timeZone: 'America/New_York',
   })
 }
