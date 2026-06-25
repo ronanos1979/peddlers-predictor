@@ -236,13 +236,16 @@ function resolveCandidates(
       if (!winner) return { teams: [], confirmed: false }
       return resolveCandidates(winner, matchByNum, groupMap, depth + 1)
     }
-    // Match not yet played — take one representative from each side
+    // Match not yet played — collect all candidates from both sides
     const homeC = resolveCandidates(m.home_team, matchByNum, groupMap, depth + 1)
     const awayC = resolveCandidates(m.away_team, matchByNum, groupMap, depth + 1)
-    return {
-      teams: [...homeC.teams.slice(0, 1), ...awayC.teams.slice(0, 1)],
-      confirmed: false,
-    }
+    const seen = new Set<string>()
+    const unique = [...homeC.teams, ...awayC.teams].filter(t => {
+      if (seen.has(t.name)) return false
+      seen.add(t.name)
+      return true
+    })
+    return { teams: unique.slice(0, 6), confirmed: false }
   }
 
   return { teams: [], confirmed: false }
@@ -313,18 +316,23 @@ function TeamSlot({
 
   // Potential candidates — show team names instead of opaque placeholder
   if (candidates && candidates.length > 0) {
+    const SHOW_MAX = 4
+    const visible  = candidates.slice(0, SHOW_MAX)
+    const overflow = candidates.length - SHOW_MAX
+    const fontSize = visible.length <= 2 ? 14 : visible.length <= 3 ? 13 : 12
+    const logoSize = visible.length === 1 ? 22 : 13
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', ...borderStyle }}>
         <span style={{ width: 28, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-          {candidates.slice(0, 2).map(c =>
+          {visible.slice(0, 2).map(c =>
             c.logo
-              ? <img key={c.name} src={c.logo} alt="" style={{ width: candidates.length === 1 ? 22 : 13, height: candidates.length === 1 ? 22 : 13, objectFit: 'contain' }} />
-              : <span key={c.name} style={{ fontSize: candidates.length === 1 ? 22 : 14, lineHeight: 1 }}>🏳</span>
+              ? <img key={c.name} src={c.logo} alt="" style={{ width: logoSize, height: logoSize, objectFit: 'contain' }} />
+              : <span key={c.name} style={{ fontSize: logoSize, lineHeight: 1 }}>🏳</span>
           )}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text-muted)' }}>
-            {candidates.map((c, ci) => (
+          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+            {visible.map((c, ci) => (
               <span key={c.name}>
                 {ci > 0 && <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}> / </span>}
                 {c.schedName
@@ -333,6 +341,9 @@ function TeamSlot({
                 }
               </span>
             ))}
+            {overflow > 0 && (
+              <span style={{ fontWeight: 400, color: 'var(--text-dim)', fontSize: 11 }}> +{overflow} more</span>
+            )}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2, fontStyle: 'italic' }}>
             {formatPlaceholder(dbName)}
