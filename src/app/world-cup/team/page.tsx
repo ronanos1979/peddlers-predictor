@@ -236,6 +236,7 @@ function TeamContent() {
   const [groupStandings, setGroupStandings] = useState<StandingRow[]>([])
   const [allGroupStandings, setAllGroupStandings] = useState<StandingRow[][]>([])
   const [standingsOpen, setStandingsOpen] = useState(false)
+  const [selectedChainIdx, setSelectedChainIdx] = useState(0)
 
   useEffect(() => {
     setSavedTeam(readSavedTeam())
@@ -1221,18 +1222,32 @@ function TeamContent() {
                     <p className="muted" style={{ margin: 0 }}>{t.pathNoPathFound}</p>
                   </div>
                 ) : (
-                  chains.map((chain, chainIdx) => (
-                    <div key={chainIdx}>
-                      {chains.length > 1 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: chainIdx > 0 ? 20 : 0 }}>
-                          {chainIdx > 0 && <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />}
-                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)', flexShrink: 0 }}>
-                            {t.pathOptionOf.replace('{n}', String(chainIdx + 1)).replace('{total}', String(chains.length))}
-                          </div>
-                          {chainIdx > 0 && <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />}
-                        </div>
-                      )}
-                      {chain.steps.map((step, i) => {
+                  (() => {
+                  const safeIdx = Math.min(selectedChainIdx, chains.length - 1)
+                  const chain = chains[safeIdx]
+                  return (
+                  <>
+                  {chains.length > 1 && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
+                      {chains.map((_, chainIdx) => (
+                        <button
+                          key={chainIdx}
+                          onClick={() => setSelectedChainIdx(chainIdx)}
+                          style={{
+                            flexShrink: 0, padding: '6px 14px', borderRadius: 20,
+                            border: `1px solid ${chainIdx === safeIdx ? 'var(--amber)' : 'var(--border)'}`,
+                            background: chainIdx === safeIdx ? 'rgba(245,197,24,0.12)' : 'transparent',
+                            color: chainIdx === safeIdx ? 'var(--amber)' : 'var(--text-muted)',
+                            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                            letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer',
+                          }}
+                        >
+                          {t.pathOptionOf.replace('{n}', String(chainIdx + 1)).replace('{total}', String(chains.length))}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {chain.steps.map((step, i) => {
                         const isLast = i === chain.steps.length - 1
                         const isFinal = step.match.stage === 'Final'
                         return (
@@ -1311,8 +1326,9 @@ function TeamContent() {
                           </div>
                         )
                       })}
-                    </div>
-                  ))
+                  </>
+                  )
+                  })()
                 )}
 
                 {pathPosition === 'best_3rd' && group && chains.length > 0 && (
