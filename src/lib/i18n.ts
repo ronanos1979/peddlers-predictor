@@ -255,6 +255,8 @@ export const translations = {
     pathUpcomingBadge: 'Upcoming',
     pathBlockedBadge: 'No longer possible',
     pathLinkHowToQualify: 'How do third-placed teams qualify? →',
+    groupProgress: 'Group {group} · {played}/3',
+    nextMatch: 'Next Match',
 
     // Breadcrumb labels
     crumbFeedback: 'Feedback',
@@ -880,6 +882,8 @@ export const translations = {
     pathUpcomingBadge: 'Próximo',
     pathBlockedBadge: 'Ya no es posible',
     pathLinkHowToQualify: '¿Cómo clasifican los terceros? →',
+    groupProgress: 'Grupo {group} · {played}/3',
+    nextMatch: 'Próximo partido',
 
     // Breadcrumb labels
     crumbFeedback: 'Comentarios',
