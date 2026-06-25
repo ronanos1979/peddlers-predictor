@@ -323,6 +323,63 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   )
 }
 
+const WHATS_NEW_KEY = 'peddlers_best3rd_new'
+
+function WhatsNew() {
+  const { t } = useLocale()
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !localStorage.getItem(WHATS_NEW_KEY)) {
+      setShow(true)
+    }
+  }, [])
+
+  if (!show) return null
+
+  return (
+    <div style={{
+      background: 'rgba(245,197,24,0.08)',
+      border: '1px solid rgba(245,197,24,0.35)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      marginBottom: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 22, flexShrink: 0, lineHeight: 1.2 }}>🥉</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)' }}>
+                {t.whatsNewTitle}
+              </span>
+            </div>
+            <Link
+              href="/world-cup/best-3rd"
+              style={{ textDecoration: 'none', color: 'inherit' }}
+              onClick={() => { localStorage.setItem(WHATS_NEW_KEY, '1'); setShow(false) }}
+            >
+              <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 2 }}>
+                {t.whatsNewBest3rdTitle} →
+              </div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                {t.whatsNewBest3rdDesc}
+              </div>
+            </Link>
+          </div>
+        </div>
+        <button
+          onClick={() => { localStorage.setItem(WHATS_NEW_KEY, '1'); setShow(false) }}
+          style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 4px', flexShrink: 0 }}
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function FlagTip() {
   const { t } = useLocale()
   const [show, setShow] = useState(false)
@@ -837,6 +894,9 @@ function HomeContent() {
           </div>
         </div>
       </div>
+
+      {/* What's New — dismissible new feature announcement */}
+      <WhatsNew />
 
       {/* Flag tip — dismissible notice about clicking flags */}
       <FlagTip />
