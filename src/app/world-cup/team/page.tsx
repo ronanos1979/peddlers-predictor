@@ -67,7 +67,6 @@ function isPlaceholderTeam(name: string) {
 }
 
 type ResolvedOpponent = { label: string; confirmed: boolean; schedName: string | null }
-type MatchRecord = Match
 
 function Possible3rdOpponents({
   matches, resolveOpponent, t,
@@ -525,7 +524,7 @@ function TeamContent() {
     }
     return { label: formatPlaceholder(slot), confirmed: false, schedName: null }
   }
-  const possible3rdMatches = (finishPosition === 3 && currentGroup && allGroupGamesDone)
+  const possible3rdMatches: MatchRecord[] = (finishPosition === 3 && currentGroup && allGroupGamesDone)
     ? allSortedMatches.filter(m => m.stage === 'Round of 32' && (() => {
         const checkSlot = (slot: string) => {
           const mm = slot.match(/^3rd Place \(([^)]+)\)/i)
