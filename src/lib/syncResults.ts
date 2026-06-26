@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getFdFixtures, getFdStandings, FdRateLimitError } from '@/lib/footballData'
 import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
+import { toEspnDate, toEspnTeamName } from '@/lib/espnEvents'
 
 export { FdRateLimitError }
 
@@ -90,9 +91,10 @@ export async function updateKnockoutNames(): Promise<number> {
     updated++
   }
 
-  // Pass 2 — FD scheduled fixtures: fill any remaining placeholders ("3rd Place (…)",
-  // "Match N Winner", etc.) once FD confirms the matchups.
-  // Reload the knockout matches in case Pass 1 just updated some slots.
+  // Pass 2 — ESPN scoreboard: fill any remaining placeholders ("3rd Place (…)",
+  // "Match N Winner", etc.) once FIFA confirms the matchup. ESPN reliably carries
+  // upcoming scheduled fixtures for WC 2026 with real team names.
+  // Reload knockout matches in case Pass 1 just updated some slots.
   const { data: remainingMatches } = await supabaseAdmin
     .from('matches').select('id, home_team, away_team, kickoff_at')
     .not('stage', 'ilike', 'Group %').neq('stage', 'Demo Match')
@@ -100,58 +102,65 @@ export async function updateKnockoutNames(): Promise<number> {
   const stillHasPlaceholder = (remainingMatches || []).filter(
     m => isPlaceholderName(m.home_team) || isPlaceholderName(m.away_team)
   )
-  if (stillHasPlaceholder.length > 0) {
-    type FdFixtureItem = { fixture: { date: string }; teams: { home: { name: string }; away: { name: string } } }
-    const allFdData = await getFdFixtures() as { response?: FdFixtureItem[] }
-    const allFdFixtures = allFdData.response ?? []
 
-    // Index FD fixtures by kickoff ms, keeping only those with real team names on both sides
-    const isRealName = (n: string) => !!n && n.length > 1 && !/^tbd$/i.test(n.trim())
-    const fdByTime: Array<{ ms: number; home: string; away: string }> = []
-    for (const f of allFdFixtures) {
-      const home = f.teams.home.name
-      const away = f.teams.away.name
-      if (isRealName(home) && isRealName(away)) {
-        fdByTime.push({ ms: new Date(f.fixture.date).getTime(), home, away })
-      }
+  if (stillHasPlaceholder.length > 0) {
+    const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
+    const norm = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
+
+    type EspnComp = { homeAway: string; team: { displayName: string } }
+    type EspnScoreboardEvent = { id: string; date?: string; competitions: Array<{ date?: string; competitors: EspnComp[] }> }
+
+    // Group by ESPN date to make one scoreboard fetch per day
+    const byEspnDate = new Map<string, typeof stillHasPlaceholder>()
+    for (const m of stillHasPlaceholder) {
+      const date = toEspnDate(m.kickoff_at)
+      if (!byEspnDate.has(date)) byEspnDate.set(date, [])
+      byEspnDate.get(date)!.push(m)
     }
 
-    for (const m of stillHasPlaceholder) {
-      const dbMs = new Date(m.kickoff_at).getTime()
-      const fd = fdByTime.find(f => Math.abs(f.ms - dbMs) <= 5 * 60 * 1000)
-      if (!fd) continue
+    for (const [date, dateMatches] of Array.from(byEspnDate)) {
+      const sbRes = await fetch(`${ESPN_BASE}/scoreboard?dates=${date}`)
+      if (!sbRes.ok) continue
+      const sbData = await sbRes.json()
+      const espnEvents: EspnScoreboardEvent[] = sbData.events || []
 
-      // Convert FD names to schedule names
-      const fdHome = FD_TO_SCHED[fd.home] ?? fd.home
-      const fdAway = FD_TO_SCHED[fd.away] ?? fd.away
+      for (const m of dateMatches) {
+        const dbMs = new Date(m.kickoff_at).getTime()
+        const knownTeam = !isPlaceholderName(m.home_team) ? m.home_team
+          : !isPlaceholderName(m.away_team) ? m.away_team
+          : null
+        const normKnown = knownTeam ? norm(toEspnTeamName(knownTeam)) : null
 
-      // Determine which FD team fills which placeholder slot.
-      // If one slot is already a real name, cross-check using normFdName to find the right order.
-      const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
-      const homePlaceholder = isPlaceholderName(m.home_team)
-      const awayPlaceholder = isPlaceholderName(m.away_team)
+        // Find ESPN event by known team name; fall back to kickoff time match
+        const espnEvent = espnEvents.find(e => {
+          const comps = e.competitions?.[0]?.competitors || []
+          if (normKnown) {
+            return comps.some(c => {
+              const n = norm(c.team.displayName)
+              return n === normKnown || n.includes(normKnown) || normKnown.includes(n)
+            })
+          }
+          const evDate = e.competitions?.[0]?.date || e.date
+          return !!evDate && Math.abs(new Date(evDate).getTime() - dbMs) <= 5 * 60 * 1000
+        })
+        if (!espnEvent) continue
 
-      let resolvedHome: string | null = null
-      let resolvedAway: string | null = null
+        const comps = espnEvent.competitions[0].competitors
+        const espnHomeComp = comps.find(c => c.homeAway === 'home')
+        const espnAwayComp = comps.find(c => c.homeAway === 'away')
+        if (!espnHomeComp || !espnAwayComp) continue
 
-      if (homePlaceholder && awayPlaceholder) {
-        // Both unknown — trust FD's home/away ordering
-        resolvedHome = fdHome
-        resolvedAway = fdAway
-      } else if (homePlaceholder) {
-        // away_team is already real; figure out which FD team is which
-        resolvedHome = norm(fdAway) === norm(m.away_team) ? fdHome : fdAway
-      } else {
-        // home_team is already real; same logic
-        resolvedAway = norm(fdHome) === norm(m.home_team) ? fdAway : fdHome
-      }
+        const schedHome = FD_TO_SCHED[espnHomeComp.team.displayName] ?? espnHomeComp.team.displayName
+        const schedAway = FD_TO_SCHED[espnAwayComp.team.displayName] ?? espnAwayComp.team.displayName
 
-      const updates: Record<string, string> = {}
-      if (resolvedHome) { updates.home_team = resolvedHome; const f = flagMap.get(resolvedHome); if (f) updates.home_flag = f }
-      if (resolvedAway) { updates.away_team = resolvedAway; const f = flagMap.get(resolvedAway); if (f) updates.away_flag = f }
-      if (Object.keys(updates).length > 0) {
-        await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
-        updated++
+        const updates: Record<string, string> = {}
+        if (isPlaceholderName(m.home_team)) { updates.home_team = schedHome; const f = flagMap.get(schedHome); if (f) updates.home_flag = f }
+        if (isPlaceholderName(m.away_team)) { updates.away_team = schedAway; const f = flagMap.get(schedAway); if (f) updates.away_flag = f }
+        if (Object.keys(updates).length > 0) {
+          await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
+          updated++
+        }
       }
     }
   }
