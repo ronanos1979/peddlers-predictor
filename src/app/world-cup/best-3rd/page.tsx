@@ -92,6 +92,8 @@ export default function Best3rdPage() {
   }, [])
 
   const groupsComplete = entries.filter(e => e.groupComplete).length
+  const allGroupsComplete = groupsComplete === 12
+  const remainingGroups = 12 - groupsComplete
   const qualifying = entries.slice(0, 8)
   const notQualifying = entries.slice(8)
 
@@ -134,7 +136,7 @@ export default function Best3rdPage() {
             {t.best3rdQualifying} (1–8)
           </div>
           {qualifying.map(entry => (
-            <GroupEntryCard key={entry.group} entry={entry} qualifying t={t} />
+            <GroupEntryCard key={entry.group} entry={entry} qualifying allGroupsComplete={allGroupsComplete} remainingGroups={remainingGroups} t={t} />
           ))}
         </>
       )}
@@ -145,7 +147,7 @@ export default function Best3rdPage() {
             {t.best3rdNotQualifying}
           </div>
           {notQualifying.map(entry => (
-            <GroupEntryCard key={entry.group} entry={entry} qualifying={false} t={t} />
+            <GroupEntryCard key={entry.group} entry={entry} qualifying={false} allGroupsComplete={allGroupsComplete} remainingGroups={remainingGroups} t={t} />
           ))}
         </>
       )}
@@ -180,11 +182,15 @@ export default function Best3rdPage() {
 type CardProps = {
   entry: GroupEntry
   qualifying: boolean
+  allGroupsComplete: boolean
+  remainingGroups: number
   t: ReturnType<typeof useLocale>['t']
 }
 
-function GroupEntryCard({ entry, qualifying, t }: CardProps) {
+function GroupEntryCard({ entry, qualifying, allGroupsComplete, remainingGroups, t }: CardProps) {
   const { group, groupComplete, third, contenders, sortRank } = entry
+  // Confirmed: own group locked AND (rank is unreachable by remaining groups, OR 4+ pts which no WC 3rd-place qualifier has ever needed more than)
+  const isGuaranteed = groupComplete && (sortRank + remainingGroups <= 8 || third.points >= 4)
   const borderColor = qualifying ? 'rgba(0,200,122,0.28)' : 'rgba(255,59,59,0.18)'
   const rankColor   = qualifying ? 'var(--green)' : 'var(--red)'
   const gd          = third.goalsDiff
@@ -250,14 +256,14 @@ function GroupEntryCard({ entry, qualifying, t }: CardProps) {
       <div style={{ padding: '7px 14px 8px 54px', borderTop: '1px solid var(--border)', background: qualifying ? 'rgba(0,200,122,0.04)' : 'transparent', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: qualifying ? 'var(--green)' : 'var(--text-muted)', fontWeight: 700 }}>
           {qualifying
-            ? groupComplete
+            ? isGuaranteed
               ? '✓ Qualified for Round of 32'
               : '→ On course for Round of 32'
-            : groupComplete
+            : allGroupsComplete
               ? '✗ Did not qualify'
               : '→ Currently outside top 8'}
         </span>
-        {!groupComplete && (
+        {(qualifying ? !isGuaranteed : !allGroupsComplete) && (
           <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)' }}>
             · may change
           </span>
