@@ -262,6 +262,10 @@ export default function WorldCupHub() {
     { href: '/world-cup/winner-picks',    icon: '📊', label: t.communityPicksLabel,         desc: t.communityPicksDesc },
     { href: '/world-cup/top-scorer-pick', icon: '🎯', label: t.pickTopScorer,               desc: t.topScorerBonus },
     { href: '/world-cup/scorer-picks',    icon: '📈', label: t.goldenBootCommunityNavLabel, desc: t.goldenBootCommunityNavDesc },
+    { href: '/world-cup/how-to-qualify',  icon: '📋', label: t.howToQualifyHubLabel,        desc: t.howToQualifyHubDesc },
+    { href: '/overall-picks',             icon: '🗳️', label: t.overallPicks,               desc: t.overallPicksSub },
+    { href: '/rules',                     icon: '📖', label: t.rules,                       desc: t.rulesSub },
+    { href: '/locations',                 icon: '📍', label: t.locations,                   desc: t.locationsHubDesc },
   ]
 
   return (

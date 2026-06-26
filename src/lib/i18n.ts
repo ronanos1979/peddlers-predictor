@@ -448,6 +448,10 @@ export const translations = {
     wrongLower: 'wrong',
     usesSameNumber: 'Use the same number every time you pick to keep your predictions together.',
 
+    // Rules / Locations hub descriptions
+    rulesSub: 'How the prediction game works — scoring, raffle tickets & prizes',
+    locationsHubDesc: 'Haverhill MA and Nashua NH',
+
     // Overall Picks
     overallPicksTitle: 'Overall Picks',
     overallPicksSub: 'How everyone is predicting every World Cup 2026 match.',
@@ -1105,6 +1109,10 @@ export const translations = {
     scoringInfoGroupEarly: 'Fase de Grupos MD1–MD2',
     scoringInfoGroupMD3: 'Fase de Grupos MD3',
     scoringInfoTotal: 'Tu total = boletos de partidos + bono Campeón + bono Bota de Oro',
+
+    // Rules / Locations hub descriptions
+    rulesSub: 'Cómo funciona el juego de predicciones — puntaje, boletos y premios',
+    locationsHubDesc: 'Haverhill MA y Nashua NH',
 
     // Overall Picks
     overallPicksTitle: 'Picks Generales',
