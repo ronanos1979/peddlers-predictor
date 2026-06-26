@@ -32,13 +32,24 @@ export default function AdminCheckinsPage() {
   const [view, setView] = useState<'list' | 'leaders'>('list')
   const [dateFilter, setDateFilter] = useState('')
   const [pubFilter, setPubFilter] = useState<'all' | 'haverhill' | 'nashua'>('all')
+  const [openCards, setOpenCards] = useState<Set<string>>(new Set())
   const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set())
+  const [initializedCards, setInitializedCards] = useState(false)
 
   const loadCheckins = useCallback(async (pw: string) => {
     setLoading(true)
     const res = await fetch(`/api/admin-data?password=${encodeURIComponent(pw)}&action=checkins`)
     const data = await res.json()
-    setCheckins(data.checkins || [])
+    const rows: CheckInRow[] = data.checkins || []
+    setCheckins(rows)
+    // Auto-open the latest match on load
+    let latestId = '', latestKickoff = ''
+    for (const c of rows) {
+      const ko = c.matches?.kickoff_at || ''
+      if (ko > latestKickoff) { latestKickoff = ko; latestId = c.match_id }
+    }
+    if (latestId) setOpenCards(new Set([latestId]))
+    setInitializedCards(true)
     setLoading(false)
   }, [])
 
@@ -63,6 +74,14 @@ export default function AdminCheckinsPage() {
     } else {
       setAuthError('Wrong password')
     }
+  }
+
+  function toggleCard(matchId: string) {
+    setOpenCards(prev => {
+      const next = new Set(prev)
+      if (next.has(matchId)) { next.delete(matchId) } else { next.add(matchId) }
+      return next
+    })
   }
 
   function toggleExpand(matchId: string) {
@@ -197,56 +216,66 @@ export default function AdminCheckinsPage() {
       {!loading && view === 'list' && (
         matchEntries.length === 0
           ? <div className="card" style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--text-muted)' }}>No check-ins for this filter</div>
-          : matchEntries.map(([matchId, rows]) => {
+          : matchEntries.map(([matchId, rows], idx) => {
               const m = rows[0].matches
+              const isOpen = initializedCards ? openCards.has(matchId) : idx === 0
               const expanded = expandedMatches.has(matchId)
               const PREVIEW = 5
               const visible = expanded ? rows : rows.slice(0, PREVIEW)
+              const matchLabel = `${m?.home_flag ?? ''} ${m?.home_team ?? ''} vs ${m?.away_flag ?? ''} ${m?.away_team ?? ''}`
+              const dateLabel = m?.kickoff_at ? new Date(m.kickoff_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+
               return (
-                <div key={matchId} className="card" style={{ marginBottom: 12, border: '1px solid rgba(255,59,59,0.2)' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>
-                        {m?.home_flag} {m?.home_team} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs</span> {m?.away_flag} {m?.away_team}
-                      </div>
+                <div key={matchId} className="card" style={{ marginBottom: 8, border: '1px solid rgba(255,59,59,0.2)', padding: 0, overflow: 'hidden' }}>
+                  {/* Card header — always visible, click to toggle */}
+                  <button
+                    onClick={() => toggleCard(matchId)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{matchLabel}</div>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {m?.stage} · {m?.kickoff_at ? new Date(m.kickoff_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                        {m?.stage} · {dateLabel}
+                        {m?.checkin_winner_name && <span style={{ color: 'var(--gold)', marginLeft: 8 }}>🏆 {m.checkin_winner_name}</span>}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--red)' }}>{rows.length}</span>
-                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>checked in</div>
-                      {m?.checkin_winner_name && (
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--gold)', marginTop: 4 }}>
-                          🏆 {m.checkin_winner_name}
-                        </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--red)' }}>{rows.length}</span>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>checked in</div>
+                      </div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-cond)' }}>{isOpen ? '▲' : '▼'}</span>
+                    </div>
+                  </button>
+
+                  {/* Expandable body */}
+                  {isOpen && (
+                    <div style={{ padding: '0 16px 12px', borderTop: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10 }}>
+                        {visible.map(c => (
+                          <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2, fontSize: 12, paddingBottom: 5, borderBottom: '1px solid var(--border)' }}>
+                            <div>
+                              <span style={{ fontWeight: 700, color: 'var(--text)' }}>{c.name}</span>
+                              <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{c.phone}</span>
+                              {c.email && <span style={{ color: 'var(--green)', marginLeft: 8 }}>✉ {c.email}</span>}
+                              {c.shared_to && <span style={{ color: 'var(--amber)', marginLeft: 8, fontFamily: 'var(--font-cond)', fontSize: 11 }}>shared {c.shared_to}</span>}
+                              <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11 }}>
+                                {c.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'} · {formatTime(c.created_at)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {rows.length > PREVIEW && (
+                        <button
+                          onClick={() => toggleExpand(matchId)}
+                          style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, cursor: 'pointer', padding: 0 }}
+                        >
+                          {expanded ? '▲ Show less' : `▼ Show all ${rows.length}`}
+                        </button>
                       )}
                     </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {visible.map(c => (
-                      <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, fontSize: 12, paddingBottom: 5, borderBottom: '1px solid var(--border)' }}>
-                        <div>
-                          <span style={{ fontWeight: 700, color: 'var(--text)' }}>{c.name}</span>
-                          <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{c.phone}</span>
-                          {c.email && <span style={{ color: 'var(--green)', marginLeft: 8 }}>✉ {c.email}</span>}
-                          {c.shared_to && <span style={{ color: 'var(--amber)', marginLeft: 8, fontFamily: 'var(--font-cond)', fontSize: 11 }}>shared {c.shared_to}</span>}
-                          <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11 }}>
-                            {c.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'} · {formatTime(c.created_at)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {rows.length > PREVIEW && (
-                    <button
-                      onClick={() => toggleExpand(matchId)}
-                      style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, cursor: 'pointer', padding: 0 }}
-                    >
-                      {expanded ? '▲ Show less' : `▼ Show all ${rows.length}`}
-                    </button>
                   )}
                 </div>
               )
