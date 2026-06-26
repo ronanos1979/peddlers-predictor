@@ -103,7 +103,20 @@ export function getR32EntryMatches(
     .map(m => ({ match: m, isHome: slot3rdMatchesGroup(m.home_team, g) }))
 }
 
+// ESPN overwrites "Match N Winner" placeholders with stage-ordinal labels:
+//   "Round of 32 N Winner", "Round of 16 N Winner", "Quarterfinal N Winner", "Semifinal N Winner"
+// N is the 1-based position of the match within its stage (sorted by kickoff_at).
+function espnOrdinalLabel(stage: string, ordinalInStage: number): string | null {
+  if (stage === 'Round of 32')  return `Round of 32 ${ordinalInStage} Winner`
+  if (stage === 'Round of 16')  return `Round of 16 ${ordinalInStage} Winner`
+  if (stage === 'Quarter Final') return `Quarterfinal ${ordinalInStage} Winner`
+  if (stage === 'Semi Final')   return `Semifinal ${ordinalInStage} Winner`
+  return null
+}
+
 // Trace R32 → R16 → QF → SF → Final following "Match N Winner" cross-references.
+// Falls back to ESPN ordinal labels and (for completed matches) the winner's team name
+// to handle database slots that were rewritten by updateKnockoutNames() Pass 2.
 // Returns PathSteps in order (viability set to 'upcoming' — apply computePathViability separately).
 export function tracePathToFinal(
   sortedMatches: MatchRecord[],
@@ -119,10 +132,40 @@ export function tracePathToFinal(
     const opponentSlot = isHome ? cur.away_team : cur.home_team
     steps.push({ match: cur, matchNum, isHome, status: 'upcoming', opponentSlot })
     if (cur.stage === 'Final') break
+
     const label = `Match ${matchNum} Winner`
-    const next = sortedMatches.find(m => m.home_team === label || m.away_team === label)
+
+    // 1. Original DB format: "Match N Winner"
+    let next = sortedMatches.find(m => m.home_team === label || m.away_team === label)
+    let nextIsHome = next ? next.home_team === label : false
+
+    // 2. ESPN ordinal format: "Round of 32 N Winner", "Quarterfinal N Winner", etc.
+    //    N = 1-based position of the current match within its stage.
+    if (!next) {
+      const stageMatches = sortedMatches.filter(m => m.stage === cur.stage)
+      const ordinalInStage = stageMatches.findIndex(m => m.id === cur.id) + 1
+      const espn = espnOrdinalLabel(cur.stage, ordinalInStage)
+      if (espn) {
+        next = sortedMatches.find(m => m.home_team === espn || m.away_team === espn)
+        nextIsHome = next ? next.home_team === espn : false
+      }
+    }
+
+    // 3. Winner's real team name (for already-played matches where the winner was
+    //    filled directly into the next round, replacing the placeholder entirely)
+    if (!next && cur.result) {
+      const winnerName = cur.result === 'home' ? cur.home_team : cur.away_team
+      const koStages = new Set(['Round of 16', 'Quarter Final', 'Semi Final', 'Final'])
+      next = sortedMatches.find(m =>
+        m.kickoff_at > cur.kickoff_at &&
+        koStages.has(m.stage) &&
+        (m.home_team === winnerName || m.away_team === winnerName)
+      )
+      nextIsHome = next ? next.home_team === winnerName : false
+    }
+
     if (!next) break
-    isHome = next.home_team === label
+    isHome = nextIsHome
     cur = next
   }
 
