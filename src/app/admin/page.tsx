@@ -90,6 +90,7 @@ export default function AdminPage() {
   const [goldenBootResult, setGoldenBootResult] = useState<{ scored: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [checkins, setCheckins] = useState<CheckInRow[]>([])
+  const [checkinEarlierOpen, setCheckinEarlierOpen] = useState(false)
   const [checkinMinDraw, setCheckinMinDraw] = useState<number>(() =>
     typeof window !== 'undefined' ? parseInt(localStorage.getItem('checkin_min_draw') || '10', 10) : 10
   )
@@ -983,59 +984,73 @@ export default function AdminPage() {
                     <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>check-ins</span>
                   </div>
                 </div>
-                {Array.from(byMatch.entries()).map(([matchId, rows]) => {
-                  const m = rows[0].matches
-                  const alreadyDrawn = m?.checkin_winner_name
-                  return (
-                    <div key={matchId} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>
-                            {m?.home_flag} {m?.home_team} vs {m?.away_flag} {m?.away_team}
-                          </div>
-                          <div className="muted" style={{ fontSize: 12 }}>{m?.stage} · {rows.length} checked in</div>
-                        </div>
-                        {alreadyDrawn ? (
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>🏆 Winner Drawn</div>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{m.checkin_winner_name}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.checkin_winner_phone}</div>
-                            <button
-                              onClick={() => drawCheckinWinner(matchId)}
-                              disabled={drawingMatchId === matchId}
-                              style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
-                            >
-                              Re-draw
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            className="btn btn-primary"
-                            style={{ width: 'auto', padding: '7px 14px', fontSize: 13, background: 'var(--red)', borderColor: 'transparent' }}
-                            onClick={() => drawCheckinWinner(matchId)}
-                            disabled={drawingMatchId === matchId}
-                          >
-                            {drawingMatchId === matchId ? 'Drawing…' : `🎲 Draw Winner (${rows.length})`}
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {rows.slice(0, 10).map(c => (
-                          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>
-                            <span>·</span>
-                            <span>{c.phone}</span>
-                            {c.email && <><span>·</span><span style={{ color: 'var(--green)' }}>✉</span></>}
-                            {c.shared_to && <span style={{ color: 'var(--amber)', fontSize: 11 }}>shared via {c.shared_to}</span>}
-                          </div>
-                        ))}
-                        {rows.length > 10 && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>+ {rows.length - 10} more</div>
-                        )}
-                      </div>
-                    </div>
+                {(() => {
+                  const sorted = Array.from(byMatch.entries()).sort((a, b) =>
+                    (b[1][0].matches?.kickoff_at || '').localeCompare(a[1][0].matches?.kickoff_at || '')
                   )
-                })}
+                  const [latest, ...older] = sorted
+
+                  const renderMatch = ([matchId, rows]: [string, CheckInRow[]], isLatest: boolean) => {
+                    const m = rows[0].matches
+                    const alreadyDrawn = m?.checkin_winner_name
+                    return (
+                      <div key={matchId} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>
+                              {m?.home_flag} {m?.home_team} vs {m?.away_flag} {m?.away_team}
+                              {isLatest && <span style={{ marginLeft: 8, fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)', border: '1px solid rgba(0,200,122,0.4)', borderRadius: 4, padding: '2px 5px' }}>Latest</span>}
+                            </div>
+                            <div className="muted" style={{ fontSize: 12 }}>{m?.stage} · {rows.length} checked in</div>
+                          </div>
+                          {alreadyDrawn ? (
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>🏆 Winner Drawn</div>
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{m.checkin_winner_name}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.checkin_winner_phone}</div>
+                              <button onClick={() => drawCheckinWinner(matchId)} disabled={drawingMatchId === matchId} style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>Re-draw</button>
+                            </div>
+                          ) : (
+                            <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13, background: 'var(--red)', borderColor: 'transparent' }} onClick={() => drawCheckinWinner(matchId)} disabled={drawingMatchId === matchId}>
+                              {drawingMatchId === matchId ? 'Drawing…' : `🎲 Draw Winner (${rows.length})`}
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {rows.slice(0, 10).map(c => (
+                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>
+                              <span>·</span><span>{c.phone}</span>
+                              {c.email && <><span>·</span><span style={{ color: 'var(--green)' }}>✉</span></>}
+                              {c.shared_to && <span style={{ color: 'var(--amber)', fontSize: 11 }}>shared via {c.shared_to}</span>}
+                            </div>
+                          ))}
+                          {rows.length > 10 && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>+ {rows.length - 10} more</div>}
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <>
+                      {latest && renderMatch(latest, true)}
+                      {older.length > 0 && (
+                        <>
+                          <button
+                            onClick={() => setCheckinEarlierOpen(o => !o)}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', marginBottom: checkinEarlierOpen ? 12 : 0 }}
+                          >
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>
+                              Earlier matches ({older.length})
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{checkinEarlierOpen ? '▲' : '▼'}</span>
+                          </button>
+                          {checkinEarlierOpen && older.map(e => renderMatch(e, false))}
+                        </>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             )
           })()}
