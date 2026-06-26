@@ -940,6 +940,12 @@ export default function AdminPage() {
                 )}
               </button>
             ))}
+            <Link href="/admin/checkins"
+              style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
+                background: 'transparent', color: 'var(--text)', fontWeight: 400,
+                fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              check-ins ↗
+            </Link>
           </div>
         )
       })()}
