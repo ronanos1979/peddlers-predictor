@@ -52,7 +52,19 @@
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260624\")",
       "Bash(xargs ls)",
       "WebFetch(domain:www.fifa.com)",
-      "Bash(grep -n \"pathLinkHowToQualify\\\\|tab === 'fixtures' && \\(\\\\|^\\\\s*\\)\\\\s*$\\\\|return \\\\\\(\\\\|^\\\\s*<\\\\/div>\" /Users/ronanosullivan/git/peddlers-predictor/src/app/world-cup/team/page.tsx)"
+      "Bash(grep -n \"pathLinkHowToQualify\\\\|tab === 'fixtures' && \\(\\\\|^\\\\s*\\)\\\\s*$\\\\|return \\\\\\(\\\\|^\\\\s*<\\\\/div>\" /Users/ronanosullivan/git/peddlers-predictor/src/app/world-cup/team/page.tsx)",
+      "Bash(xargs -n 1 git update-ref -d)",
+      "Bash(git reflog *)",
+      "Bash(git gc *)",
+      "Bash(xargs -I{} git merge-base --is-ancestor 8629d6e {})",
+      "Bash(curl -s \"https://peddlers-predictor.vercel.app/api/team?name=Cape%20Verde\")",
+      "Bash(curl -s \"https://peddlers-predictor.vercel.app/\")",
+      "Bash(curl -s \"https://peddlers-predictor.vercel.app/_next/static/chunks/app/layout.js\")",
+      "Bash(curl -s \"https://peddlers-predictor.vercel.app/_next/static/chunks/main.js\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260703\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260701\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260702\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260630\")"
     ]
   }
 }
