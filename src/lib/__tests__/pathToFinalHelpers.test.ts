@@ -108,3 +108,43 @@ describe('buildPathChains', () => {
     expect(buildPathChains(S, 'Z', '1st')).toHaveLength(0)
   })
 })
+
+// ESPN rewrites DB placeholders to different formats before groups settle.
+// "Group H Runner-up" → "Group H 2nd Place"
+// "3rd Place (C/D/F/G/H)" → "Third Place Group C/D/F/G/H"
+// getR32EntryMatches must handle both.
+describe('getR32EntryMatches — ESPN-format placeholders', () => {
+  const espnCorrupted = [
+    { id: 'g1', kickoff_at: '2026-06-13T18:00:00Z', stage: 'Group H', home_team: 'Cape Verde', away_team: 'Saudi Arabia', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r1', kickoff_at: '2026-07-02T19:00:00Z', stage: 'Round of 32', home_team: 'Group H Winner', away_team: 'Group J 2nd Place', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r2', kickoff_at: '2026-07-03T22:00:00Z', stage: 'Round of 32', home_team: 'Argentina', away_team: 'Group H 2nd Place', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r3', kickoff_at: '2026-06-30T21:00:00Z', stage: 'Round of 32', home_team: 'Group I Winner', away_team: 'Third Place Group C/D/F/G/H', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r4', kickoff_at: '2026-07-01T16:00:00Z', stage: 'Round of 32', home_team: 'Group L Winner', away_team: 'Third Place Group E/H/I/J/K', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r5', kickoff_at: '2026-07-04T17:00:00Z', stage: 'Round of 16', home_team: 'Match 1 Winner', away_team: 'Match 2 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r6', kickoff_at: '2026-07-07T20:00:00Z', stage: 'Round of 16', home_team: 'Match 4 Winner', away_team: 'Match 3 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'qf', kickoff_at: '2026-07-12T20:00:00Z', stage: 'Quarter Final', home_team: 'Match 5 Winner', away_team: 'Match 6 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'sf', kickoff_at: '2026-07-15T20:00:00Z', stage: 'Semi Final', home_team: 'Match 7 Winner', away_team: 'Match 8 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'fi', kickoff_at: '2026-07-19T20:00:00Z', stage: 'Final', home_team: 'Match 9 Winner', away_team: 'Match 10 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+  ]
+
+  it('2nd — finds "Group H 2nd Place" (ESPN format)', () => {
+    const r = getR32EntryMatches(espnCorrupted, 'H', '2nd', 'Cape Verde')
+    expect(r).toHaveLength(1)
+    expect(r[0].match.id).toBe('r2')
+    expect(r[0].isHome).toBe(false)
+  })
+
+  it('best_3rd — finds "Third Place Group C/D/F/G/H" (ESPN format)', () => {
+    const r = getR32EntryMatches(espnCorrupted, 'H', 'best_3rd')
+    expect(r).toHaveLength(2)
+    expect(r.map(e => e.match.id).sort()).toEqual(['r3', 'r4'])
+    expect(r.every(e => !e.isHome)).toBe(true)
+  })
+
+  it('1st — still finds "Group H Winner" (original format unchanged)', () => {
+    const r = getR32EntryMatches(espnCorrupted, 'H', '1st')
+    expect(r).toHaveLength(1)
+    expect(r[0].match.id).toBe('r1')
+    expect(r[0].isHome).toBe(true)
+  })
+})

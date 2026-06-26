@@ -72,29 +72,35 @@ export function getR32EntryMatches(
 
   if (position === '2nd') {
     const ph = `Group ${g} Runner-up`
-    const byPlaceholder = r32.filter(m => m.home_team === ph || m.away_team === ph)
-    if (byPlaceholder.length > 0) return byPlaceholder.map(m => ({ match: m, isHome: m.home_team === ph }))
+    // ESPN rewrites "Group H Runner-up" → "Group H 2nd Place" in the DB before the group is settled
+    const phEspn = `Group ${g} 2nd Place`
+    const byPlaceholder = r32.filter(m =>
+      m.home_team === ph || m.away_team === ph ||
+      m.home_team === phEspn || m.away_team === phEspn
+    )
+    if (byPlaceholder.length > 0) return byPlaceholder.map(m => ({
+      match: m,
+      isHome: m.home_team === ph || m.home_team === phEspn,
+    }))
     // Placeholder was replaced with real team name after group completed
     if (schedName) return r32.filter(m => m.home_team === schedName || m.away_team === schedName).map(m => ({ match: m, isHome: m.home_team === schedName }))
     return []
   }
 
+  // Helper: check if a slot targets this group in the 3rd-place position
+  // Handles both DB format "3rd Place (C/D/F/G/H)" and ESPN format "Third Place Group C/D/F/G/H"
+  function slot3rdMatchesGroup(slot: string, grp: string): boolean {
+    const dbHit = slot.match(/3rd Place \(([^)]+)\)/i)
+    if (dbHit && dbHit[1].split('/').map(s => s.trim().toUpperCase()).includes(grp)) return true
+    const espnHit = slot.match(/Third Place Group ([A-L/]+)/i)
+    if (espnHit && espnHit[1].split('/').map(s => s.trim().toUpperCase()).includes(grp)) return true
+    return false
+  }
+
   // best_3rd — find all R32 matches whose "3rd Place (…)" slot includes this group letter
   return r32
-    .filter(m => {
-      for (const slot of [m.home_team, m.away_team]) {
-        const hit = slot.match(/3rd Place \(([^)]+)\)/i)
-        if (hit && hit[1].split('/').map(s => s.trim().toUpperCase()).includes(g)) return true
-      }
-      return false
-    })
-    .map(m => {
-      const homeHit = m.home_team.match(/3rd Place \(([^)]+)\)/i)
-      const isHome =
-        homeHit !== null &&
-        homeHit[1].split('/').map(s => s.trim().toUpperCase()).includes(g)
-      return { match: m, isHome }
-    })
+    .filter(m => slot3rdMatchesGroup(m.home_team, g) || slot3rdMatchesGroup(m.away_team, g))
+    .map(m => ({ match: m, isHome: slot3rdMatchesGroup(m.home_team, g) }))
 }
 
 // Trace R32 → R16 → QF → SF → Final following "Match N Winner" cross-references.

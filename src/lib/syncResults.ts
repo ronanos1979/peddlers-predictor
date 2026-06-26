@@ -44,9 +44,17 @@ type StandingRow = { team: { name: string }; all: { played: number } }
 // Resolve "Group X Winner" / "Group X Runner-up" placeholders in the matches table
 // to real team names once the group is complete. Also sets home_flag/away_flag from
 // existing group stage match records. Returns the number of match rows updated.
-// True if a team slot still holds an unresolved placeholder
+// True if a team slot still holds an unresolved placeholder.
+// Catches both our DB format ("Group H Runner-up", "3rd Place (A/B/C)") and
+// ESPN's format ("Group H 2nd Place", "Third Place Group C/D/F/G/H") so Pass 2
+// never overwrites a real placeholder with an ESPN-format placeholder.
 function isPlaceholderName(name: string): boolean {
-  return /\b(Winner|Runner-up|3rd\s*Place|TBD|Match\s*\d+)\b/i.test(name)
+  if (/\b(Winner|Runner-up|3rd\s*Place|TBD|Match\s*\d+)\b/i.test(name)) return true
+  // ESPN uses "Group H 2nd Place" / "Group K 1st Place" — catch ordinal+Place combos
+  if (/\b\d+(?:st|nd|rd|th)\s+Place\b/i.test(name)) return true
+  // ESPN uses "Third Place Group E/H/I/J/K" instead of our "3rd Place (E/H/I/J/K)"
+  if (/\bThird\s+Place\b/i.test(name)) return true
+  return false
 }
 
 export async function updateKnockoutNames(): Promise<number> {
@@ -156,8 +164,9 @@ export async function updateKnockoutNames(): Promise<number> {
         const schedAway = FD_TO_SCHED[espnAwayComp.team.displayName] ?? espnAwayComp.team.displayName
 
         const updates: Record<string, string> = {}
-        if (isPlaceholderName(m.home_team)) { updates.home_team = schedHome; const f = flagMap.get(schedHome); if (f) updates.home_flag = f }
-        if (isPlaceholderName(m.away_team)) { updates.away_team = schedAway; const f = flagMap.get(schedAway); if (f) updates.away_flag = f }
+        // Only write a real team name — skip if ESPN is still showing its own placeholder
+        if (isPlaceholderName(m.home_team) && !isPlaceholderName(schedHome)) { updates.home_team = schedHome; const f = flagMap.get(schedHome); if (f) updates.home_flag = f }
+        if (isPlaceholderName(m.away_team) && !isPlaceholderName(schedAway)) { updates.away_team = schedAway; const f = flagMap.get(schedAway); if (f) updates.away_flag = f }
         if (Object.keys(updates).length > 0) {
           await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
           updated++
