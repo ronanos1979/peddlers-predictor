@@ -83,7 +83,7 @@ export default function AdminPage() {
   const [analyticsDays, setAnalyticsDays] = useState(7)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   type SyncDebugUnmatched = { match: string; dbKickoff: string; nearestFd: string | null; nearestFdKickoff: string | null; diffMin: number | null }
-  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; events_loaded?: number; names_updated?: number; message?: string; debug?: { fdFinishedCount: number; dbUnresolvedCount: number; unmatched: SyncDebugUnmatched[] } } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; events_loaded?: number; names_updated?: number; scores_corrected?: number; message?: string; debug?: { fdFinishedCount: number; dbUnresolvedCount: number; unmatched: SyncDebugUnmatched[] } } | null>(null)
   const [knockoutNamesUpdating, setKnockoutNamesUpdating] = useState(false)
   const [goldenBootPlayerInput, setGoldenBootPlayerInput] = useState('')
   const [goldenBootScoring, setGoldenBootScoring] = useState(false)
@@ -1071,7 +1071,7 @@ export default function AdminPage() {
                   background: syncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
                   color: syncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
                   border: `1px solid ${syncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
-                  {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored${syncResult.events_loaded ? ` · ${syncResult.events_loaded} event${syncResult.events_loaded !== 1 ? 's' : ''} loaded` : ''}${syncResult.names_updated ? ` · ${syncResult.names_updated} team name${syncResult.names_updated !== 1 ? 's' : ''} resolved` : ''}`}
+                  {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored${syncResult.events_loaded ? ` · ${syncResult.events_loaded} event${syncResult.events_loaded !== 1 ? 's' : ''} loaded` : ''}${syncResult.scores_corrected ? ` · ${syncResult.scores_corrected} score${syncResult.scores_corrected !== 1 ? 's' : ''} corrected` : ''}${syncResult.names_updated ? ` · ${syncResult.names_updated} team name${syncResult.names_updated !== 1 ? 's' : ''} resolved` : ''}`}
                 </div>
                 {syncResult.debug && (
                   <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, fontSize: 12, background: 'rgba(119,119,112,0.08)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontFamily: 'monospace' }}>

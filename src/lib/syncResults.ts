@@ -18,6 +18,7 @@ export type SyncResultsOutput = {
   entries_scored: number
   events_loaded: number
   names_updated: number
+  scores_corrected: number
   message?: string
   debug: {
     fdFinishedCount: number
@@ -242,6 +243,58 @@ function pairWithFd(match: DbMatch, fdFinished: FdFixture[]): PairedResult | nul
   return { result, homeScore, awayScore }
 }
 
+// Cross-check all recently-resolved matches against their loaded ESPN events.
+// Fixes any match where FD returned a wrong/stale score (e.g. 0-0 when events show 3-2).
+// Returns the number of matches corrected.
+async function reconcileFromEvents(): Promise<number> {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: recentMatches } = await supabaseAdmin
+    .from('matches')
+    .select('id, kickoff_at, home_team, away_team, result, home_score, away_score, hat_trick_scored, hat_trick_scorer')
+    .not('result', 'is', null)
+    .gte('kickoff_at', since)
+    .neq('stage', 'Demo Match')
+
+  if (!recentMatches || recentMatches.length === 0) return 0
+
+  const { data: eventRows } = await supabaseAdmin
+    .from('match_events')
+    .select('match_id, events')
+    .in('match_id', recentMatches.map(m => m.id))
+
+  if (!eventRows || eventRows.length === 0) return 0
+
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+  let corrected = 0
+
+  for (const row of eventRows) {
+    const match = recentMatches.find(m => m.id === row.match_id)
+    if (!match) continue
+    const events = (row.events as Array<{ type: string; detail: string; player: { name: string }; team: { name: string }; teamSide?: string }>) || []
+    if (events.length === 0) continue
+
+    const normHome = norm(match.home_team)
+    const normAway = norm(match.away_team)
+    const isHome = (e: typeof events[0]) => e.teamSide === 'home' || (!e.teamSide && norm(e.team.name) === normHome)
+    const isAway = (e: typeof events[0]) => e.teamSide === 'away' || (!e.teamSide && norm(e.team.name) === normAway)
+
+    const goals = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal')
+    const ownGoals = events.filter(e => e.detail === 'Own Goal')
+    const homeGoals = goals.filter(isHome).length + ownGoals.filter(isAway).length
+    const awayGoals = goals.filter(isAway).length + ownGoals.filter(isHome).length
+
+    // Only act when at least one goal was attributed — avoids false 0-0 positives
+    if (homeGoals === 0 && awayGoals === 0) continue
+
+    const evtResult: 'home' | 'draw' | 'away' = homeGoals > awayGoals ? 'home' : awayGoals > homeGoals ? 'away' : 'draw'
+    if (evtResult === match.result && match.home_score === homeGoals && match.away_score === awayGoals) continue
+
+    await applyAndScore(match as DbMatch, { result: evtResult, homeScore: homeGoals, awayScore: awayGoals })
+    corrected++
+  }
+  return corrected
+}
+
 // Apply result + score to match row and re-score all its entries. Returns entries scored count.
 async function applyAndScore(match: DbMatch, paired: PairedResult): Promise<number> {
   const { result, homeScore, awayScore } = paired
@@ -283,8 +336,10 @@ export async function syncResults(): Promise<SyncResultsOutput> {
   const fdFinished = (data.response || []).filter(f => f.fixture.status.short === 'FT')
 
   if (fdFinished.length === 0) {
+    const scores_corrected = await reconcileFromEvents().catch(() => 0)
+    const names_updated = await updateKnockoutNames().catch(() => 0)
     return {
-      updated: 0, entries_scored: 0, events_loaded: 0, names_updated: 0,
+      updated: 0, entries_scored: 0, events_loaded: 0, names_updated, scores_corrected,
       message: 'No finished matches found from API',
       debug: { fdFinishedCount: 0, dbUnresolvedCount: 0, unmatched: [] },
     }
@@ -300,9 +355,10 @@ export async function syncResults(): Promise<SyncResultsOutput> {
     .neq('stage', 'Demo Match')
 
   if (!unresolved || unresolved.length === 0) {
+    const scores_corrected = await reconcileFromEvents().catch(() => 0)
     const names_updated = await updateKnockoutNames().catch(() => 0)
     return {
-      updated: 0, entries_scored: 0, events_loaded: 0, names_updated,
+      updated: 0, entries_scored: 0, events_loaded: 0, names_updated, scores_corrected,
       message: 'No unresolved finished matches',
       debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: 0, unmatched: [] },
     }
@@ -347,10 +403,11 @@ export async function syncResults(): Promise<SyncResultsOutput> {
     events_loaded = espnResults.filter(r => r.status === 'fulfilled' && r.value !== null).length
   }
 
+  const scores_corrected = await reconcileFromEvents().catch(() => 0)
   const names_updated = await updateKnockoutNames().catch(() => 0)
 
   return {
-    updated, entries_scored, events_loaded, names_updated,
+    updated, entries_scored, events_loaded, names_updated, scores_corrected,
     debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: unresolved.length, unmatched },
   }
 }
@@ -369,7 +426,7 @@ export async function resyncMatchIds(matchIds: string[]): Promise<SyncResultsOut
 
   if (!matches || matches.length === 0) {
     return {
-      updated: 0, entries_scored: 0, events_loaded: 0, names_updated: 0,
+      updated: 0, entries_scored: 0, events_loaded: 0, names_updated: 0, scores_corrected: 0,
       message: 'No matches found for given IDs',
       debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: 0, unmatched: [] },
     }
@@ -414,7 +471,7 @@ export async function resyncMatchIds(matchIds: string[]): Promise<SyncResultsOut
   }
 
   return {
-    updated, entries_scored, events_loaded: resolvedForEspn.length, names_updated: 0,
+    updated, entries_scored, events_loaded: resolvedForEspn.length, names_updated: 0, scores_corrected: 0,
     debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: matches.length, unmatched },
   }
 }
