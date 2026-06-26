@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { supabase, type Match } from '@/lib/supabase'
 import { getDailyCode } from '@/lib/matchSchedule'
 import Flag from '@/components/Flag'
@@ -965,6 +966,9 @@ export default function AdminPage() {
                     <div style={{ fontSize: 13, fontWeight: 600 }}>
                       {checkins.length} total · {byMatch.size} match{byMatch.size !== 1 ? 'es' : ''}
                     </div>
+                    <Link href="/admin/checkins" style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--red)', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}>
+                      Full check-in detail →
+                    </Link>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
