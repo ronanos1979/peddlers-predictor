@@ -1135,67 +1135,94 @@ function TeamContent() {
                     const myFlag = isHome ? match.home_flag : match.away_flag
                     const opponent = isHome ? match.away_team : match.home_team
                     const opponentFlag = isHome ? match.away_flag : match.home_flag
-                    const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
-                    const resultLabel = match.result ? resultMap[match.result] : null
-                    const borderColor = resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
-                    const resultColor = resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
+
+                    // Events
                     const events = matchEventsById.get(match.id) ?? []
                     const goals = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal')
                     const ownGoals = events.filter(e => e.detail === 'Own Goal')
-                    const myGoals = goals.filter(e => e.teamSide === (isHome ? 'home' : 'away'))
-                    const oppGoals = goals.filter(e => e.teamSide === (isHome ? 'away' : 'home'))
-                    // Own goals credited to the team that conceded (opposite side)
-                    const myOwnGoalsConceded = ownGoals.filter(e => e.teamSide === (isHome ? 'away' : 'home'))
-                    const allMyGoals = [...myGoals, ...myOwnGoalsConceded].sort((a, b) => a.time.elapsed - b.time.elapsed)
-                    const allOppGoals = [...oppGoals, ...ownGoals.filter(e => e.teamSide === (isHome ? 'home' : 'away'))].sort((a, b) => a.time.elapsed - b.time.elapsed)
+                    // My goals: goals by my side + own goals by opponent side (credited to me)
+                    const allMyGoals = [
+                      ...goals.filter(e => e.teamSide === (isHome ? 'home' : 'away')),
+                      ...ownGoals.filter(e => e.teamSide === (isHome ? 'away' : 'home')),
+                    ].sort((a, b) => a.time.elapsed - b.time.elapsed)
+                    const allOppGoals = [
+                      ...goals.filter(e => e.teamSide === (isHome ? 'away' : 'home')),
+                      ...ownGoals.filter(e => e.teamSide === (isHome ? 'home' : 'away')),
+                    ].sort((a, b) => a.time.elapsed - b.time.elapsed)
+
+                    // Score: prefer DB value, fall back to event count when events are loaded
+                    const hasDbScore = match.home_score !== null && match.away_score !== null
+                    const homeScoreEvt = goals.filter(e => e.teamSide === 'home').length + ownGoals.filter(e => e.teamSide === 'away').length
+                    const awayScoreEvt = goals.filter(e => e.teamSide === 'away').length + ownGoals.filter(e => e.teamSide === 'home').length
+                    const homeScore = hasDbScore ? match.home_score! : (events.length > 0 ? homeScoreEvt : null)
+                    const awayScore = hasDbScore ? match.away_score! : (events.length > 0 ? awayScoreEvt : null)
+                    const myScore = isHome ? homeScore : awayScore
+                    const oppScore = isHome ? awayScore : homeScore
+
+                    // Derive W/D/L from actual score (events override wrong DB result)
+                    const derivedLabel = (myScore !== null && oppScore !== null)
+                      ? (myScore > oppScore ? 'W' : myScore < oppScore ? 'L' : 'D')
+                      : (match.result ? ({ home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }[match.result]) : null)
+                    const resultColor = derivedLabel === 'W' ? 'var(--green)' : derivedLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
+                    const borderColor = derivedLabel === 'W' ? 'rgba(0,200,122,0.3)' : derivedLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
+
+                    const fmtGoal = (e: typeof allMyGoals[0]) => {
+                      const icon = e.detail === 'Own Goal' ? '⚽🔴' : e.detail === 'Penalty' ? '⚽(P)' : '⚽'
+                      const min = `${e.time.elapsed}${e.time.extra ? `+${e.time.extra}` : ''}'`
+                      return `${icon} ${e.player.name} ${min}`
+                    }
+
                     return (
                       <div key={match.id} style={{
                         padding: '12px 14px', background: 'var(--surface)',
-                        border: `1px solid ${borderColor}`,
-                        borderRadius: 8, marginBottom: 6
+                        border: `1px solid ${borderColor}`, borderRadius: 8, marginBottom: 6
                       }}>
-                        {/* Match header: teams + score + result */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
-                              {match.stage} · {fmtDate(match.kickoff_at)}
-                            </div>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                              <Flag emoji={myFlag} size={14} />{myTeam}
-                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, margin: '0 2px' }}>vs</span>
-                              <Flag emoji={opponentFlag} size={14} />{opponent}
-                            </div>
-                          </div>
-                          {match.result && (
-                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
-                                {isHome ? match.home_score : match.away_score}–{isHome ? match.away_score : match.home_score}
-                              </div>
-                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor }}>
-                                {resultLabel}
-                              </div>
-                            </div>
-                          )}
+                        {/* Stage + date */}
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          {match.stage} · {fmtDate(match.kickoff_at)}
                         </div>
-                        {/* Goal scorers */}
+                        {/* Teams + score */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14 }}>
+                            <Flag emoji={myFlag} size={15} />{myTeam}
+                          </div>
+                          <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                            {(myScore !== null && oppScore !== null) ? (
+                              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
+                                {myScore}–{oppScore}
+                              </div>
+                            ) : match.result ? (
+                              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: resultColor }}>vs</div>
+                            ) : (
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>vs</div>
+                            )}
+                            {derivedLabel && (
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor, textAlign: 'center' }}>
+                                {derivedLabel}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'flex-end', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, textAlign: 'right' }}>
+                            {opponent}<Flag emoji={opponentFlag} size={15} />
+                          </div>
+                        </div>
+                        {/* Goal scorers grouped by team */}
                         {(allMyGoals.length > 0 || allOppGoals.length > 0) && (
-                          <div style={{ marginTop: 8, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
                             {allMyGoals.length > 0 && (
                               <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                                {allMyGoals.map((e, i) => (
-                                  <span key={i} style={{ marginRight: 8 }}>
-                                    {e.detail === 'Penalty' ? '⚽(P)' : '⚽'} {e.player.name} {e.time.elapsed}{e.time.extra ? `+${e.time.extra}` : ''}'
-                                  </span>
-                                ))}
+                                <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--text)', marginRight: 6 }}>
+                                  <Flag emoji={myFlag} size={11} /> {myTeam}
+                                </span>
+                                {allMyGoals.map((e, i) => <span key={i} style={{ marginRight: 8 }}>{fmtGoal(e)}</span>)}
                               </div>
                             )}
                             {allOppGoals.length > 0 && (
-                              <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                                {allOppGoals.map((e, i) => (
-                                  <span key={i} style={{ marginRight: 8 }}>
-                                    {e.detail === 'Own Goal' ? '⚽🔴' : e.detail === 'Penalty' ? '⚽(P)' : '⚽'} {e.player.name} {e.time.elapsed}{e.time.extra ? `+${e.time.extra}` : ''}'
-                                  </span>
-                                ))}
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                                <span style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--text)', marginRight: 6 }}>
+                                  <Flag emoji={opponentFlag} size={11} /> {opponent}
+                                </span>
+                                {allOppGoals.map((e, i) => <span key={i} style={{ marginRight: 8 }}>{fmtGoal(e)}</span>)}
                               </div>
                             )}
                           </div>
