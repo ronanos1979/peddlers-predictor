@@ -42,11 +42,16 @@ type StandingRow = { team: { name: string }; all: { played: number } }
 // Resolve "Group X Winner" / "Group X Runner-up" placeholders in the matches table
 // to real team names once the group is complete. Also sets home_flag/away_flag from
 // existing group stage match records. Returns the number of match rows updated.
+// True if a team slot still holds an unresolved placeholder
+function isPlaceholderName(name: string): boolean {
+  return /\b(Winner|Runner-up|3rd\s*Place|TBD|Match\s*\d+)\b/i.test(name)
+}
+
 export async function updateKnockoutNames(): Promise<number> {
   const standingsData = await getFdStandings() as { response?: Array<{ league?: { standings?: StandingRow[][] } }> }
   const groups: StandingRow[][] = standingsData.response?.[0]?.league?.standings ?? []
-  if (groups.length === 0) return 0
 
+  // Pass 1 — standings-based: "Group X Winner/Runner-up" → real team name
   const resolution = new Map<string, string>()
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i]
@@ -56,9 +61,8 @@ export async function updateKnockoutNames(): Promise<number> {
       resolution.set(`Group ${letter} Runner-up`, FD_TO_SCHED[group[1].team.name] ?? group[1].team.name)
     }
   }
-  if (resolution.size === 0) return 0
 
-  // Build team name → flag emoji map from group stage matches
+  // Build team name → flag emoji map from all existing DB matches
   const { data: flagRows } = await supabaseAdmin
     .from('matches').select('home_team, home_flag, away_team, away_flag')
     .not('home_flag', 'is', null).neq('home_flag', '')
@@ -68,31 +72,90 @@ export async function updateKnockoutNames(): Promise<number> {
     if (m.away_team && m.away_flag) flagMap.set(m.away_team, m.away_flag)
   }
 
-  // Update all knockout matches that still have placeholder names we can now resolve
   const { data: knockoutMatches } = await supabaseAdmin
-    .from('matches').select('id, home_team, away_team')
+    .from('matches').select('id, home_team, away_team, kickoff_at')
     .not('stage', 'ilike', 'Group %').neq('stage', 'Demo Match')
 
   let updated = 0
+
+  // Apply standings-based resolution (Group Winner/Runner-up)
   for (const m of knockoutMatches || []) {
     const homeResolved = resolution.get(m.home_team)
     const awayResolved = resolution.get(m.away_team)
     if (!homeResolved && !awayResolved) continue
-
     const updates: Record<string, string> = {}
-    if (homeResolved) {
-      updates.home_team = homeResolved
-      const flag = flagMap.get(homeResolved)
-      if (flag) updates.home_flag = flag
-    }
-    if (awayResolved) {
-      updates.away_team = awayResolved
-      const flag = flagMap.get(awayResolved)
-      if (flag) updates.away_flag = flag
-    }
+    if (homeResolved) { updates.home_team = homeResolved; const f = flagMap.get(homeResolved); if (f) updates.home_flag = f }
+    if (awayResolved) { updates.away_team = awayResolved; const f = flagMap.get(awayResolved); if (f) updates.away_flag = f }
     await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
     updated++
   }
+
+  // Pass 2 — FD scheduled fixtures: fill any remaining placeholders ("3rd Place (…)",
+  // "Match N Winner", etc.) once FD confirms the matchups.
+  // Reload the knockout matches in case Pass 1 just updated some slots.
+  const { data: remainingMatches } = await supabaseAdmin
+    .from('matches').select('id, home_team, away_team, kickoff_at')
+    .not('stage', 'ilike', 'Group %').neq('stage', 'Demo Match')
+
+  const stillHasPlaceholder = (remainingMatches || []).filter(
+    m => isPlaceholderName(m.home_team) || isPlaceholderName(m.away_team)
+  )
+  if (stillHasPlaceholder.length > 0) {
+    type FdFixtureItem = { fixture: { date: string }; teams: { home: { name: string }; away: { name: string } } }
+    const allFdData = await getFdFixtures() as { response?: FdFixtureItem[] }
+    const allFdFixtures = allFdData.response ?? []
+
+    // Index FD fixtures by kickoff ms, keeping only those with real team names on both sides
+    const isRealName = (n: string) => !!n && n.length > 1 && !/^tbd$/i.test(n.trim())
+    const fdByTime: Array<{ ms: number; home: string; away: string }> = []
+    for (const f of allFdFixtures) {
+      const home = f.teams.home.name
+      const away = f.teams.away.name
+      if (isRealName(home) && isRealName(away)) {
+        fdByTime.push({ ms: new Date(f.fixture.date).getTime(), home, away })
+      }
+    }
+
+    for (const m of stillHasPlaceholder) {
+      const dbMs = new Date(m.kickoff_at).getTime()
+      const fd = fdByTime.find(f => Math.abs(f.ms - dbMs) <= 5 * 60 * 1000)
+      if (!fd) continue
+
+      // Convert FD names to schedule names
+      const fdHome = FD_TO_SCHED[fd.home] ?? fd.home
+      const fdAway = FD_TO_SCHED[fd.away] ?? fd.away
+
+      // Determine which FD team fills which placeholder slot.
+      // If one slot is already a real name, cross-check using normFdName to find the right order.
+      const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+      const homePlaceholder = isPlaceholderName(m.home_team)
+      const awayPlaceholder = isPlaceholderName(m.away_team)
+
+      let resolvedHome: string | null = null
+      let resolvedAway: string | null = null
+
+      if (homePlaceholder && awayPlaceholder) {
+        // Both unknown — trust FD's home/away ordering
+        resolvedHome = fdHome
+        resolvedAway = fdAway
+      } else if (homePlaceholder) {
+        // away_team is already real; figure out which FD team is which
+        resolvedHome = norm(fdAway) === norm(m.away_team) ? fdHome : fdAway
+      } else {
+        // home_team is already real; same logic
+        resolvedAway = norm(fdHome) === norm(m.home_team) ? fdAway : fdHome
+      }
+
+      const updates: Record<string, string> = {}
+      if (resolvedHome) { updates.home_team = resolvedHome; const f = flagMap.get(resolvedHome); if (f) updates.home_flag = f }
+      if (resolvedAway) { updates.away_team = resolvedAway; const f = flagMap.get(resolvedAway); if (f) updates.away_flag = f }
+      if (Object.keys(updates).length > 0) {
+        await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
+        updated++
+      }
+    }
+  }
+
   return updated
 }
 
