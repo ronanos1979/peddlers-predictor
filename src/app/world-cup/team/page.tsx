@@ -238,6 +238,7 @@ function TeamContent() {
   const [standingsOpen, setStandingsOpen] = useState(false)
   const [selectedChainIdx, setSelectedChainIdx] = useState(0)
   const [groupStageOpen, setGroupStageOpen] = useState(false)
+  const [matchEventsById, setMatchEventsById] = useState<Map<string, Array<{ type: string; detail: string; time: { elapsed: number; extra: number | null }; player: { name: string }; teamSide: 'home' | 'away' | undefined }>>>(new Map())
 
   useEffect(() => {
     setSavedTeam(readSavedTeam())
@@ -251,6 +252,23 @@ function TeamContent() {
       .order('kickoff_at', { ascending: true })
       .then(({ data }) => { if (data) setAllSortedMatches(data as MatchRecord[]) })
   }, [])
+
+  // Fetch match events for completed group stage matches
+  useEffect(() => {
+    const completed = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage) && m.result)
+    if (completed.length === 0) return
+    const ids = completed.map(m => m.id)
+    supabase
+      .from('match_events')
+      .select('match_id, events')
+      .in('match_id', ids)
+      .then(({ data }) => {
+        if (!data) return
+        const map = new Map<string, Array<{ type: string; detail: string; time: { elapsed: number; extra: number | null }; player: { name: string }; teamSide: 'home' | 'away' | undefined }>>()
+        for (const row of data) map.set(row.match_id, (row.events as never[]) || [])
+        setMatchEventsById(map)
+      })
+  }, [localMatches])
 
   useEffect(() => {
     const sched = localScheduleTeamName || teamName || ''
@@ -1113,40 +1131,75 @@ function TeamContent() {
                 {groupStageMatches.length > 0 && (() => {
                   const matchRows = groupStageMatches.map(match => {
                     const isHome = match.home_team === localScheduleTeamName
+                    const myTeam = localScheduleTeamName
+                    const myFlag = isHome ? match.home_flag : match.away_flag
                     const opponent = isHome ? match.away_team : match.home_team
                     const opponentFlag = isHome ? match.away_flag : match.home_flag
                     const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
                     const resultLabel = match.result ? resultMap[match.result] : null
                     const borderColor = resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
                     const resultColor = resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
+                    const events = matchEventsById.get(match.id) ?? []
+                    const goals = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal')
+                    const ownGoals = events.filter(e => e.detail === 'Own Goal')
+                    const myGoals = goals.filter(e => e.teamSide === (isHome ? 'home' : 'away'))
+                    const oppGoals = goals.filter(e => e.teamSide === (isHome ? 'away' : 'home'))
+                    // Own goals credited to the team that conceded (opposite side)
+                    const myOwnGoalsConceded = ownGoals.filter(e => e.teamSide === (isHome ? 'away' : 'home'))
+                    const allMyGoals = [...myGoals, ...myOwnGoalsConceded].sort((a, b) => a.time.elapsed - b.time.elapsed)
+                    const allOppGoals = [...oppGoals, ...ownGoals.filter(e => e.teamSide === (isHome ? 'home' : 'away'))].sort((a, b) => a.time.elapsed - b.time.elapsed)
                     return (
                       <div key={match.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
                         padding: '12px 14px', background: 'var(--surface)',
                         border: `1px solid ${borderColor}`,
                         borderRadius: 8, marginBottom: 6
                       }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
-                            {match.stage}
+                        {/* Match header: teams + score + result */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+                              {match.stage} · {fmtDate(match.kickoff_at)}
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                              <Flag emoji={myFlag} size={14} />{myTeam}
+                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, margin: '0 2px' }}>vs</span>
+                              <Flag emoji={opponentFlag} size={14} />{opponent}
+                            </div>
                           </div>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} />{opponent}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {match.result ? (
-                            <>
+                          {match.result && (
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
                               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
-                                {isHome ? match.home_score : match.away_score} – {isHome ? match.away_score : match.home_score}
+                                {isHome ? match.home_score : match.away_score}–{isHome ? match.away_score : match.home_score}
                               </div>
                               <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor }}>
                                 {resultLabel}
                               </div>
-                            </>
-                          ) : null}
+                            </div>
+                          )}
                         </div>
+                        {/* Goal scorers */}
+                        {(allMyGoals.length > 0 || allOppGoals.length > 0) && (
+                          <div style={{ marginTop: 8, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            {allMyGoals.length > 0 && (
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                                {allMyGoals.map((e, i) => (
+                                  <span key={i} style={{ marginRight: 8 }}>
+                                    {e.detail === 'Penalty' ? '⚽(P)' : '⚽'} {e.player.name} {e.time.elapsed}{e.time.extra ? `+${e.time.extra}` : ''}'
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {allOppGoals.length > 0 && (
+                              <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                                {allOppGoals.map((e, i) => (
+                                  <span key={i} style={{ marginRight: 8 }}>
+                                    {e.detail === 'Own Goal' ? '⚽🔴' : e.detail === 'Penalty' ? '⚽(P)' : '⚽'} {e.player.name} {e.time.elapsed}{e.time.extra ? `+${e.time.extra}` : ''}'
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })
