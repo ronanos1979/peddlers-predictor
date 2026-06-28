@@ -36,7 +36,7 @@ UPDATE matches SET kickoff_at = '2026-06-28 02:00:00+00', entries_close_at = '20
   WHERE home_team = 'Algeria' AND away_team = 'Austria' AND stage = 'Group J';
 
 UPDATE matches SET kickoff_at = '2026-06-28 02:00:00+00', entries_close_at = '2026-06-28 03:45:00+00'
-  WHERE home_team = 'Jordan' AND away_team = 'Argentina' AND stage = 'Group J';
+  WHERE home_team = 'Argentina' AND away_team = 'Jordan' AND stage = 'Group J';
 
 -- =============================================================
 -- PART 2: Fix home/away team order (wrong in original load)
@@ -201,7 +201,7 @@ UPDATE matches SET venue = 'Atlanta aka Mercedes-Benz Stadium'
 UPDATE matches SET venue = 'Kansas City aka GEHA Field at Arrowhead Stadium'
   WHERE home_team = 'Algeria' AND away_team = 'Austria';
 UPDATE matches SET venue = 'Dallas aka AT&T Stadium'
-  WHERE home_team = 'Jordan' AND away_team = 'Argentina';
+  WHERE home_team = 'Argentina' AND away_team = 'Jordan';
 
 -- =============================================================
 -- PART 4: Replace knockout stage matches (no patron entries yet)
