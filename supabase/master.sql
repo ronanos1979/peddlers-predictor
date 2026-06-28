@@ -370,7 +370,7 @@ insert into matches (home_team, away_team, home_flag, away_flag, kickoff_at, ent
 ('Colombia',    'Portugal',            '🇨🇴','🇵🇹', '2026-06-27 23:30:00+00', '2026-06-28 01:15:00+00', 'Group K', false, 'Miami aka Hard Rock Stadium'),
 ('Congo DR',    'Uzbekistan',          '🇨🇩','🇺🇿', '2026-06-27 23:30:00+00', '2026-06-28 01:15:00+00', 'Group K', false, 'Atlanta aka Mercedes-Benz Stadium'),
 ('Algeria',     'Austria',             '🇩🇿','🇦🇹', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
-('Argentina',   'Jordan',              '🇦🇷','🇯🇴', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'Dallas aka AT&T Stadium'),
+('Jordan',      'Argentina',           '🇯🇴','🇦🇷', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'Dallas aka AT&T Stadium'),
 
 -- ── ROUND OF 32 (June 28 – July 4) ───────────────────────────
 -- M73-M88 — teams filled in by admin as group stage completes
