@@ -167,7 +167,7 @@ function SourceMatchPanel({
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
-        R32 {t.matchNumber.replace('{n}', String(matchNum))} · {fmtDate(src.kickoff_at)}
+        {matchNum <= 88 ? 'R32' : matchNum <= 96 ? 'R16' : matchNum <= 100 ? 'QF' : 'SF'} {t.matchNumber.replace('{n}', String(matchNum))} · {fmtDate(src.kickoff_at)}
         {src.result && <span style={{ marginLeft: 6, color: 'var(--green)' }}>✓</span>}
       </div>
       {src.result ? (
@@ -576,10 +576,16 @@ export default function BracketPage() {
           const hasWidget         = showGroupWidget || showR16Widget
 
           // Widget button label
+          function srcLabel(n: number): string {
+            if (n <= 88) return `R32 M${n - 72}`
+            if (n <= 96) return `R16 M${n - 88}`
+            if (n <= 100) return `QF M${n - 96}`
+            return `SF M${n - 100}`
+          }
           const widgetLabel = showGroupWidget
             ? `${expanded ? t.hideGroups : t.seeGroups} ${involvedGroups.map(g => `Group ${g}`).join(' · ')}`
             : showR16Widget
-            ? `${expanded ? t.hideGroups : t.seeGroups} ${[homeMatchNum, awayMatchNum].filter(Boolean).map(n => `R32 #${n}`).join(' · ')}`
+            ? `${expanded ? t.hideGroups : t.seeGroups} ${[homeMatchNum, awayMatchNum].filter(Boolean).map(n => srcLabel(n as number)).join(' · ')}`
             : ''
 
           return (
