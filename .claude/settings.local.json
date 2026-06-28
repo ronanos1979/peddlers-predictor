@@ -64,7 +64,8 @@
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260703\")",
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260701\")",
       "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260702\")",
-      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260630\")"
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260630\")",
+      "Bash(node *)"
     ]
   }
 }
