@@ -448,6 +448,17 @@ export const translations = {
     wrongLower: 'wrong',
     usesSameNumber: 'Use the same number every time you pick to keep your predictions together.',
 
+    // My Picks — edit prediction
+    changePick: 'Change Pick',
+    saveChanges: 'Save Changes',
+    cancelEdit: 'Cancel',
+    pickUpdated: 'Pick updated!',
+    editingYourPick: 'Editing your pick',
+    scorePredLabel: 'Score guess',
+    addScoreGuess: '🎯 Add score guess (+2 extra tickets)',
+    removeScoreGuess: 'Remove score guess',
+    locksAtKickoff: 'Can be changed up to kickoff',
+
     // Rules / Locations hub descriptions
     rulesSub: 'How the prediction game works — scoring, raffle tickets & prizes',
     locationsHubDesc: 'Haverhill MA and Nashua NH',
@@ -1109,6 +1120,17 @@ export const translations = {
     scoringInfoGroupEarly: 'Fase de Grupos MD1–MD2',
     scoringInfoGroupMD3: 'Fase de Grupos MD3',
     scoringInfoTotal: 'Tu total = boletos de partidos + bono Campeón + bono Bota de Oro',
+
+    // My Picks — edit prediction
+    changePick: 'Cambiar pronóstico',
+    saveChanges: 'Guardar cambios',
+    cancelEdit: 'Cancelar',
+    pickUpdated: '¡Pronóstico actualizado!',
+    editingYourPick: 'Editando tu pronóstico',
+    scorePredLabel: 'Marcador previsto',
+    addScoreGuess: '🎯 Agregar marcador previsto (+2 boletos extra)',
+    removeScoreGuess: 'Eliminar marcador',
+    locksAtKickoff: 'Se puede cambiar hasta el inicio del partido',
 
     // Rules / Locations hub descriptions
     rulesSub: 'Cómo funciona el juego de predicciones — puntaje, boletos y premios',

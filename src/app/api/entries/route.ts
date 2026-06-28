@@ -133,3 +133,91 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { entry_id, phone, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred } = await req.json()
+
+    if (!entry_id || !phone || !pick) {
+      return NextResponse.json({ error: 'Required fields missing' }, { status: 400 })
+    }
+
+    if (!['home', 'draw', 'away'].includes(pick)) {
+      return NextResponse.json({ error: 'Invalid pick' }, { status: 400 })
+    }
+
+    // Normalize phone (same logic as POST)
+    const rawPhone = String(phone).trim()
+    let digits: string
+    if (rawPhone.startsWith('+')) {
+      const stripped = rawPhone.replace(/\D/g, '')
+      if (stripped.startsWith('1') && stripped.length === 11) {
+        digits = stripped.slice(1)
+      } else {
+        digits = '+' + stripped
+        if (digits.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+      }
+    } else {
+      const stripped = rawPhone.replace(/\D/g, '')
+      digits = stripped.length === 11 && stripped.startsWith('1') ? stripped.slice(1) : stripped
+      if (digits.length !== 10) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+    }
+
+    const { data: entry } = await supabaseAdmin
+      .from('entries')
+      .select('id, phone, matches(kickoff_at, stage)')
+      .eq('id', entry_id)
+      .single()
+
+    if (!entry) {
+      return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+    }
+
+    if (entry.phone !== digits) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    const matchRaw = entry.matches as unknown
+    const match: { kickoff_at: string; stage: string } | null =
+      Array.isArray(matchRaw) ? (matchRaw[0] ?? null) : (matchRaw as { kickoff_at: string; stage: string } | null)
+    if (!match) {
+      return NextResponse.json({ error: 'Match not found' }, { status: 404 })
+    }
+
+    if (match.stage === 'Demo Match') {
+      return NextResponse.json({ error: 'Cannot edit demo entries' }, { status: 400 })
+    }
+
+    if (new Date(match.kickoff_at) <= new Date()) {
+      return NextResponse.json({ error: 'Entries are closed for this match' }, { status: 400 })
+    }
+
+    const homePred = home_score_pred != null ? parseInt(String(home_score_pred), 10) : null
+    const awayPred = away_score_pred != null ? parseInt(String(away_score_pred), 10) : null
+    const validHomePred = homePred != null && !isNaN(homePred) && homePred >= 0 && homePred <= 20 ? homePred : null
+    const validAwayPred = awayPred != null && !isNaN(awayPred) && awayPred >= 0 && awayPred <= 20 ? awayPred : null
+    const scorerName = hat_trick_pred === true && typeof hat_trick_scorer_pred === 'string' ? hat_trick_scorer_pred.trim().slice(0, 80) : null
+    const validHatTrickPred = hat_trick_pred === true && scorerName ? true : null
+
+    const { error: updateError } = await supabaseAdmin
+      .from('entries')
+      .update({
+        pick,
+        home_score_pred: validHomePred,
+        away_score_pred: validAwayPred,
+        hat_trick_pred: validHatTrickPred,
+        hat_trick_scorer_pred: validHatTrickPred === true ? scorerName : null,
+      })
+      .eq('id', entry_id)
+
+    if (updateError) {
+      console.error('Update error:', updateError)
+      return NextResponse.json({ error: 'Failed to update entry' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('Entries PATCH error:', err)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+  }
+}

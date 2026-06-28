@@ -48,6 +48,7 @@ type Stats = {
   pending: number
   raffle_entries: number
 }
+
 function normName(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
 }
@@ -58,6 +59,27 @@ function scorerMatches(pred: string, actual: string): boolean {
 
 type ScorerPick = { player_name: string; player_team: string; potential_raffle_entries: number | null; raffle_entries: number | null; is_correct: boolean | null }
 type WinnerPick = { team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number; potential_raffle_entries: number | null }
+
+type EditState = {
+  pick: 'home' | 'draw' | 'away'
+  homeScore: number
+  awayScore: number
+  hasScore: boolean
+  hatTrick: boolean
+  hatTrickScorer: string
+}
+
+function ScoreStepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button type="button" onClick={() => onChange(Math.max(0, value - 1))}
+        style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid var(--gray-border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, minWidth: 32, textAlign: 'center', color: 'var(--text)', lineHeight: 1 }}>{value}</div>
+      <button type="button" onClick={() => onChange(Math.min(20, value + 1))}
+        style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.08)', color: 'var(--gold)', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+    </div>
+  )
+}
 
 function MyPicksContent() {
   const { t } = useLocale()
@@ -73,6 +95,13 @@ function MyPicksContent() {
   const [error, setError] = useState('')
   const [fromCookie, setFromCookie] = useState(false)
   const [showScoringInfo, setShowScoringInfo] = useState(false)
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editState, setEditState] = useState<EditState>({ pick: 'home', homeScore: 0, awayScore: 0, hasScore: false, hatTrick: false, hatTrickScorer: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [justUpdated, setJustUpdated] = useState<string | null>(null)
 
   const currentWinnerTickets = getWinnerPickTickets()
   const currentScorerTickets = getScorerPickTickets()
@@ -124,6 +153,60 @@ function MyPicksContent() {
       lookup(patron.phone)
     }
   }, []) // eslint-disable-line
+
+  function canEdit(e: EntryWithMatch): boolean {
+    return e.is_correct === null && new Date(e.matches.kickoff_at) > new Date()
+  }
+
+  function startEdit(e: EntryWithMatch) {
+    setEditingId(e.id)
+    setEditError('')
+    setEditState({
+      pick: e.pick,
+      homeScore: e.home_score_pred ?? 0,
+      awayScore: e.away_score_pred ?? 0,
+      hasScore: e.home_score_pred != null && e.away_score_pred != null,
+      hatTrick: !!e.hat_trick_pred,
+      hatTrickScorer: e.hat_trick_scorer_pred || '',
+    })
+  }
+
+  async function saveEdit(entryId: string) {
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const res = await fetch('/api/entries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entry_id: entryId,
+          phone,
+          pick: editState.pick,
+          home_score_pred: editState.hasScore ? editState.homeScore : null,
+          away_score_pred: editState.hasScore ? editState.awayScore : null,
+          hat_trick_pred: editState.hatTrick || null,
+          hat_trick_scorer_pred: editState.hatTrick ? editState.hatTrickScorer : null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditError(data.error || t.somethingWentWrong); setEditSaving(false); return }
+
+      setEntries(prev => prev.map(e => e.id !== entryId ? e : {
+        ...e,
+        pick: editState.pick,
+        home_score_pred: editState.hasScore ? editState.homeScore : null,
+        away_score_pred: editState.hasScore ? editState.awayScore : null,
+        hat_trick_pred: editState.hatTrick ? true : null,
+        hat_trick_scorer_pred: editState.hatTrick ? editState.hatTrickScorer : null,
+      }))
+      setEditingId(null)
+      setJustUpdated(entryId)
+      setTimeout(() => setJustUpdated(null), 3000)
+    } catch {
+      setEditError(t.networkError)
+    }
+    setEditSaving(false)
+  }
 
   function predictionLabel(pick: string, m: EntryWithMatch['matches']) {
     if (pick === 'home') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{t.teamToWin.replace('{team}', m.home_team)}</Link></>
@@ -406,16 +489,22 @@ function MyPicksContent() {
             entries.map(e => {
               const m = e.matches
               if (!m) return null
+              const isEditing = editingId === e.id
+              const showUpdated = justUpdated === e.id
+
               return (
                 <div key={e.id} style={{
                   background: 'var(--white)',
                   border: `1px solid ${
+                    showUpdated ? 'var(--green)' :
                     e.is_correct === true ? 'var(--green)' :
                     e.is_correct === false ? 'var(--red)' :
+                    isEditing ? 'rgba(245,197,24,0.5)' :
                     'var(--gray-border)'
                   }`,
                   borderRadius: 10, padding: '14px', marginBottom: 8
                 }}>
+                  {/* Match header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>
@@ -428,74 +517,206 @@ function MyPicksContent() {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                      {e.is_correct === true && (
+                      {showUpdated && (
+                        <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green-dark)' }}>
+                          ✓ {t.pickUpdated}
+                        </span>
+                      )}
+                      {!showUpdated && e.is_correct === true && (
                         <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green-dark)' }}>
                           ✓ {t.correct}
                         </span>
                       )}
-                      {e.is_correct === false && (
+                      {!showUpdated && e.is_correct === false && (
                         <span className="badge" style={{ background: 'var(--red-light)', color: 'var(--red)' }}>
                           ✗ {t.wrong}
                         </span>
                       )}
-                      {e.is_correct === null && (
+                      {!showUpdated && e.is_correct === null && !isEditing && (
                         <span className="badge badge-pending">{t.pending}</span>
                       )}
                     </div>
                   </div>
 
-                  <div style={{
-                    marginTop: 10, padding: '8px 12px',
-                    background: 'var(--gray-bg)', borderRadius: 8,
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    flexWrap: 'wrap', gap: 6
-                  }}>
-                    <div>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.yourPrediction}: </span>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{predictionLabel(e.pick, m)}</span>
-                      {e.home_score_pred != null && e.away_score_pred != null && (
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
-                          ({e.home_score_pred}–{e.away_score_pred})
-                        </span>
+                  {/* Inline edit form */}
+                  {isEditing ? (
+                    <div style={{ marginTop: 12, padding: '14px', background: 'rgba(245,197,24,0.04)', borderRadius: 8, border: '1px solid rgba(245,197,24,0.25)' }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>
+                        {t.editingYourPick}
+                      </div>
+
+                      {/* Pick buttons */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 14 }}>
+                        {(['home', 'draw', 'away'] as const).map(p => (
+                          <button key={p} type="button"
+                            onClick={() => setEditState(s => ({ ...s, pick: p }))}
+                            style={{
+                              padding: '10px 6px', borderRadius: 8, border: `2px solid ${editState.pick === p ? 'var(--gold)' : 'var(--gray-border)'}`,
+                              background: editState.pick === p ? 'rgba(245,197,24,0.12)' : 'var(--surface)',
+                              color: editState.pick === p ? 'var(--gold)' : 'var(--text)',
+                              fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                            }}>
+                            <span style={{ fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: editState.pick === p ? 'var(--gold)' : 'var(--text-muted)' }}>
+                              {p === 'home' ? t.homeWin : p === 'draw' ? t.draw : t.awayWin}
+                            </span>
+                            <span style={{ fontSize: 12 }}>
+                              {p === 'home' ? <><Flag emoji={m.home_flag} size={13} style={{ marginRight: 3 }} />{m.home_team}</> :
+                               p === 'draw' ? '—' :
+                               <><Flag emoji={m.away_flag} size={13} style={{ marginRight: 3 }} />{m.away_team}</>}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Score prediction */}
+                      {editState.hasScore ? (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 10, textAlign: 'center' }}>
+                            {t.scorePredLabel}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontFamily: 'var(--font-cond)' }}>
+                                <Flag emoji={m.home_flag} size={13} style={{ marginRight: 3 }} />{m.home_team}
+                              </div>
+                              <ScoreStepper value={editState.homeScore} onChange={v => setEditState(s => ({ ...s, homeScore: v }))} />
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--text-muted)', paddingTop: 20 }}>–</div>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontFamily: 'var(--font-cond)' }}>
+                                <Flag emoji={m.away_flag} size={13} style={{ marginRight: 3 }} />{m.away_team}
+                              </div>
+                              <ScoreStepper value={editState.awayScore} onChange={v => setEditState(s => ({ ...s, awayScore: v }))} />
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => setEditState(s => ({ ...s, hasScore: false, homeScore: 0, awayScore: 0 }))}
+                            style={{ display: 'block', margin: '10px auto 0', background: 'none', border: 'none', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                            {t.removeScoreGuess}
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setEditState(s => ({ ...s, hasScore: true }))}
+                          style={{ display: 'block', width: '100%', marginBottom: 12, padding: '10px 14px', background: 'rgba(245,197,24,0.06)', border: '1px dashed rgba(245,197,24,0.3)', borderRadius: 8, color: 'var(--gold)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>
+                          {t.addScoreGuess}
+                        </button>
                       )}
+
+                      {/* Hat-trick */}
+                      {editState.hatTrick ? (
+                        <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(0,200,122,0.06)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>⚡ {t.hatTrickPredicted}</span>
+                            <button type="button" onClick={() => setEditState(s => ({ ...s, hatTrick: false, hatTrickScorer: '' }))}
+                              style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 8px' }}>
+                              {t.hatTrickRemove}
+                            </button>
+                          </div>
+                          <input type="text" value={editState.hatTrickScorer}
+                            onChange={ev => setEditState(s => ({ ...s, hatTrickScorer: ev.target.value }))}
+                            placeholder={t.hatTrickScorerPlaceholder}
+                            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, fontFamily: 'var(--font-body)' }} />
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setEditState(s => ({ ...s, hatTrick: true }))}
+                          style={{ display: 'block', width: '100%', marginBottom: 12, padding: '8px 14px', background: 'rgba(0,200,122,0.04)', border: '1px dashed rgba(0,200,122,0.3)', borderRadius: 8, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>
+                          ⚡ {t.hatTrickBonusTitle}
+                        </button>
+                      )}
+
+                      {editError && <p style={{ color: 'var(--red)', fontSize: 13, margin: '0 0 10px', fontFamily: 'var(--font-cond)' }}>{editError}</p>}
+
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" onClick={() => saveEdit(e.id)} disabled={editSaving || (editState.hatTrick && !editState.hatTrickScorer.trim())}
+                          style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, cursor: editSaving ? 'wait' : 'pointer', opacity: (editState.hatTrick && !editState.hatTrickScorer.trim()) ? 0.5 : 1 }}>
+                          {editSaving ? t.submitting : t.saveChanges}
+                        </button>
+                        <button type="button" onClick={() => { setEditingId(null); setEditError('') }}
+                          style={{ padding: '11px 16px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--surface)', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                          {t.cancelEdit}
+                        </button>
+                      </div>
                     </div>
-                    {m.result && (
-                      <div>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.actualResult}: </span>
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{resultLabel(m.result, m)}</span>
-                        {m.home_score != null && m.away_score != null && (
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
-                            ({m.home_score}–{m.away_score})
-                          </span>
+                  ) : (
+                    <>
+                      {/* Prediction summary */}
+                      <div style={{
+                        marginTop: 10, padding: '10px 12px',
+                        background: 'var(--gray-bg)', borderRadius: 8,
+                      }}>
+                        {/* Your prediction row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <div>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.yourPrediction}: </span>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{predictionLabel(e.pick, m)}</span>
+                          </div>
+                          {e.raffle_entries > 0 && (
+                            <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
+                              +{e.raffle_entries} {t.tickets}
+                            </span>
+                          )}
+                          {e.is_correct === null && (
+                            <span style={{ fontSize: 11, color: 'var(--amber)', opacity: 0.85 }}>
+                              {e.home_score_pred != null && e.away_score_pred != null
+                                ? t.pendingCouldEarnExact
+                                : t.pendingCouldEarn1}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Score prediction row */}
+                        {e.home_score_pred != null && e.away_score_pred != null && (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.scorePredLabel}: </span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)' }}>
+                              {e.home_score_pred} – {e.away_score_pred}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Actual result row */}
+                        {m.result && (
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--gray-border)' }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.actualResult}: </span>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{resultLabel(m.result, m)}</span>
+                            {m.home_score != null && m.away_score != null && (
+                              <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 6, color: 'var(--text-muted)' }}>
+                                {m.home_score} – {m.away_score}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                    {e.raffle_entries > 0 && (
-                      <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
-                        +{e.raffle_entries} {t.tickets}
-                      </span>
-                    )}
-                    {e.is_correct === null && (
-                      <span style={{ fontSize: 11, color: 'var(--amber)', opacity: 0.85 }}>
-                        {e.home_score_pred != null && e.away_score_pred != null
-                          ? t.pendingCouldEarnExact
-                          : t.pendingCouldEarn1}
-                      </span>
-                    )}
-                  </div>
-                  {e.hat_trick_pred === true && e.hat_trick_scorer_pred && (
-                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>⚡ {t.hatTrickBonusLabel}: <em>{e.hat_trick_scorer_pred}</em></span>
-                      {m.hat_trick_scored === null ? (
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+7 {t.ifCorrect}</span>
-                      ) : m.hat_trick_scored === false ? (
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
-                      ) : m.hat_trick_scorer && scorerMatches(e.hat_trick_scorer_pred, m.hat_trick_scorer) ? (
-                        <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>{t.hatTrickHit} +7</span>
-                      ) : (
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
+
+                      {/* Hat-trick prediction */}
+                      {e.hat_trick_pred === true && e.hat_trick_scorer_pred && (
+                        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>⚡ {t.hatTrickBonusLabel}: <em>{e.hat_trick_scorer_pred}</em></span>
+                          {m.hat_trick_scored === null ? (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+7 {t.ifCorrect}</span>
+                          ) : m.hat_trick_scored === false ? (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
+                          ) : m.hat_trick_scorer && scorerMatches(e.hat_trick_scorer_pred, m.hat_trick_scorer) ? (
+                            <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>{t.hatTrickHit} +7</span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.hatTrickMissed}</span>
+                          )}
+                        </div>
                       )}
-                    </div>
+
+                      {/* Change pick button (pre-kickoff only) */}
+                      {canEdit(e) && (
+                        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)' }}>
+                            🔓 {t.locksAtKickoff}
+                          </span>
+                          <button type="button" onClick={() => startEdit(e)}
+                            style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--gray-border)', background: 'var(--surface)', color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
+                            ✏ {t.changePick}
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )
