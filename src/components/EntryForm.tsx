@@ -6,6 +6,7 @@ import { distanceMetres, getPosition } from '@/lib/geo'
 import { getDailyCode, isValidOverrideCode } from '@/lib/matchSchedule'
 import { savePatron, loadPatron, firstName } from '@/lib/patron'
 import Flag from '@/components/Flag'
+import HatTrickPlayerPicker from '@/components/HatTrickPlayerPicker'
 import { useLocale } from '@/lib/useLocale'
 import { PUB_DATA } from '@/lib/pubData'
 import Link from 'next/link'
@@ -795,13 +796,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                       {t.hatTrickRemove}
                     </button>
                   </div>
-                  <input
-                    type="text"
+                  <HatTrickPlayerPicker
+                    homeTeam={match.home_team}
+                    homeFlag={match.home_flag}
+                    awayTeam={match.away_team}
+                    awayFlag={match.away_flag}
                     value={hatTrickScorerPred}
-                    onChange={e => setHatTrickScorerPred(e.target.value)}
-                    placeholder={t.hatTrickScorerPlaceholder}
-                    maxLength={80}
-                    style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 6, color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 14, padding: '8px 10px', outline: 'none' }}
+                    onChange={setHatTrickScorerPred}
                   />
                   {!hatTrickScorerPred.trim() && (
                     <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'rgba(245,197,24,0.7)', marginTop: 4 }}>

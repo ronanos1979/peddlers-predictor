@@ -6,6 +6,7 @@ import { useLocale } from '@/lib/useLocale'
 import { loadPatron } from '@/lib/patron'
 import Link from 'next/link'
 import Flag from '@/components/Flag'
+import HatTrickPlayerPicker from '@/components/HatTrickPlayerPicker'
 import { BONUS_TIERS, MAX_WINNER_TICKETS, MAX_SCORER_TICKETS, getWinnerPickTickets, getScorerPickTickets } from '@/lib/bonusTickets'
 
 function TeamLink({ name, flag }: { name: string; flag: string }) {
@@ -612,10 +613,14 @@ function MyPicksContent() {
                               {t.hatTrickRemove}
                             </button>
                           </div>
-                          <input type="text" value={editState.hatTrickScorer}
-                            onChange={ev => setEditState(s => ({ ...s, hatTrickScorer: ev.target.value }))}
-                            placeholder={t.hatTrickScorerPlaceholder}
-                            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, fontFamily: 'var(--font-body)' }} />
+                          <HatTrickPlayerPicker
+                            homeTeam={m.home_team}
+                            homeFlag={m.home_flag}
+                            awayTeam={m.away_team}
+                            awayFlag={m.away_flag}
+                            value={editState.hatTrickScorer}
+                            onChange={v => setEditState(s => ({ ...s, hatTrickScorer: v }))}
+                          />
                         </div>
                       ) : (
                         <button type="button" onClick={() => setEditState(s => ({ ...s, hatTrick: true }))}

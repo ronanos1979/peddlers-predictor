@@ -639,7 +639,12 @@ export const translations = {
     hatTrickHit: 'hat-trick ✓',
     hatTrickMissed: 'no hat-trick',
     hatTrickScorerPlaceholder: 'e.g. Messi, Mbappé…',
-    hatTrickScorerRequired: 'Name a scorer to activate the hat-trick bonus',
+    hatTrickScorerRequired: 'Select a player to activate the hat-trick bonus',
+    hatTrickSearchPlayers: 'Search players…',
+    hatTrickLoadingPlayers: 'Loading squad data…',
+    hatTrickNoPlayers: 'Player data not yet loaded — type a name below',
+    hatTrickNoMatch: 'No players found',
+    hatTrickChangePlayer: 'Change',
 
     // Check-in card
     checkInLiveNow: 'Live Now',
@@ -1312,7 +1317,12 @@ export const translations = {
     hatTrickHit: 'hat-trick ✓',
     hatTrickMissed: 'sin hat-trick',
     hatTrickScorerPlaceholder: 'ej. Messi, Mbappé…',
-    hatTrickScorerRequired: 'Nombra un anotador para activar el bono hat-trick',
+    hatTrickScorerRequired: 'Selecciona un jugador para activar el bono hat-trick',
+    hatTrickSearchPlayers: 'Buscar jugadores…',
+    hatTrickLoadingPlayers: 'Cargando plantilla…',
+    hatTrickNoPlayers: 'Datos de jugadores no disponibles — escribe un nombre',
+    hatTrickNoMatch: 'No se encontraron jugadores',
+    hatTrickChangePlayer: 'Cambiar',
 
     // Check-in card
     checkInLiveNow: 'En Vivo',
