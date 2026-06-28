@@ -65,6 +65,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
   const [scoreSkipped, setScoreSkipped] = useState(false)
   const [hatTrickPred, setHatTrickPred] = useState<boolean | null>(null)
   const [hatTrickScorerPred, setHatTrickScorerPred] = useState('')
+  const [penaltiesPred, setPenaltiesPred] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -192,13 +193,18 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
     }
   }, [isDemo, pub]) // eslint-disable-line
 
+  const KNOCKOUT_STAGES = ['Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Third Place', 'Final']
+  const isKnockout = KNOCKOUT_STAGES.includes(match.stage)
+
   const isClosed = !isDemo && new Date(match.kickoff_at) <= new Date()
   const phoneValid = isValidPhone(phone)
   const nameValid = isValidName(name)
   const scoreValid = scoreSkipped || !pick || (
-    pick === 'draw' ? homeScorePred === awayScorePred :
-    pick === 'home' ? homeScorePred > awayScorePred :
-    awayScorePred > homeScorePred
+    isKnockout
+      ? (pick === 'home' ? homeScorePred >= awayScorePred : awayScorePred >= homeScorePred)
+      : pick === 'draw' ? homeScorePred === awayScorePred :
+        pick === 'home' ? homeScorePred > awayScorePred :
+        awayScorePred > homeScorePred
   )
   const canSubmit = nameValid && phone && phoneValid && pick && geoStatus === 'ok' && !isClosed && !submitting && scoreValid
 
@@ -235,6 +241,7 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
           away_score_pred: scoreSkipped ? null : awayScorePred,
           hat_trick_pred: (hatTrickPred === true && hatTrickScorerPred.trim()) ? true : null,
           hat_trick_scorer_pred: (hatTrickPred === true && hatTrickScorerPred.trim()) ? hatTrickScorerPred.trim() : null,
+          penalties_pred: penaltiesPred === true ? true : null,
           entry_lat: userCoords?.lat ?? null,
           entry_lng: userCoords?.lng ?? null,
           entry_distance_m: userDistance !== null ? Math.round(userDistance) : null,
@@ -350,6 +357,15 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--green)', letterSpacing: 2 }}>+7</div>
                       <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.hatTrickBonusLabel}</div>
+                    </div>
+                  </>
+                )}
+                {penaltiesPred === true && (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 20, color: 'var(--text-muted)', alignSelf: 'center' }}>+</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--amber)', letterSpacing: 2 }}>+2</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.penaltiesBonusLabel}</div>
                     </div>
                   </>
                 )}
@@ -699,8 +715,13 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
               {t.yourPrediction}
             </div>
-            <div className="pick-grid">
-              {(['home', 'draw', 'away'] as const).map(p => (
+            {isKnockout && (
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--amber)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>⚡</span>{t.knockoutNoDraw}
+              </div>
+            )}
+            <div className="pick-grid" style={isKnockout ? { gridTemplateColumns: '1fr 1fr' } : undefined}>
+              {(isKnockout ? ['home', 'away'] as const : ['home', 'draw', 'away'] as const).map(p => (
                 <button key={p}
                   className={`pick-btn ${pick === p ? 'selected' : ''}`}
                   onClick={() => setPick(p)}>
@@ -757,11 +778,16 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                     </div>
                   </div>
                 </div>
+                {isKnockout && homeScorePred === awayScorePred && pick && !scoreSkipped && (
+                  <p style={{ color: 'var(--amber)', fontFamily: 'var(--font-cond)', fontSize: 11, textAlign: 'center', margin: '10px 0 0' }}>
+                    Equal scores = match goes to penalties, {pick === 'home' ? match.home_team : match.away_team} wins the shootout
+                  </p>
+                )}
                 {!scoreValid && pick && (
                   <p style={{ color: 'var(--red)', fontFamily: 'var(--font-cond)', fontSize: 12, textAlign: 'center', margin: '12px 0 0' }}>
-                    {pick === 'draw'
+                    {!isKnockout && pick === 'draw'
                       ? t.scoreMismatchDraw
-                      : t.scoreMismatchWinner.replace('{team}', pick === 'home' ? match.home_team : match.away_team)}
+                      : t.scoreMismatchKnockout.replace('{team}', pick === 'home' ? match.home_team : match.away_team)}
                   </p>
                 )}
                 <button type="button" onClick={() => { setScoreSkipped(true); setHomeScorePred(0); setAwayScorePred(0) }}
@@ -776,6 +802,45 @@ export default function EntryForm({ pubId, match, pub, isDemo = false, onComplet
                 style={{ display: 'block', width: '100%', marginTop: 10, padding: '10px 14px', background: 'rgba(245,197,24,0.06)', border: '1px dashed rgba(245,197,24,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--gold)', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>
                 {t.addScorePrediction}
               </button>
+            )}
+
+            {/* Penalty shootout bonus prediction (knockout rounds only) */}
+            {pick && isKnockout && (
+              penaltiesPred === true ? (
+                <div style={{ marginTop: 10, padding: '12px 14px', background: 'linear-gradient(135deg, #13100a, #0f0e00)', border: '1px solid rgba(245,197,24,0.5)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--amber)', letterSpacing: 0.5 }}>
+                        {t.penaltiesPredicted}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {t.penaltiesPredictedDesc}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setPenaltiesPred(null)}
+                      style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', flexShrink: 0 }}>
+                      {t.penaltiesRemove}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, padding: '12px 14px', background: 'rgba(245,197,24,0.04)', border: '1px dashed rgba(245,197,24,0.25)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--amber)', letterSpacing: 0.5 }}>
+                        {t.penaltiesBonusTitle}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                        {t.penaltiesBonusDesc}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setPenaltiesPred(true)}
+                      style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.35)', borderRadius: 8, color: 'var(--amber)', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '6px 12px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      ⚡ {t.penaltiesYesBtn}
+                    </button>
+                  </div>
+                </div>
+              )
             )}
 
             {/* Hat-trick bonus prediction */}

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     // Set match result and score all entries
     if (action === 'set_result') {
-      const { match_id, result, home_score, away_score, auto_draw_min } = payload
+      const { match_id, result, home_score, away_score, penalties_scored, auto_draw_min } = payload
 
       if (!['home', 'draw', 'away'].includes(result)) {
         return NextResponse.json({ error: 'Invalid result' }, { status: 400 })
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
       const homeScore = home_score != null ? parseInt(String(home_score), 10) : null
       const awayScore = away_score != null ? parseInt(String(away_score), 10) : null
+      const penaltiesScored = penalties_scored === true ? true : penalties_scored === false ? false : null
 
       await supabaseAdmin
         .from('matches')
@@ -43,18 +44,20 @@ export async function POST(req: NextRequest) {
           result,
           home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
           away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+          penalties_scored: penaltiesScored,
         })
         .eq('id', match_id)
 
-      // Fetch hat_trick_scored/scorer if ESPN events were already loaded before result was set
-      const { data: matchForHatTrick } = await supabaseAdmin
-        .from('matches').select('hat_trick_scored, hat_trick_scorer').eq('id', match_id).single()
-      const hatTrickScored = matchForHatTrick?.hat_trick_scored ?? null
-      const hatTrickScorer = (matchForHatTrick as { hat_trick_scorer?: string | null } | null)?.hat_trick_scorer ?? null
+      // Fetch hat_trick_scored/scorer/penalties_scored if ESPN events were already loaded before result was set
+      const { data: matchForBonuses } = await supabaseAdmin
+        .from('matches').select('hat_trick_scored, hat_trick_scorer, penalties_scored').eq('id', match_id).single()
+      const hatTrickScored = matchForBonuses?.hat_trick_scored ?? null
+      const hatTrickScorer = (matchForBonuses as { hat_trick_scorer?: string | null } | null)?.hat_trick_scorer ?? null
+      const penaltiesScoredVal = penaltiesScored ?? (matchForBonuses as { penalties_scored?: boolean | null } | null)?.penalties_scored ?? null
 
       const { data: entries } = await supabaseAdmin
         .from('entries')
-        .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred')
+        .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, penalties_pred')
         .eq('match_id', match_id)
 
       if (entries) {
@@ -70,6 +73,10 @@ export async function POST(req: NextRequest) {
           const htPred = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
           if (entry.hat_trick_pred === true && hatTrickScored === true && hatTrickScorer && htPred && scorerNameMatches(htPred, hatTrickScorer)) {
             raffle_entries += 7
+          }
+          const penPred = (entry as typeof entry & { penalties_pred?: boolean | null }).penalties_pred
+          if (penPred === true && penaltiesScoredVal === true) {
+            raffle_entries += 2
           }
           await supabaseAdmin
             .from('entries')
@@ -240,7 +247,7 @@ export async function POST(req: NextRequest) {
 
       const { data: matches } = await supabaseAdmin
         .from('matches')
-        .select('id, result, home_score, away_score, hat_trick_scored, hat_trick_scorer')
+        .select('id, result, home_score, away_score, hat_trick_scored, hat_trick_scorer, penalties_scored')
         .in('id', match_ids)
         .not('result', 'is', null)
 
@@ -248,7 +255,7 @@ export async function POST(req: NextRequest) {
       for (const match of matches || []) {
         const { data: entries } = await supabaseAdmin
           .from('entries')
-          .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred')
+          .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, penalties_pred')
           .eq('match_id', match.id)
 
         if (!entries) continue
@@ -264,6 +271,11 @@ export async function POST(req: NextRequest) {
           const htPred = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
           if (entry.hat_trick_pred === true && match.hat_trick_scored === true && match.hat_trick_scorer && htPred && scorerNameMatches(htPred, match.hat_trick_scorer)) {
             raffle_entries += 7
+          }
+          const penPred = (entry as typeof entry & { penalties_pred?: boolean | null }).penalties_pred
+          const penScored = (match as typeof match & { penalties_scored?: boolean | null }).penalties_scored
+          if (penPred === true && penScored === true) {
+            raffle_entries += 2
           }
           await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
           entries_scored++

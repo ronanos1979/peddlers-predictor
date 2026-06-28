@@ -37,7 +37,8 @@ create table if not exists matches (
   checkin_winner_name   text default null,
   checkin_winner_phone  text default null,
   checkin_draw_at       timestamptz default null,
-  hat_trick_scored      boolean default null
+  hat_trick_scored      boolean default null,
+  penalties_scored      boolean default null
 );
 
 -- Entries
@@ -55,6 +56,7 @@ create table if not exists entries (
   home_score_pred  integer default null,
   away_score_pred  integer default null,
   hat_trick_pred   boolean default null,
+  penalties_pred   boolean default null,
   entry_lat        numeric(10,7) default null,
   entry_lng        numeric(10,7) default null,
   entry_distance_m integer default null,

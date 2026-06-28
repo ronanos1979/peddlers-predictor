@@ -646,6 +646,17 @@ export const translations = {
     hatTrickNoMatch: 'No players found',
     hatTrickChangePlayer: 'Change',
 
+    // Penalty shootout prediction (knockout rounds)
+    penaltiesBonusTitle: '🎯 Penalty shootout bonus',
+    penaltiesBonusDesc: 'Predict if this match goes to a penalty shootout — +2 tickets if right',
+    penaltiesYesBtn: 'Yes — predict a penalty shootout!',
+    penaltiesPredicted: '🎯 Penalty shootout predicted!',
+    penaltiesPredictedDesc: '+2 raffle tickets if the match goes to penalties',
+    penaltiesRemove: 'Remove',
+    penaltiesBonusLabel: 'penalty shootout',
+    knockoutNoDraw: 'Knockout round — there must be a winner (no draws)',
+    scoreMismatchKnockout: '{team} must score at least as many goals — fix the score or change your pick',
+
     // Check-in card
     checkInLiveNow: 'Live Now',
     checkInCheckedCount: '{count} checked in',
@@ -1323,6 +1334,17 @@ export const translations = {
     hatTrickNoPlayers: 'Datos de jugadores no disponibles — escribe un nombre',
     hatTrickNoMatch: 'No se encontraron jugadores',
     hatTrickChangePlayer: 'Cambiar',
+
+    // Penalty shootout prediction (knockout rounds)
+    penaltiesBonusTitle: '🎯 Bono tanda de penaltis',
+    penaltiesBonusDesc: 'Predice si este partido va a penaltis — +2 boletos si aciertas',
+    penaltiesYesBtn: '¡Sí — predecir una tanda de penaltis!',
+    penaltiesPredicted: '🎯 ¡Tanda de penaltis predicha!',
+    penaltiesPredictedDesc: '+2 boletos si el partido va a penaltis',
+    penaltiesRemove: 'Eliminar',
+    penaltiesBonusLabel: 'tanda de penaltis',
+    knockoutNoDraw: 'Ronda eliminatoria — debe haber un ganador (sin empates)',
+    scoreMismatchKnockout: '{team} debe marcar al menos tantos goles — ajusta el marcador o cambia tu elección',
 
     // Check-in card
     checkInLiveNow: 'En Vivo',

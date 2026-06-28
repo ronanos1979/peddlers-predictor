@@ -207,7 +207,7 @@ function normFdName(name: string): string {
   return resolved.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
 }
 
-type PairedResult = { result: 'home' | 'draw' | 'away'; homeScore: number | null; awayScore: number | null }
+type PairedResult = { result: 'home' | 'draw' | 'away'; homeScore: number | null; awayScore: number | null; penaltiesScored: boolean }
 
 // Pair a DB match to an FD fixture using kickoff time + team name disambiguation.
 // Returns null if no FD match found within ±5 min.
@@ -248,18 +248,20 @@ function pairWithFd(match: DbMatch, fdFinished: FdFixture[]): PairedResult | nul
     : (fdMatch.teams.home.winner === true ? 'home' : fdMatch.teams.away.winner === true ? 'away' : 'draw')
   const homeScore = homeAwayFlipped ? (fdMatch.goals.away ?? null) : (fdMatch.goals.home ?? null)
   const awayScore = homeAwayFlipped ? (fdMatch.goals.home ?? null) : (fdMatch.goals.away ?? null)
+  const penaltiesScored = fdMatch.fixture.status.short === 'PEN'
 
-  return { result, homeScore, awayScore }
+  return { result, homeScore, awayScore, penaltiesScored }
 }
 
 // Cross-check all recently-resolved matches against their loaded ESPN events.
 // Fixes any match where FD returned a wrong/stale score (e.g. 0-0 when events show 3-2).
 // Returns the number of matches corrected.
 async function reconcileFromEvents(): Promise<number> {
+  const KNOCKOUT_STAGES = ['Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Third Place', 'Final']
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: recentMatches } = await supabaseAdmin
     .from('matches')
-    .select('id, kickoff_at, home_team, away_team, result, home_score, away_score, hat_trick_scored, hat_trick_scorer')
+    .select('id, kickoff_at, home_team, away_team, result, home_score, away_score, hat_trick_scored, hat_trick_scorer, stage')
     .not('result', 'is', null)
     .gte('kickoff_at', since)
     .neq('stage', 'Demo Match')
@@ -298,7 +300,12 @@ async function reconcileFromEvents(): Promise<number> {
     const evtResult: 'home' | 'draw' | 'away' = homeGoals > awayGoals ? 'home' : awayGoals > homeGoals ? 'away' : 'draw'
     if (evtResult === match.result && match.home_score === homeGoals && match.away_score === awayGoals) continue
 
-    await applyAndScore(match as DbMatch, { result: evtResult, homeScore: homeGoals, awayScore: awayGoals })
+    // Don't overwrite a knockout match's home/away result with 'draw' — the ESPN goal count
+    // reflects 90+ET score (tied), but the FD result reflects the penalty shootout winner.
+    const matchStage = (match as typeof match & { stage?: string }).stage ?? ''
+    if (evtResult === 'draw' && (match.result === 'home' || match.result === 'away') && KNOCKOUT_STAGES.includes(matchStage)) continue
+
+    await applyAndScore(match as DbMatch, { result: evtResult, homeScore: homeGoals, awayScore: awayGoals, penaltiesScored: false })
     corrected++
   }
   return corrected
@@ -306,16 +313,21 @@ async function reconcileFromEvents(): Promise<number> {
 
 // Apply result + score to match row and re-score all its entries. Returns entries scored count.
 async function applyAndScore(match: DbMatch, paired: PairedResult): Promise<number> {
-  const { result, homeScore, awayScore } = paired
+  const { result, homeScore, awayScore, penaltiesScored } = paired
 
-  await supabaseAdmin.from('matches').update({ result, home_score: homeScore, away_score: awayScore }).eq('id', match.id)
+  await supabaseAdmin.from('matches').update({
+    result,
+    home_score: homeScore,
+    away_score: awayScore,
+    penalties_scored: penaltiesScored || null,
+  }).eq('id', match.id)
 
   const hatTrickScored = match.hat_trick_scored ?? null
   const hatTrickScorer = match.hat_trick_scorer ?? null
 
   const { data: entries } = await supabaseAdmin
     .from('entries')
-    .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred')
+    .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, penalties_pred')
     .eq('match_id', match.id)
 
   let scored = 0
@@ -332,6 +344,10 @@ async function applyAndScore(match: DbMatch, paired: PairedResult): Promise<numb
       if (entry.hat_trick_pred === true && hatTrickScored === true && hatTrickScorer && htScorer && scorerNameMatches(htScorer, hatTrickScorer)) {
         raffle_entries += 7
       }
+      const penPred = (entry as typeof entry & { penalties_pred?: boolean | null }).penalties_pred
+      if (penPred === true && penaltiesScored === true) {
+        raffle_entries += 2
+      }
       await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
       scored++
     }
@@ -342,7 +358,7 @@ async function applyAndScore(match: DbMatch, paired: PairedResult): Promise<numb
 // Throws FdRateLimitError if rate-limited; callers should handle it.
 export async function syncResults(): Promise<SyncResultsOutput> {
   const data = await getFdFixtures({ status: 'FT' }) as { response?: FdFixture[] }
-  const fdFinished = (data.response || []).filter(f => f.fixture.status.short === 'FT')
+  const fdFinished = (data.response || []).filter(f => ['FT', 'AET', 'PEN'].includes(f.fixture.status.short))
 
   if (fdFinished.length === 0) {
     const scores_corrected = await reconcileFromEvents().catch(() => 0)
@@ -425,7 +441,7 @@ export async function syncResults(): Promise<SyncResultsOutput> {
 // Throws FdRateLimitError if rate-limited.
 export async function resyncMatchIds(matchIds: string[]): Promise<SyncResultsOutput> {
   const data = await getFdFixtures({ status: 'FT' }) as { response?: FdFixture[] }
-  const fdFinished = (data.response || []).filter(f => f.fixture.status.short === 'FT')
+  const fdFinished = (data.response || []).filter(f => ['FT', 'AET', 'PEN'].includes(f.fixture.status.short))
 
   const { data: matches } = await supabaseAdmin
     .from('matches')

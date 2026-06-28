@@ -45,6 +45,7 @@ export default function AdminPage() {
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
   const [results, setResults] = useState<Record<string, 'home' | 'draw' | 'away'>>({})
   const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({})
+  const [penaltiesScored, setPenaltiesScored] = useState<Record<string, boolean>>({})
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState<'success' | 'error'>('success')
   const [stats, setStats] = useState<DayStat[]>([])
@@ -222,6 +223,7 @@ export default function AdminPage() {
           match_id: match.id, result,
           home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
           away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+          penalties_scored: penaltiesScored[match.id] ?? null,
           auto_draw_min: checkinMinDraw,
         }
       })
@@ -714,6 +716,9 @@ export default function AdminPage() {
                   ({m.home_score}–{m.away_score})
                 </span>
               )}
+              {m.penalties_scored && (
+                <span style={{ marginLeft: 6, color: 'var(--amber)', fontWeight: 700, fontSize: 11 }}>🎯 pens</span>
+              )}
               {' '}
               <button onClick={loadMatchEvents} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, padding: 0 }}>
                 {matchEvents === 'loading' ? '…' : matchEvents === null ? '⟳ scorers' : '⟳'}
@@ -751,7 +756,9 @@ export default function AdminPage() {
                 style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13 }}>
                 <option value="">Result…</option>
                 <option value="home">{m.home_flag} {m.home_team} win</option>
-                <option value="draw">Draw</option>
+                {!['Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Third Place', 'Final'].includes(m.stage) && (
+                  <option value="draw">Draw</option>
+                )}
                 <option value="away">{m.away_flag} {m.away_team} win</option>
               </select>
               <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13 }}
@@ -773,6 +780,16 @@ export default function AdminPage() {
                 placeholder="0" style={{ width: 44, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13, textAlign: 'center' }}
               />
             </div>
+            {['Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Third Place', 'Final'].includes(m.stage) && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!penaltiesScored[m.id]}
+                  onChange={e => setPenaltiesScored(prev => ({ ...prev, [m.id]: e.target.checked }))}
+                />
+                Went to penalty shootout
+              </label>
+            )}
           </div>
         )}
       </div>
