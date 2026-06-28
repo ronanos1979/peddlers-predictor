@@ -76,7 +76,10 @@ export default function ResultsPage() {
         const idByTeams = new Map<string, string>()
         const venueById = new Map<string, string>()
         for (const m of sbMatchesRes.data || []) {
-          idByTeams.set(`${normSched(m.home_team)}|${normSched(m.away_team)}`, m.id)
+          const h = normSched(m.home_team)
+          const a = normSched(m.away_team)
+          idByTeams.set(`${h}|${a}`, m.id)
+          idByTeams.set(`${a}|${h}`, m.id)
           if (m.venue) venueById.set(m.id, m.venue as string)
         }
         setEventsState({ byId, idByTeams, venueById })
