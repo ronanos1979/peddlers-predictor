@@ -76,6 +76,8 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false)
   const [forceResyncing, setForceResyncing] = useState(false)
   const [forceResyncResult, setForceResyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
+  const [rescoring, setRescoring] = useState(false)
+  const [rescoreResult, setRescoreResult] = useState<{ entries_scored: number } | null>(null)
   const [refreshingEvents, setRefreshingEvents] = useState(false)
   const [refreshEventsResult, setRefreshEventsResult] = useState<{ updated: number; failed: number; detail: string[] } | null>(null)
   const [reloadingResults, setReloadingResults] = useState(false)
@@ -562,6 +564,30 @@ export default function AdminPage() {
       flash('Network error during force resync', 'error')
     }
     setForceResyncing(false)
+  }
+
+  async function rescoreEntries() {
+    const resolvedIds = [...recentMatches, ...todaysMatches]
+      .filter(m => m.result !== null)
+      .map(m => m.id)
+    if (resolvedIds.length === 0) { flash('No resolved matches in the recent window', 'error'); return }
+    setRescoring(true)
+    setRescoreResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'rescore_entries', payload: { match_ids: resolvedIds } })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Rescore failed', 'error'); setRescoring(false); return }
+      setRescoreResult(data)
+      loadMatches(); loadStats(); loadEntrants()
+      flash(`Re-scored ${data.entries_scored} entries`, 'success')
+    } catch {
+      flash('Network error during rescore', 'error')
+    }
+    setRescoring(false)
   }
 
   async function refreshAllEvents() {
@@ -1160,6 +1186,27 @@ export default function AdminPage() {
                 color: forceResyncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
                 border: `1px solid ${forceResyncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
                 {forceResyncResult.message || `✅ ${forceResyncResult.updated} match${forceResyncResult.updated !== 1 ? 'es' : ''} corrected · ${forceResyncResult.entries_scored} entries re-scored`}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Re-score entries from stored results</div>
+                <div className="muted" style={{ fontSize: 12 }}>Scores all entries for resolved matches using the result already in the DB — use when entries are pending despite a result being set</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={rescoring} onClick={rescoreEntries}>
+                {rescoring ? 'Scoring…' : '✓ Re-score entries'}
+              </button>
+            </div>
+            {rescoreResult && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                background: rescoreResult.entries_scored > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
+                color: rescoreResult.entries_scored > 0 ? 'var(--green)' : 'var(--text-muted)',
+                border: `1px solid ${rescoreResult.entries_scored > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
+                ✅ {rescoreResult.entries_scored} entries re-scored
               </div>
             )}
           </div>

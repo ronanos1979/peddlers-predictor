@@ -232,6 +232,47 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (action === 'rescore_entries') {
+      const { match_ids } = payload as { match_ids: string[] }
+      if (!Array.isArray(match_ids) || match_ids.length === 0) {
+        return NextResponse.json({ error: 'match_ids array required' }, { status: 400 })
+      }
+
+      const { data: matches } = await supabaseAdmin
+        .from('matches')
+        .select('id, result, home_score, away_score, hat_trick_scored, hat_trick_scorer')
+        .in('id', match_ids)
+        .not('result', 'is', null)
+
+      let entries_scored = 0
+      for (const match of matches || []) {
+        const { data: entries } = await supabaseAdmin
+          .from('entries')
+          .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred')
+          .eq('match_id', match.id)
+
+        if (!entries) continue
+        for (const entry of entries) {
+          const is_correct = entry.pick === match.result
+          let raffle_entries = 0
+          if (is_correct) {
+            const scoreCorrect =
+              match.home_score != null && match.away_score != null &&
+              entry.home_score_pred === match.home_score && entry.away_score_pred === match.away_score
+            raffle_entries = scoreCorrect ? 3 : 1
+          }
+          const htPred = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
+          if (entry.hat_trick_pred === true && match.hat_trick_scored === true && match.hat_trick_scorer && htPred && scorerNameMatches(htPred, match.hat_trick_scorer)) {
+            raffle_entries += 7
+          }
+          await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
+          entries_scored++
+        }
+      }
+
+      return NextResponse.json({ success: true, entries_scored })
+    }
+
     if (action === 'draw_checkin_winner') {
       const { match_id } = payload
       const { data: checkins } = await supabaseAdmin
