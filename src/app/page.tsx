@@ -760,7 +760,7 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const pubParam = searchParams.get('pub')
   const pubId = (pubParam && PUB_DATA[pubParam]) ? pubParam : ''
-  const [selectedPub, setSelectedPub] = useState(pubId)
+  const [selectedPub, setSelectedPub] = useState(pubId || 'nashua')
   const pub: PubInfo | null = selectedPub ? PUB_DATA[selectedPub] : null
   const [predictableMatches, setPredictableMatches] = useState<Match[]>([])
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
@@ -798,7 +798,7 @@ function HomeContent() {
     if (pubId) return
     const saved = loadPubPref()
     if (saved && PUB_DATA[saved]) { choosePub(saved); return }
-    if (!navigator.geolocation) { choosePub('haverhill'); return }
+    if (!navigator.geolocation) { choosePub('nashua'); return }
     setGeoDetecting(true)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -808,7 +808,7 @@ function HomeContent() {
         choosePub(dH <= dN ? 'haverhill' : 'nashua')
         setGeoDetecting(false)
       },
-      () => { setGeoDetecting(false); choosePub('haverhill') },
+      () => { setGeoDetecting(false); choosePub('nashua') },
       { timeout: 7000, maximumAge: 300000 }
     )
   }, []) // eslint-disable-line
