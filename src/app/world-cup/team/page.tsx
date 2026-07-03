@@ -11,6 +11,7 @@ import {
   type MatchRecord,
   type PathPosition,
 } from './pathToFinalHelpers'
+import { formatPlaceholder, parseGroupLetters } from '@/app/world-cup/bracket/bracketHelpers'
 
 type TeamInfo = { team: { id: number; name: string; country: string; logo: string; founded: number; national: boolean }; venue: { name: string; city: string; capacity: number } }
 type Player = { id: number; name: string; age: number; number: number; position: string; photo: string; club?: { name: string; logo?: string } }
@@ -25,6 +26,14 @@ type Standing = {
   team: { id: number | null; name: string; logo: string }
   group?: string
 }
+type StandingRow = {
+  rank: number
+  team: { id: number; name: string; logo: string }
+  points: number
+  goalsDiff: number
+  all: { played: number; win: number; draw: number; lose: number; goals: { for: number; against: number } }
+  description: string | null
+}
 type LocalMatch = Match
 type SavedTeam = { id: string; name: string; logo?: string; savedAt: string }
 type CachedTeamPayload = {
@@ -34,6 +43,18 @@ type CachedTeamPayload = {
   fixtures: Fixture[]
   savedTeam: SavedTeam | null
   cachedAt: string
+}
+
+function groupRemainingLabel(rows: StandingRow[], t: Record<string, string>): string | null {
+  if (rows.length < 4) return null
+  const totalPlayed = rows.reduce((s, r) => s + r.all.played, 0) / 2
+  const remaining = 6 - totalPlayed
+  if (remaining <= 0) return null
+  if (remaining === 1) {
+    const notDone = rows.filter(r => r.all.played < 3)
+    if (notDone.length === 2) return `${notDone[0].team.name} vs ${notDone[1].team.name}`
+  }
+  return t.groupMatchesLeft.replace('{n}', String(remaining))
 }
 
 const POSITION_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Attacker']
@@ -57,6 +78,122 @@ function isPlaceholderTeam(name: string) {
   return /\b(TBD|Winner|Runner-up|3rd Place|R32|QF|SF)\b/i.test(name)
 }
 
+type ResolvedOpponent = { label: string; confirmed: boolean; schedName: string | null }
+
+function GroupDropdown({ letter, allGroupStandings }: { letter: string; allGroupStandings: StandingRow[][] }) {
+  const [open, setOpen] = useState(false)
+  const { t } = useLocale()
+  const rows = allGroupStandings[letter.charCodeAt(0) - 65] ?? []
+  const done = rows.length >= 4 && rows.every(r => r.all.played >= 3)
+  const remainingLabel = rows.length > 0 && !done ? groupRemainingLabel(rows, t) : null
+  // Always show the button even while data is loading — content shows loading state when empty
+  return (
+    <div style={{ marginTop: 5 }}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'var(--surface2)', border: '1px solid var(--border)',
+          borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
+          fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+          color: 'var(--text-muted)', letterSpacing: 0.5, textTransform: 'uppercase',
+        }}
+      >
+        See Group {letter}
+        {rows.length > 0 && (
+          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: done ? 'var(--green)' : 'var(--amber)', padding: '1px 4px', borderRadius: 3, border: `1px solid ${done ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: done ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+            {done ? t.groupFinalStandings : t.groupInProgress}{remainingLabel && ` · ${remainingLabel}`}
+          </span>
+        )}
+        {open ? '▲' : '▼'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          {rows.length === 0 ? (
+            <div style={{ padding: '10px 12px', fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)' }}>Loading…</div>
+          ) : (
+            <>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['#', 'Team', 'P', 'W', 'D', 'L', 'Pts'].map((h, hi) => (
+                      <th key={hi} style={{ padding: '5px 6px', textAlign: hi <= 1 ? 'left' : 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-muted)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={row.team.id} style={{ background: i < 2 ? 'rgba(0,200,122,0.05)' : 'transparent', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
+                      <td style={{ padding: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
+                          <Link href={`/world-cup/team?id=${row.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 11, color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            {row.team.name}
+                          </Link>
+                        </div>
+                      </td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.played}</td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.win}</td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.draw}</td>
+                      <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--text-muted)' }}>{row.all.lose}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--green)' }}>{row.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ padding: '4px 8px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>■ Qualified (top 2)</div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Possible3rdOpponents({
+  matches, resolveOpponent, allGroupStandings, t,
+}: {
+  matches: MatchRecord[]
+  resolveOpponent: (slot: string) => ResolvedOpponent
+  allGroupStandings: StandingRow[][]
+  t: ReturnType<typeof useLocale>['t']
+}) {
+  if (matches.length === 0) return null
+  return (
+    <div style={{ marginTop: 8, padding: '12px 14px', background: 'rgba(245,197,24,0.05)', border: '1px solid rgba(245,197,24,0.2)', borderRadius: 10 }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
+        Possible Round of 32 Opponent
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+        The exact opponent depends on which 8 of the 12 third-placed teams qualify. FIFA uses a fixed allocation table.
+      </div>
+      {matches.map(m => {
+        const third3slot   = isPlaceholderTeam(m.home_team) && /3rd Place/i.test(m.home_team) ? m.home_team : m.away_team
+        const opponentSlot = third3slot === m.home_team ? m.away_team : m.home_team
+        const opp          = resolveOpponent(opponentSlot)
+        const letters      = opp.confirmed ? [] : parseGroupLetters(opponentSlot)
+        return (
+          <div key={m.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: opp.confirmed ? 'var(--text)' : 'var(--text-muted)' }}>
+              {opp.schedName
+                ? <Link href={`/world-cup/team?name=${encodeURIComponent(opp.schedName)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{opp.label}</Link>
+                : opp.label
+              }
+              {opp.confirmed && <span style={{ marginLeft: 5, fontFamily: 'var(--font-cond)', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)' }}>✓ confirmed</span>}
+            </div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+              {m.stage} · {new Date(m.kickoff_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {m.venue && <span style={{ opacity: 0.7 }}> · {m.venue}</span>}
+            </div>
+            {letters.map(l => <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function savedTeamHref(team: SavedTeam) {
   return team.id.startsWith('name:')
     ? `/world-cup/team?name=${encodeURIComponent(team.name)}`
@@ -65,6 +202,16 @@ function savedTeamHref(team: SavedTeam) {
 
 function isImageSrc(value?: string) {
   return !!value && /^https?:\/\//.test(value)
+}
+
+function normForStandings(s: string): string {
+  const map: Record<string, string> = {
+    'czech republic': 'czechia', 'korea republic': 'south korea',
+    "côte d'ivoire": 'ivory coast', 'united states': 'usa',
+    'turkey': 'türkiye', 'cape verde islands': 'cape verde',
+  }
+  const lower = s.toLowerCase()
+  return (map[lower] ?? lower).replace(/[^a-z0-9]/g, '')
 }
 
 function TeamContent() {
@@ -86,6 +233,14 @@ function TeamContent() {
   const [rateLimited, setRateLimited] = useState(false)
   const [allSortedMatches, setAllSortedMatches] = useState<MatchRecord[]>([])
   const [pathPosition, setPathPosition] = useState<PathPosition>('1st')
+  const [groupStandings, setGroupStandings] = useState<StandingRow[]>([])
+  const [allGroupStandings, setAllGroupStandings] = useState<StandingRow[][]>([])
+  const [standingsOpen, setStandingsOpen] = useState(false)
+  const [selectedChainIdx, setSelectedChainIdx] = useState(0)
+  const [groupStageOpen, setGroupStageOpen] = useState(false)
+  type MatchEvent = { type: string; detail: string; time: { elapsed: number; extra: number | null }; player: { name: string }; team: { name: string }; teamSide: 'home' | 'away' | undefined }
+
+  const [matchEventsById, setMatchEventsById] = useState<Map<string, MatchEvent[]>>(new Map())
 
   useEffect(() => {
     setSavedTeam(readSavedTeam())
@@ -99,6 +254,66 @@ function TeamContent() {
       .order('kickoff_at', { ascending: true })
       .then(({ data }) => { if (data) setAllSortedMatches(data as MatchRecord[]) })
   }, [])
+
+  // Fetch match events for completed group stage matches; auto-load via ESPN if missing
+  useEffect(() => {
+    const completed = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage) && m.result)
+    if (completed.length === 0) return
+    const ids = completed.map(m => m.id)
+
+    const fetchAndSet = (rows: Array<{ match_id: string; events: unknown }>) => {
+      const map = new Map<string, MatchEvent[]>()
+      for (const row of rows) map.set(row.match_id, (row.events as MatchEvent[]) || [])
+      setMatchEventsById(map)
+      return map
+    }
+
+    supabase.from('match_events').select('match_id, events').in('match_id', ids)
+      .then(({ data }) => {
+        if (!data) return
+        const map = fetchAndSet(data)
+        // Auto-load ESPN events for any matches with no events yet
+        const missing = completed.filter(m => !map.has(m.id) || (map.get(m.id)?.length ?? 0) === 0)
+        if (missing.length > 0) {
+          fetch('/api/auto-load-events').then(() =>
+            supabase.from('match_events').select('match_id, events').in('match_id', ids)
+              .then(({ data: fresh }) => { if (fresh) fetchAndSet(fresh) })
+          ).catch(() => {})
+        }
+      })
+  }, [localMatches])
+
+  useEffect(() => {
+    const sched = localScheduleTeamName || teamName || ''
+    if (!sched || allSortedMatches.length === 0) return
+    const group = getTeamGroup(allSortedMatches, sched)
+    if (!group) return
+    const idx = group.charCodeAt(0) - 65
+    fetch('/api/football?endpoint=standings')
+      .then(r => r.json())
+      .then(data => {
+        const raw: StandingRow[][] = data.response?.[0]?.league?.standings ?? []
+        setGroupStandings(raw[idx] ?? [])
+        setAllGroupStandings(raw)
+      })
+      .catch(() => {})
+  }, [localScheduleTeamName, teamName, allSortedMatches])
+
+  // Auto-set path position to confirmed finish position once all group games are done.
+  // groupStandings is sorted by global rank ascending — array index = group position (0=1st, 1=2nd, 2=3rd, 3=4th).
+  // Do NOT use myRow.rank (global 1-48); use groupStandings.indexOf(myRow) instead.
+  useEffect(() => {
+    const sched = localScheduleTeamName || teamName || ''
+    if (!sched || groupStandings.length === 0) return
+    const groupMatches = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage))
+    if (groupMatches.length !== 3 || groupMatches.some(m => !m.result)) return
+    const myRow = groupStandings.find(r => normForStandings(r.team.name) === normForStandings(sched))
+    if (!myRow) return
+    const groupPos = groupStandings.indexOf(myRow) // 0=1st, 1=2nd, 2=3rd, 3=4th
+    if (groupPos === 0) setPathPosition('1st')
+    else if (groupPos === 1) setPathPosition('2nd')
+    else setPathPosition('best_3rd')
+  }, [localMatches, groupStandings, localScheduleTeamName, teamName])
 
   useEffect(() => {
     if (teamId || teamName) return
@@ -371,6 +586,108 @@ function TeamContent() {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   }
 
+  const schedName = localScheduleTeamName || teamName || ''
+  const currentGroup = schedName && allSortedMatches.length > 0 ? getTeamGroup(allSortedMatches, schedName) : null
+  const groupGamesPlayed = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage) && m.result !== null).length
+  const groupGamesTotal = localMatches.filter(m => /^Group [A-L]$/i.test(m.stage)).length
+  const allGroupGamesDone = groupGamesTotal === 3 && groupGamesPlayed === 3
+  const standingsGroupDone = groupStandings.length >= 4 && groupStandings.every(r => r.all.played >= 3)
+  const standingsRemainingLabel = standingsGroupDone ? null : groupRemainingLabel(groupStandings, t)
+  const myStandingRow = currentGroup && groupStandings.length > 0
+    ? groupStandings.find(r => normForStandings(r.team.name) === normForStandings(schedName))
+    : null
+  // groupStandings is sorted by global rank — use array index for GROUP position (0=1st … 3=4th).
+  // myStandingRow.rank is the GLOBAL rank (1-48) and must NOT be used for group position logic.
+  const myGroupPos = myStandingRow ? groupStandings.indexOf(myStandingRow) : -1 // 0-based
+  const finishPosition = allGroupGamesDone && myGroupPos >= 0 ? (myGroupPos + 1) : null // 1-based (1–4)
+  const qualified = finishPosition !== null && finishPosition <= 2
+  // Count total group matches played across all 4 teams (each match adds 1 to both teams' played count)
+  const groupTotalPlayed = groupStandings.length > 0
+    ? Math.round(groupStandings.reduce((s, r) => s + r.all.played, 0) / 2)
+    : groupGamesPlayed
+  const GROUP_TOTAL_MATCHES = 6 // 4 teams, C(4,2) = 6 round-robin matches
+  const posSlot = qualified
+    ? (finishPosition === 1 ? `Group ${currentGroup} Winner` : `Group ${currentGroup} Runner-up`)
+    : null
+  // Placeholder may have been replaced in DB by updateKnockoutNames() — fall back to actual team name
+  const nextKnockoutMatchByPlaceholder = posSlot
+    ? (allSortedMatches.find(m => m.home_team === posSlot || m.away_team === posSlot) ?? null)
+    : null
+  const nextKnockoutMatchByName = (!nextKnockoutMatchByPlaceholder && qualified && schedName)
+    ? (allSortedMatches.find(m => m.stage === 'Round of 32' && (m.home_team === schedName || m.away_team === schedName)) ?? null)
+    : null
+  const nextKnockoutMatch = nextKnockoutMatchByPlaceholder ?? nextKnockoutMatchByName
+  const nextKnockoutTeamIsHome = nextKnockoutMatch
+    ? (nextKnockoutMatchByPlaceholder ? nextKnockoutMatch.home_team === posSlot : nextKnockoutMatch.home_team === schedName)
+    : false
+
+  // For 3rd-placed teams: find all R32 matches that could receive this team based on FIFA's
+  // fixed allocation table. Each R32 slot stores "3rd Place (A/B/C/D/F)" in the DB — we check
+  // if currentGroup appears in that list. The other side of the match is the potential opponent.
+  const FD_TO_SCHED_MAP: Record<string, string> = {
+    'United States': 'USA', 'Korea Republic': 'South Korea',
+    "Côte d'Ivoire": 'Ivory Coast', 'Turkey': 'Türkiye',
+    'Czech Republic': 'Czechia', 'Cape Verde Islands': 'Cape Verde',
+    'Bosnia-Herzegovina': 'Bosnia & Herzegovina', 'Cabo Verde': 'Cape Verde',
+  }
+  function resolveOpponent(slot: string): { label: string; confirmed: boolean; schedName: string | null } {
+    const winnerM = slot.match(/^Group ([A-L]) Winner$/i)
+    if (winnerM) {
+      const g = allGroupStandings[winnerM[1].toUpperCase().charCodeAt(0) - 65]
+      if (g && g.length >= 4 && g.every(r => r.all.played >= 3)) {
+        const name = g[0].team.name
+        return { label: FD_TO_SCHED_MAP[name] ?? name, confirmed: true, schedName: FD_TO_SCHED_MAP[name] ?? name }
+      }
+      return { label: `1st · Group ${winnerM[1].toUpperCase()}`, confirmed: false, schedName: null }
+    }
+    const runnerM = slot.match(/^Group ([A-L]) Runner-up$/i)
+    if (runnerM) {
+      const g = allGroupStandings[runnerM[1].toUpperCase().charCodeAt(0) - 65]
+      if (g && g.length >= 4 && g.every(r => r.all.played >= 3)) {
+        const name = g[1].team.name
+        return { label: FD_TO_SCHED_MAP[name] ?? name, confirmed: true, schedName: FD_TO_SCHED_MAP[name] ?? name }
+      }
+      return { label: `2nd · Group ${runnerM[1].toUpperCase()}`, confirmed: false, schedName: null }
+    }
+    return { label: formatPlaceholder(slot), confirmed: false, schedName: null }
+  }
+  const possible3rdMatches: MatchRecord[] = (finishPosition === 3 && currentGroup && allGroupGamesDone)
+    ? allSortedMatches.filter(m => m.stage === 'Round of 32' && (() => {
+        const checkSlot = (slot: string) => {
+          const mm = slot.match(/^3rd Place \(([^)]+)\)/i)
+          return mm ? mm[1].split('/').map(s => s.trim()).includes(currentGroup) : false
+        }
+        return (isPlaceholderTeam(m.home_team) && checkSlot(m.home_team))
+            || (isPlaceholderTeam(m.away_team) && checkSlot(m.away_team))
+      })())
+    : []
+
+  function statusLabel() {
+    if (finishPosition === 1) return t.pathAs1st.replace('{group}', currentGroup ?? '')
+    if (finishPosition === 2) return t.pathAs2nd.replace('{group}', currentGroup ?? '')
+    if (finishPosition === 3) return t.finishedThird.replace('{group}', currentGroup ?? '')
+    if (finishPosition === 4) return t.eliminated
+    if (currentGroup && groupGamesTotal > 0)
+      return t.groupProgress.replace('{group}', currentGroup).replace('{played}', String(groupGamesPlayed))
+    return null
+  }
+  const groupStatusLabel = statusLabel()
+  const groupStatusColor = finishPosition === 1 ? 'var(--green)'
+    : finishPosition === 2 ? 'var(--green)'
+    : finishPosition === 3 ? 'var(--amber)'
+    : finishPosition === 4 ? 'var(--red)'
+    : 'var(--text-muted)'
+  const groupStatusBorder = finishPosition === 1 ? 'var(--green)'
+    : finishPosition === 2 ? 'rgba(0,200,122,0.45)'
+    : finishPosition === 3 ? 'rgba(245,197,24,0.5)'
+    : finishPosition === 4 ? 'rgba(255,59,59,0.35)'
+    : 'var(--border)'
+  const groupStatusBg = finishPosition === 1 ? 'rgba(0,200,122,0.12)'
+    : finishPosition === 2 ? 'rgba(0,200,122,0.08)'
+    : finishPosition === 3 ? 'rgba(245,197,24,0.08)'
+    : finishPosition === 4 ? 'rgba(255,59,59,0.08)'
+    : 'var(--surface)'
+
   const positionGroups = POSITION_ORDER.reduce((acc, pos) => {
     acc[pos] = squad.filter(p => p.position === pos)
     return acc
@@ -398,6 +715,115 @@ function TeamContent() {
                 <p className="muted">{t.savedOnThisPhone} · {t.localSchedule}</p>
               </div>
             </div>
+
+            {/* Group standings widget (fallback view) */}
+            {currentGroup && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: groupStandings.length > 0 ? 8 : 0 }}>
+                  {groupStatusLabel && (
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center',
+                      padding: '4px 12px', borderRadius: 20,
+                      background: groupStatusBg, border: `1px solid ${groupStatusBorder}`,
+                      fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
+                      color: groupStatusColor, letterSpacing: 0.3,
+                    }}>
+                      {groupStatusLabel}
+                    </div>
+                  )}
+                  {groupStandings.length > 0 && (
+                    <button onClick={() => setStandingsOpen(o => !o)} style={{
+                      marginLeft: 'auto', background: 'none', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: '4px 10px', cursor: 'pointer',
+                      fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
+                      color: 'var(--text-muted)', letterSpacing: 0.5, textTransform: 'uppercase',
+                    }}>
+                      {t.groupStandings} {standingsOpen ? '▲' : '▼'}
+                    </button>
+                  )}
+                </div>
+                {standingsOpen && groupStandings.length > 0 && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+                    <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>Group {currentGroup}</span>
+                      {groupStandings.length >= 4 && (
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: standingsGroupDone ? 'var(--green)' : 'var(--amber)', padding: '2px 6px', borderRadius: 4, border: `1px solid ${standingsGroupDone ? 'rgba(0,200,122,0.3)' : 'rgba(245,197,24,0.3)'}`, background: standingsGroupDone ? 'rgba(0,200,122,0.08)' : 'rgba(245,197,24,0.08)' }}>
+                          {standingsGroupDone ? t.groupFinalStandings : t.groupInProgress}{standingsRemainingLabel && ` · ${standingsRemainingLabel}`}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                            {[t.pos, t.team, t.played, t.won, t.drawn, t.lost, t.gd, t.points].map(h => (
+                              <th key={h} style={{ padding: '7px 8px', textAlign: h === t.team ? 'left' : 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupStandings.map((row, i) => {
+                            const isThis = normForStandings(row.team.name) === normForStandings(schedName)
+                            return (
+                              <tr key={row.team.id} style={{ borderBottom: i < groupStandings.length - 1 ? '1px solid var(--border)' : 'none', background: isThis ? 'rgba(245,197,24,0.07)' : i < 2 ? 'rgba(0,200,122,0.04)' : 'transparent' }}>
+                                <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
+                                <td style={{ padding: '9px 8px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }} />}
+                                    <Link href={`/world-cup/team?id=${row.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: isThis ? 800 : 700, fontSize: 12, color: isThis ? 'var(--amber)' : 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                      {row.team.name}
+                                    </Link>
+                                  </div>
+                                </td>
+                                {[row.all.played, row.all.win, row.all.draw, row.all.lose, row.goalsDiff].map((v, vi) => (
+                                  <td key={vi} style={{ padding: '9px 6px', textAlign: 'center', color: 'var(--text-muted)' }}>{v}</td>
+                                ))}
+                                <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--green)' }}>{row.points}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ padding: '6px 12px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>
+                      ■ {t.qualified}
+                    </div>
+                  </div>
+                )}
+                {qualified && nextKnockoutMatch && (() => {
+                  const oSlot = nextKnockoutTeamIsHome ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
+                  const letters = parseGroupLetters(oSlot)
+                  return (
+                    <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 5 }}>
+                        {t.nextMatch} · {nextKnockoutMatch.stage}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, marginBottom: letters.length > 0 ? 2 : 4 }}>
+                        vs {isPlaceholderTeam(oSlot) ? formatPlaceholder(oSlot) : oSlot}
+                      </div>
+                      {letters.map(l => <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />)}
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: letters.length > 0 ? 6 : 0 }}>
+                        {fmtDate(nextKnockoutMatch.kickoff_at)}
+                        {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
+                      </div>
+                    </div>
+                  )
+                })()}
+                {finishPosition === 3 && (
+                  <>
+                    <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
+                      </div>
+                      <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
+                    </Link>
+                    {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} allGroupStandings={allGroupStandings} t={t} />}
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="card" style={{ marginBottom: 14 }}>
               <h2>{t.teamInfo}</h2>
@@ -489,6 +915,115 @@ function TeamContent() {
             </div>
           )}
 
+          {/* Group standings widget */}
+          {currentGroup && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: groupStandings.length > 0 ? 8 : 0 }}>
+                {groupStatusLabel && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    padding: '4px 12px', borderRadius: 20,
+                    background: groupStatusBg, border: `1px solid ${groupStatusBorder}`,
+                    fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13,
+                    color: groupStatusColor, letterSpacing: 0.3,
+                  }}>
+                    {groupStatusLabel}
+                  </div>
+                )}
+                {groupStandings.length > 0 && (
+                  <button onClick={() => setStandingsOpen(o => !o)} style={{
+                    marginLeft: 'auto', background: 'none', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '4px 10px', cursor: 'pointer',
+                    fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700,
+                    color: 'var(--text-muted)', letterSpacing: 0.5, textTransform: 'uppercase',
+                  }}>
+                    {t.groupStandings} {standingsOpen ? '▲' : '▼'}
+                  </button>
+                )}
+              </div>
+              {standingsOpen && groupStandings.length > 0 && (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, letterSpacing: 1 }}>Group {currentGroup}</span>
+                    <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: groupTotalPlayed >= GROUP_TOTAL_MATCHES ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>
+                      {groupTotalPlayed >= GROUP_TOTAL_MATCHES
+                        ? t.groupAllComplete.replace('{total}', String(GROUP_TOTAL_MATCHES))
+                        : t.groupMatchProgress.replace('{played}', String(groupTotalPlayed)).replace('{total}', String(GROUP_TOTAL_MATCHES))}
+                    </span>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {[t.pos, t.team, t.played, t.won, t.drawn, t.lost, t.gd, t.points].map(h => (
+                            <th key={h} style={{ padding: '7px 8px', textAlign: h === t.team ? 'left' : 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groupStandings.map((row, i) => {
+                          const isThis = normForStandings(row.team.name) === normForStandings(schedName)
+                          return (
+                            <tr key={row.team.id} style={{ borderBottom: i < groupStandings.length - 1 ? '1px solid var(--border)' : 'none', background: isThis ? 'rgba(245,197,24,0.07)' : i < 2 ? 'rgba(0,200,122,0.04)' : 'transparent' }}>
+                              <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: i < 2 ? 'var(--green)' : 'var(--text-muted)' }}>{i + 1}</td>
+                              <td style={{ padding: '9px 8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  {row.team.logo && <img src={row.team.logo} alt="" style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }} />}
+                                  <Link href={`/world-cup/team?id=${row.team.id}`} style={{ fontFamily: 'var(--font-cond)', fontWeight: isThis ? 800 : 700, fontSize: 12, color: isThis ? 'var(--amber)' : 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                    {row.team.name}
+                                  </Link>
+                                </div>
+                              </td>
+                              {[row.all.played, row.all.win, row.all.draw, row.all.lose, row.goalsDiff].map((v, vi) => (
+                                <td key={vi} style={{ padding: '9px 6px', textAlign: 'center', color: 'var(--text-muted)' }}>{v}</td>
+                              ))}
+                              <td style={{ padding: '9px 8px', textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--green)' }}>{row.points}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ padding: '6px 12px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--green)', fontFamily: 'var(--font-cond)', fontWeight: 700 }}>
+                    ■ {t.qualified}
+                  </div>
+                </div>
+              )}
+              {qualified && nextKnockoutMatch && (() => {
+                const oSlot = nextKnockoutTeamIsHome ? nextKnockoutMatch.away_team : nextKnockoutMatch.home_team
+                const letters = parseGroupLetters(oSlot)
+                return (
+                  <div style={{ padding: '12px 14px', background: 'linear-gradient(135deg, rgba(0,200,122,0.07), rgba(245,197,24,0.04))', border: '1px solid rgba(0,200,122,0.25)', borderRadius: 10 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 5 }}>
+                      {t.nextMatch} · {nextKnockoutMatch.stage}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15, marginBottom: letters.length > 0 ? 2 : 4 }}>
+                      vs {isPlaceholderTeam(oSlot) ? formatPlaceholder(oSlot) : oSlot}
+                    </div>
+                    {letters.map(l => <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />)}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: letters.length > 0 ? 6 : 0 }}>
+                      {fmtDate(nextKnockoutMatch.kickoff_at)}
+                      {nextKnockoutMatch.venue && <span style={{ opacity: 0.7 }}> · {nextKnockoutMatch.venue}</span>}
+                    </div>
+                  </div>
+                )
+              })()}
+              {finishPosition === 3 && (
+                <>
+                  <Link href="/world-cup/best-3rd" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.3)', borderRadius: 10, textDecoration: 'none', marginTop: 8 }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>🥉</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 13, color: 'var(--amber)' }}>{t.best3rdNavLabel}</div>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t.best3rdNavDesc}</div>
+                    </div>
+                    <span style={{ color: 'var(--amber)', fontSize: 14, flexShrink: 0 }}>→</span>
+                  </Link>
+                  {possible3rdMatches.length > 0 && <Possible3rdOpponents matches={possible3rdMatches} resolveOpponent={resolveOpponent} allGroupStandings={allGroupStandings} t={t} />}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <button onClick={() => setTab('squad')} style={{
@@ -515,8 +1050,8 @@ function TeamContent() {
             </button>
           </div>
 
-          {/* Path to Final promo — shown when on Squad tab to surface the feature */}
-          {tab === 'squad' && (
+          {/* Path to Final promo — shown when on Squad tab to surface the feature (hidden if eliminated) */}
+          {tab === 'squad' && finishPosition !== 4 && (
             <button onClick={() => setTab('fixtures')} style={{
               width: '100%', marginBottom: 16,
               padding: '13px 16px',
@@ -587,7 +1122,7 @@ function TeamContent() {
             const group = localScheduleTeamName
               ? getTeamGroup(allSortedMatches, localScheduleTeamName)
               : null
-            const chains = group ? buildPathChains(allSortedMatches, group, pathPosition) : []
+            const chains = group ? buildPathChains(allSortedMatches, group, pathPosition, localScheduleTeamName || teamName) : []
             const statusColor = (s: string) =>
               s === 'confirmed' ? 'var(--green)' :
               s === 'eliminated' ? 'var(--red)' :
@@ -606,53 +1141,156 @@ function TeamContent() {
             return (
               <>
                 {/* Group stage results */}
-                {groupStageMatches.length > 0 && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
-                      {t.groupStage}
-                    </div>
-                    {groupStageMatches.map(match => {
-                      const isHome = match.home_team === localScheduleTeamName
-                      const opponent = isHome ? match.away_team : match.home_team
-                      const opponentFlag = isHome ? match.away_flag : match.home_flag
-                      const resultMap: Record<string, string> = { home: isHome ? 'W' : 'L', away: isHome ? 'L' : 'W', draw: 'D' }
-                      const resultLabel = match.result ? resultMap[match.result] : null
-                      const borderColor = resultLabel === 'W' ? 'rgba(0,200,122,0.3)' : resultLabel === 'L' ? 'rgba(255,59,59,0.2)' : 'var(--border)'
-                      const resultColor = resultLabel === 'W' ? 'var(--green)' : resultLabel === 'L' ? 'var(--red)' : 'var(--text-muted)'
-                      return (
-                        <div key={match.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '12px 14px', background: 'var(--surface)',
-                          border: `1px solid ${borderColor}`,
-                          borderRadius: 8, marginBottom: 6
-                        }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
-                              {match.stage}
-                            </div>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              {isHome ? 'vs' : '@'} <Flag emoji={opponentFlag} size={14} />{opponent}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(match.kickoff_at)}</div>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            {match.result ? (
-                              <>
-                                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 2, color: resultColor }}>
-                                  {isHome ? match.home_score : match.away_score} – {isHome ? match.away_score : match.home_score}
-                                </div>
-                                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: resultColor }}>
-                                  {resultLabel}
-                                </div>
-                              </>
-                            ) : null}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                {groupStageMatches.length > 0 && (() => {
+                  const normEvt = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+                  const eventIcon = (detail: string) => {
+                    if (detail === 'Own Goal') return '⚽🔴'
+                    if (detail === 'Penalty') return '⚽(P)'
+                    if (detail === 'Normal Goal') return '⚽'
+                    if (detail === 'Yellow Card') return '🟨'
+                    if (detail === 'Yellow Red Card' || detail === 'Red Card') return '🟥'
+                    return '⚽'
+                  }
+                  const fmtMin = (e: MatchEvent) => e.time.extra ? `${e.time.elapsed}+${e.time.extra}'` : `${e.time.elapsed}'`
 
+                  const matchRows = groupStageMatches.map(match => {
+                    const events = matchEventsById.get(match.id) ?? []
+                    const hasEvents = events.length > 0
+
+                    // home/away split — teamSide primary, team.name fallback (team.name in events = schedule name)
+                    const isHomeEvt = (e: MatchEvent) => e.teamSide === 'home' || (!e.teamSide && normEvt(e.team.name) === normEvt(match.home_team))
+                    const isAwayEvt = (e: MatchEvent) => e.teamSide === 'away' || (!e.teamSide && normEvt(e.team.name) === normEvt(match.away_team))
+                    const homeEvents = events.filter(isHomeEvt)
+                    const awayEvents = events.filter(isAwayEvt)
+
+                    // Score: DB first, then event count
+                    const homeGoalsFromEvents = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal' && isHomeEvt(e)).length
+                      + events.filter(e => e.detail === 'Own Goal' && isAwayEvt(e)).length
+                    const awayGoalsFromEvents = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal' && isAwayEvt(e)).length
+                      + events.filter(e => e.detail === 'Own Goal' && isHomeEvt(e)).length
+                    const home = match.home_score ?? (hasEvents ? homeGoalsFromEvents : null)
+                    const away = match.away_score ?? (hasEvents ? awayGoalsFromEvents : null)
+                    const homeWon = home !== null && away !== null && home > away
+                    const awayWon = home !== null && away !== null && away > home
+
+                    return (
+                      <div key={match.id} className="card" style={{ padding: '14px 16px', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{match.stage}</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{fmtDate(match.kickoff_at)}</span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8 }}>
+                          <Link href={`/world-cup/team?name=${encodeURIComponent(match.home_team)}`} style={{ display: 'block', textAlign: 'right', textDecoration: 'none' }}>
+                            <div style={{ fontSize: 20, marginBottom: 2, textAlign: 'right' }}>{match.home_flag}</div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: homeWon ? 'var(--green)' : 'var(--text)' }}>{match.home_team}</div>
+                          </Link>
+                          <div style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 30, letterSpacing: 4, color: 'var(--text)', minWidth: 80 }}>
+                            {home ?? '–'} : {away ?? '–'}
+                          </div>
+                          <Link href={`/world-cup/team?name=${encodeURIComponent(match.away_team)}`} style={{ display: 'block', textAlign: 'left', textDecoration: 'none' }}>
+                            <div style={{ fontSize: 20, marginBottom: 2 }}>{match.away_flag}</div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: awayWon ? 'var(--green)' : 'var(--text)' }}>{match.away_team}</div>
+                          </Link>
+                        </div>
+
+                        {hasEvents && (
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: events.some(e => e.type === 'Card') ? 8 : 0 }}>
+                              <div style={{ textAlign: 'right', paddingRight: 8 }}>
+                                {homeEvents.filter(e => e.type === 'Goal').map((e, i) => (
+                                  <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                                    {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMin(e)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div style={{ paddingLeft: 8 }}>
+                                {awayEvents.filter(e => e.type === 'Goal').map((e, i) => (
+                                  <div key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                                    {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMin(e)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            {events.some(e => e.type === 'Card') && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                                <div style={{ textAlign: 'right', paddingRight: 8 }}>
+                                  {homeEvents.filter(e => e.type === 'Card').map((e, i) => (
+                                    <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                                      {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMin(e)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div style={{ paddingLeft: 8 }}>
+                                  {awayEvents.filter(e => e.type === 'Card').map((e, i) => (
+                                    <div key={i} style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', lineHeight: 1.8 }}>
+                                      {eventIcon(e.detail)} {e.player.name} <span style={{ color: 'var(--text-dim)' }}>{fmtMin(e)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                  if (!allGroupGamesDone) {
+                    // Group still in progress — show inline, no toggle
+                    return (
+                      <div style={{ marginBottom: 22 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                          {t.groupStage}
+                        </div>
+                        {matchRows}
+                      </div>
+                    )
+                  }
+                  // Group complete — collapsible, default closed
+                  const wins = groupStageMatches.filter(m => { const r = m.home_team === localScheduleTeamName ? m.result === 'home' : m.result === 'away'; return r }).length
+                  const draws = groupStageMatches.filter(m => m.result === 'draw').length
+                  const losses = groupStageMatches.filter(m => m.result && !( m.home_team === localScheduleTeamName ? m.result === 'home' : m.result === 'away') && m.result !== 'draw').length
+                  return (
+                    <div style={{ marginBottom: 22 }}>
+                      <button
+                        onClick={() => setGroupStageOpen(o => !o)}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: groupStageOpen ? '8px 8px 0 0' : 8,
+                          padding: '10px 14px', cursor: 'pointer', marginBottom: 0,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            {t.groupStage}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: 0.5 }}>
+                            {wins}W · {draws}D · {losses}L
+                          </span>
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>{groupStageOpen ? '▲' : '▼'}</span>
+                      </button>
+                      {groupStageOpen && (
+                        <div style={{ border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '10px 0 4px', marginBottom: 0 }}>
+                          <div style={{ padding: '0 0 6px' }}>{matchRows}</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Eliminated — hide selector and path chains */}
+                {finishPosition === 4 ? (
+                  <div style={{ padding: '14px 16px', background: 'rgba(255,59,59,0.07)', border: '1px solid rgba(255,59,59,0.25)', borderRadius: 10, marginBottom: 16 }}>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--red)', marginBottom: 4 }}>
+                      {t.eliminated}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      {t.eliminatedGroupStage}
+                    </div>
+                  </div>
+                ) : (
+                <>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, marginTop: 0 }}>
                   {t.pathToFinalSub}
                 </p>
@@ -665,15 +1303,29 @@ function TeamContent() {
                       pos === '2nd' ? t.pathAs2nd.replace('{group}', group || '?') :
                       t.pathAsBest3rd
                     const active = pathPosition === pos
+                    // A position is "no longer possible" once all group games are settled
+                    const invalid = allGroupGamesDone && finishPosition !== null && (
+                      finishPosition === 1 ? pos !== '1st' :
+                      finishPosition === 2 ? pos !== '2nd' :
+                      finishPosition === 3 ? pos !== 'best_3rd' :
+                      true // 4th place: all paths gone
+                    )
                     return (
-                      <button key={pos} onClick={() => setPathPosition(pos)} style={{
-                        padding: '7px 14px', borderRadius: 20,
-                        border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`,
-                        background: active ? 'rgba(0,200,122,0.12)' : 'transparent',
-                        color: active ? 'var(--green)' : 'var(--text-muted)',
-                        fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
-                        letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer'
-                      }}>
+                      <button
+                        key={pos}
+                        onClick={() => { if (!invalid) setPathPosition(pos) }}
+                        style={{
+                          padding: '7px 14px', borderRadius: 20,
+                          border: `1px solid ${invalid ? 'rgba(255,59,59,0.35)' : active ? 'var(--green)' : 'var(--border)'}`,
+                          background: invalid ? 'rgba(255,59,59,0.07)' : active ? 'rgba(0,200,122,0.12)' : 'transparent',
+                          color: invalid ? 'var(--red)' : active ? 'var(--green)' : 'var(--text-muted)',
+                          fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                          letterSpacing: 0.5, textTransform: 'uppercase',
+                          cursor: invalid ? 'default' : 'pointer',
+                          textDecoration: invalid ? 'line-through' : 'none',
+                          opacity: invalid ? 0.75 : 1,
+                        }}
+                      >
                         {label}
                       </button>
                     )
@@ -693,82 +1345,113 @@ function TeamContent() {
                     <p className="muted" style={{ margin: 0 }}>{t.pathNoPathFound}</p>
                   </div>
                 ) : (
-                  chains[0].steps.map((step, i) => {
-                    const isLast = i === chains[0].steps.length - 1
-                    const isFinal = step.match.stage === 'Final'
-                    return (
-                      <div key={step.match.id} style={{ position: 'relative', paddingLeft: 32, marginBottom: isLast ? 0 : 0 }}>
-                        {/* Vertical connector line */}
-                        {!isLast && (
-                          <div style={{
-                            position: 'absolute', left: 10, top: 32, bottom: -8,
-                            width: 2, background: step.status === 'confirmed' ? 'rgba(0,200,122,0.35)'
-                              : step.status === 'eliminated' || step.status === 'blocked' ? 'rgba(255,59,59,0.2)'
-                              : 'var(--border)'
-                          }} />
-                        )}
-                        {/* Circle node */}
-                        <div style={{
-                          position: 'absolute', left: 4, top: 18,
-                          width: 14, height: 14, borderRadius: '50%',
-                          background: statusColor(step.status),
-                          border: `2px solid ${step.status === 'upcoming' ? 'var(--border)' : statusColor(step.status)}`,
-                          zIndex: 1
-                        }} />
-
-                        <div style={{
-                          padding: '12px 14px',
-                          background: statusBg(step.status),
-                          border: `1px solid ${statusColor(step.status)}`,
-                          borderRadius: 10, marginBottom: 10,
-                          opacity: step.status === 'blocked' ? 0.5 : 1,
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-                            <div style={{
-                              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
-                              letterSpacing: 1.5, textTransform: 'uppercase',
-                              color: isFinal ? 'var(--gold)' : 'var(--text-muted)'
-                            }}>
-                              M{step.matchNum} · {step.match.stage}
-                            </div>
-                            <div style={{
-                              fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
-                              letterSpacing: 0.5, textTransform: 'uppercase',
-                              color: statusColor(step.status), flexShrink: 0
-                            }}>
-                              {statusLabel(step.status)}
-                            </div>
-                          </div>
-
-                          <div style={{
-                            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16,
-                            color: step.status === 'blocked' ? 'var(--text-muted)' : 'var(--text)',
-                            marginBottom: 5,
-                            textDecoration: step.status === 'blocked' ? 'line-through' : 'none'
-                          }}>
-                            vs {step.opponentSlot}
-                          </div>
-
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {fmtDate(step.match.kickoff_at)}
-                            {step.match.venue && (
-                              <span style={{ opacity: 0.7 }}> · {step.match.venue}</span>
+                  (() => {
+                  const safeIdx = Math.min(selectedChainIdx, chains.length - 1)
+                  const chain = chains[safeIdx]
+                  return (
+                  <>
+                  {chains.length > 1 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 16 }}>
+                      {chains.map((_, chainIdx) => (
+                        <button
+                          key={chainIdx}
+                          onClick={() => setSelectedChainIdx(chainIdx)}
+                          style={{
+                            padding: '6px 8px', borderRadius: 20,
+                            border: `1px solid ${chainIdx === safeIdx ? 'var(--amber)' : 'var(--border)'}`,
+                            background: chainIdx === safeIdx ? 'rgba(245,197,24,0.12)' : 'transparent',
+                            color: chainIdx === safeIdx ? 'var(--amber)' : 'var(--text-muted)',
+                            fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                            letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer',
+                          }}
+                        >
+                          {t.pathOptionOf.replace('{n}', String(chainIdx + 1)).replace('{total}', String(chains.length))}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {chain.steps.map((step, i) => {
+                        const isLast = i === chain.steps.length - 1
+                        const isFinal = step.match.stage === 'Final'
+                        return (
+                          <div key={step.match.id} style={{ position: 'relative', paddingLeft: 32, marginBottom: isLast ? 0 : 0 }}>
+                            {/* Vertical connector line */}
+                            {!isLast && (
+                              <div style={{
+                                position: 'absolute', left: 10, top: 32, bottom: -8,
+                                width: 2, background: step.status === 'confirmed' ? 'rgba(0,200,122,0.35)'
+                                  : step.status === 'eliminated' || step.status === 'blocked' ? 'rgba(255,59,59,0.2)'
+                                  : 'var(--border)'
+                              }} />
                             )}
-                          </div>
-
-                          {step.match.result && (
+                            {/* Circle node */}
                             <div style={{
-                              marginTop: 6,
-                              fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 2,
-                              color: step.status === 'confirmed' ? 'var(--green)' : 'var(--red)'
+                              position: 'absolute', left: 4, top: 18,
+                              width: 14, height: 14, borderRadius: '50%',
+                              background: statusColor(step.status),
+                              border: `2px solid ${step.status === 'upcoming' ? 'var(--border)' : statusColor(step.status)}`,
+                              zIndex: 1
+                            }} />
+
+                            <div style={{
+                              padding: '12px 14px',
+                              background: statusBg(step.status),
+                              border: `1px solid ${statusColor(step.status)}`,
+                              borderRadius: 10, marginBottom: 10,
+                              opacity: step.status === 'blocked' ? 0.5 : 1,
                             }}>
-                              {step.match.home_score} – {step.match.away_score}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                                <div style={{
+                                  fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+                                  letterSpacing: 1.5, textTransform: 'uppercase',
+                                  color: isFinal ? 'var(--gold)' : 'var(--text-muted)'
+                                }}>
+                                  M{step.matchNum} · {step.match.stage}
+                                </div>
+                                <div style={{
+                                  fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700,
+                                  letterSpacing: 0.5, textTransform: 'uppercase',
+                                  color: statusColor(step.status), flexShrink: 0
+                                }}>
+                                  {statusLabel(step.status)}
+                                </div>
+                              </div>
+
+                              <div style={{
+                                fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16,
+                                color: step.status === 'blocked' ? 'var(--text-muted)' : 'var(--text)',
+                                marginBottom: parseGroupLetters(step.opponentSlot).length > 0 ? 2 : 5,
+                                textDecoration: step.status === 'blocked' ? 'line-through' : 'none'
+                              }}>
+                                vs {isPlaceholderTeam(step.opponentSlot) ? formatPlaceholder(step.opponentSlot) : step.opponentSlot}
+                              </div>
+                              {step.status !== 'blocked' && parseGroupLetters(step.opponentSlot).map(l => (
+                                <GroupDropdown key={l} letter={l} allGroupStandings={allGroupStandings} />
+                              ))}
+
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {fmtDate(step.match.kickoff_at)}
+                                {step.match.venue && (
+                                  <span style={{ opacity: 0.7 }}> · {step.match.venue}</span>
+                                )}
+                              </div>
+
+                              {step.match.result && (
+                                <div style={{
+                                  marginTop: 6,
+                                  fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 2,
+                                  color: step.status === 'confirmed' ? 'var(--green)' : 'var(--red)'
+                                }}>
+                                  {step.match.home_score} – {step.match.away_score}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })
+                          </div>
+                        )
+                      })}
+                  </>
+                  )
+                  })()
                 )}
 
                 {pathPosition === 'best_3rd' && group && chains.length > 0 && (
@@ -789,6 +1472,8 @@ function TeamContent() {
                 }}>
                   {t.pathLinkHowToQualify}
                 </Link>
+              </>
+                )}
               </>
             )
           })()}

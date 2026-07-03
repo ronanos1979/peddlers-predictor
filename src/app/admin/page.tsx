@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { supabase, type Match } from '@/lib/supabase'
 import { getDailyCode } from '@/lib/matchSchedule'
 import Flag from '@/components/Flag'
@@ -9,6 +10,14 @@ type EntryRow = {
   is_correct: boolean | null; raffle_entries: number; pub_id: string; created_at: string
   home_score_pred: number | null; away_score_pred: number | null
   matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; stage: string; kickoff_at: string } | null
+}
+type ScorerPickRow = { phone: string; player_name: string; player_team: string; is_correct: boolean | null; potential_raffle_entries: number | null; raffle_entries: number | null }
+type WinnerPickRow = { phone: string; team_name: string; team_flag: string; is_correct: boolean | null; raffle_entries: number; potential_raffle_entries: number | null }
+type PatronSummary = {
+  phone: string; name: string; email: string | null; pub_id: string
+  total: number; correct: number; pending: number; wrong: number; raffle_entries: number
+  golden_boot: ScorerPickRow | null; winner_pick: WinnerPickRow | null
+  entries: EntryRow[]
 }
 type DayStat = [string, { haverhill: number; nashua: number; total: number }]
 type Totals = { total_entries: number; unique_phones: number; emails_collected: number; correct: number; haverhill: number; nashua: number }
@@ -36,13 +45,18 @@ export default function AdminPage() {
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([])
   const [results, setResults] = useState<Record<string, 'home' | 'draw' | 'away'>>({})
   const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({})
+  const [penaltiesScored, setPenaltiesScored] = useState<Record<string, boolean>>({})
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState<'success' | 'error'>('success')
   const [stats, setStats] = useState<DayStat[]>([])
   const [totals, setTotals] = useState<Totals | null>(null)
   const [entrants, setEntrants] = useState<EntryRow[]>([])
+  const [scorerPicks, setScorerPicks] = useState<ScorerPickRow[]>([])
+  const [winnerPicks, setWinnerPicks] = useState<WinnerPickRow[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [loadingEntrants, setLoadingEntrants] = useState(false)
+  const [entrantView, setEntrantView] = useState<'entries' | 'by-person'>('entries')
+  const [entrantFilter, setEntrantFilter] = useState<'all' | 'correct' | 'pending' | 'wrong'>('all')
   const [feedback, setFeedback] = useState<FeedbackRow[]>([])
   const [selectedReminderIds, setSelectedReminderIds] = useState<Set<string>>(new Set())
   const [reminderSending, setReminderSending] = useState(false)
@@ -61,19 +75,32 @@ export default function AdminPage() {
   const [loadAllShirtsRunning, setLoadAllShirtsRunning] = useState(false)
   const [loadAllShirtsProgress, setLoadAllShirtsProgress] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [forceResyncing, setForceResyncing] = useState(false)
+  const [forceResyncResult, setForceResyncResult] = useState<{ updated: number; entries_scored: number; message?: string } | null>(null)
+  const [rescoring, setRescoring] = useState(false)
+  const [rescoreResult, setRescoreResult] = useState<{ entries_scored: number } | null>(null)
+  const [refreshingEvents, setRefreshingEvents] = useState(false)
+  const [refreshEventsResult, setRefreshEventsResult] = useState<{ updated: number; failed: number; detail: string[] } | null>(null)
   const [reloadingResults, setReloadingResults] = useState(false)
   type AnalyticsEvent = { event: string; properties: Record<string, unknown>; created_at: string }
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[] | null>(null)
   const [analyticsDays, setAnalyticsDays] = useState(7)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   type SyncDebugUnmatched = { match: string; dbKickoff: string; nearestFd: string | null; nearestFdKickoff: string | null; diffMin: number | null }
-  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; events_loaded?: number; message?: string; debug?: { fdFinishedCount: number; dbUnresolvedCount: number; unmatched: SyncDebugUnmatched[] } } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ updated: number; entries_scored: number; events_loaded?: number; names_updated?: number; scores_corrected?: number; message?: string; debug?: { fdFinishedCount: number; dbUnresolvedCount: number; unmatched: SyncDebugUnmatched[] } } | null>(null)
+  const [knockoutNamesUpdating, setKnockoutNamesUpdating] = useState(false)
+  const [goldenBootPlayerInput, setGoldenBootPlayerInput] = useState('')
+  const [goldenBootScoring, setGoldenBootScoring] = useState(false)
+  const [goldenBootResult, setGoldenBootResult] = useState<{ scored: number } | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [checkins, setCheckins] = useState<CheckInRow[]>([])
+  const [checkinEarlierOpen, setCheckinEarlierOpen] = useState(false)
   const [checkinMinDraw, setCheckinMinDraw] = useState<number>(() =>
     typeof window !== 'undefined' ? parseInt(localStorage.getItem('checkin_min_draw') || '10', 10) : 10
   )
   const [drawingMatchId, setDrawingMatchId] = useState<string | null>(null)
+  const [ineligiblePhones, setIneligiblePhones] = useState<Set<string>>(new Set())
+  const [togglingIneligible, setTogglingIneligible] = useState<string | null>(null)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -129,6 +156,8 @@ export default function AdminPage() {
     const res = await fetch(url)
     const data = await res.json()
     setEntrants(data.entries || [])
+    setScorerPicks(data.scorer_picks || [])
+    setWinnerPicks(data.winner_picks || [])
     setLoadingEntrants(false)
   }, [password])
 
@@ -172,6 +201,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
     if (authed && tab === 'analytics' && analyticsEvents === null) loadAnalytics(analyticsDays)
+    if (authed && (tab === 'entrants' || tab === 'raffle') && ineligiblePhones.size === 0) loadIneligible()
   }, [authed, tab]) // eslint-disable-line
 
   useEffect(() => {
@@ -193,6 +223,7 @@ export default function AdminPage() {
           match_id: match.id, result,
           home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
           away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+          penalties_scored: penaltiesScored[match.id] ?? null,
           auto_draw_min: checkinMinDraw,
         }
       })
@@ -248,12 +279,44 @@ export default function AdminPage() {
     })
   }
 
+  async function loadIneligible() {
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=ineligible`)
+    const data = await res.json()
+    setIneligiblePhones(new Set((data.ineligible || []).map((r: { phone: string }) => r.phone)))
+  }
+
+  async function toggleIneligible(phone: string, name: string) {
+    setTogglingIneligible(phone)
+    const isCurrentlyIneligible = ineligiblePhones.has(phone)
+    const action = isCurrentlyIneligible ? 'mark_eligible' : 'mark_ineligible'
+    await fetch('/api/admin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action, payload: { phone, name } }),
+    })
+    setIneligiblePhones(prev => {
+      const next = new Set(prev)
+      if (isCurrentlyIneligible) next.delete(phone)
+      else next.add(phone)
+      return next
+    })
+    setRafflePoolLoaded(false) // force raffle pool refresh
+    setTogglingIneligible(null)
+  }
+
   async function loadRafflePool() {
     setRafflePoolLoaded(false)
-    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=entrants`)
-    const data = await res.json()
+    const [entrantsRes, ineligibleRes] = await Promise.all([
+      fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=entrants`),
+      fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=ineligible`),
+    ])
+    const data = await entrantsRes.json()
+    const ineligibleData = await ineligibleRes.json()
+    const blocked = new Set<string>((ineligibleData.ineligible || []).map((r: { phone: string }) => r.phone))
+    setIneligiblePhones(blocked)
     const rows: EntryRow[] = data.entries || []
-    // Aggregate by phone: sum tickets, keep latest name + pub
+    const winnerPicks: WinnerPickRow[] = data.winner_picks || []
+    const scorerPicks: ScorerPickRow[] = data.scorer_picks || []
+    // Aggregate by phone: sum match tickets + winner bonus + scorer bonus
     const byPhone = new Map<string, RaffleEntrant>()
     for (const e of rows) {
       if (!byPhone.has(e.phone)) {
@@ -261,8 +324,18 @@ export default function AdminPage() {
       }
       byPhone.get(e.phone)!.tickets += e.raffle_entries
     }
+    for (const wp of winnerPicks) {
+      if (byPhone.has(wp.phone) && wp.raffle_entries > 0) {
+        byPhone.get(wp.phone)!.tickets += wp.raffle_entries
+      }
+    }
+    for (const sp of scorerPicks) {
+      if (byPhone.has(sp.phone) && (sp.raffle_entries ?? 0) > 0) {
+        byPhone.get(sp.phone)!.tickets += sp.raffle_entries ?? 0
+      }
+    }
     const pool = Array.from(byPhone.values())
-      .filter(p => p.tickets > 0)
+      .filter(p => p.tickets > 0 && !blocked.has(p.phone))
       .sort((a, b) => b.tickets - a.tickets)
     setRafflePool(pool)
     setRafflePoolLoaded(true)
@@ -453,6 +526,91 @@ export default function AdminPage() {
     setSyncing(false)
   }
 
+  async function triggerKnockoutNames() {
+    setKnockoutNamesUpdating(true)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'update_knockout_names', payload: {} })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Update failed', 'error'); setKnockoutNamesUpdating(false); return }
+      flash(data.names_updated > 0 ? `✅ ${data.names_updated} match team name${data.names_updated !== 1 ? 's' : ''} resolved from standings` : 'No new names to resolve — all groups may still be in progress', 'success')
+      if (data.names_updated > 0) loadMatches()
+    } catch {
+      flash('Network error', 'error')
+    }
+    setKnockoutNamesUpdating(false)
+  }
+
+  async function forceResync() {
+    const resolvedIds = [...recentMatches, ...todaysMatches]
+      .filter(m => m.result !== null)
+      .map(m => m.id)
+    if (resolvedIds.length === 0) { flash('No resolved matches in the recent window', 'error'); return }
+    setForceResyncing(true)
+    setForceResyncResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'force_resync', payload: { match_ids: resolvedIds } })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Force resync failed', 'error'); setForceResyncing(false); return }
+      setForceResyncResult(data)
+      loadMatches(); loadStats(); loadEntrants()
+      flash(`Fixed ${data.updated} match${data.updated !== 1 ? 'es' : ''} · ${data.entries_scored} entries re-scored`, 'success')
+    } catch {
+      flash('Network error during force resync', 'error')
+    }
+    setForceResyncing(false)
+  }
+
+  async function rescoreEntries() {
+    const resolvedIds = [...recentMatches, ...todaysMatches]
+      .filter(m => m.result !== null)
+      .map(m => m.id)
+    if (resolvedIds.length === 0) { flash('No resolved matches in the recent window', 'error'); return }
+    setRescoring(true)
+    setRescoreResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'rescore_entries', payload: { match_ids: resolvedIds } })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Rescore failed', 'error'); setRescoring(false); return }
+      setRescoreResult(data)
+      loadMatches(); loadStats(); loadEntrants()
+      flash(`Re-scored ${data.entries_scored} entries`, 'success')
+    } catch {
+      flash('Network error during rescore', 'error')
+    }
+    setRescoring(false)
+  }
+
+  async function refreshAllEvents() {
+    setRefreshingEvents(true)
+    setRefreshEventsResult(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'refresh_all_events', payload: {} })
+      })
+      const data = await res.json()
+      if (!res.ok) { flash(data.error || 'Refresh failed', 'error'); setRefreshingEvents(false); return }
+      setRefreshEventsResult(data)
+      flash(`${data.updated} matches refreshed, ${data.failed} not found on ESPN`, data.failed === 0 ? 'success' : 'error')
+    } catch {
+      flash('Network error during event refresh', 'error')
+    }
+    setRefreshingEvents(false)
+  }
+
   async function reloadResultsCache() {
     setReloadingResults(true)
     try {
@@ -490,7 +648,7 @@ export default function AdminPage() {
   }
 
   function fmt(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })
   }
   function fmtDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -542,7 +700,9 @@ export default function AdminPage() {
       <div className="admin-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>
-            {m.home_flag} {m.home_team} vs {m.away_flag} {m.away_team}
+            <a href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>{m.home_flag} {m.home_team}</a>
+            {' vs '}
+            <a href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>{m.away_flag} {m.away_team}</a>
           </div>
           <div className="muted" style={{ fontSize: 12 }}>
             {m.stage} · {fmt(m.kickoff_at)}
@@ -555,6 +715,9 @@ export default function AdminPage() {
                 <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>
                   ({m.home_score}–{m.away_score})
                 </span>
+              )}
+              {m.penalties_scored && (
+                <span style={{ marginLeft: 6, color: 'var(--amber)', fontWeight: 700, fontSize: 11 }}>🎯 pens</span>
               )}
               {' '}
               <button onClick={loadMatchEvents} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, padding: 0 }}>
@@ -593,7 +756,9 @@ export default function AdminPage() {
                 style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13 }}>
                 <option value="">Result…</option>
                 <option value="home">{m.home_flag} {m.home_team} win</option>
-                <option value="draw">Draw</option>
+                {!['Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Third Place', 'Final'].includes(m.stage) && (
+                  <option value="draw">Draw</option>
+                )}
                 <option value="away">{m.away_flag} {m.away_team} win</option>
               </select>
               <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13 }}
@@ -615,6 +780,142 @@ export default function AdminPage() {
                 placeholder="0" style={{ width: 44, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13, textAlign: 'center' }}
               />
             </div>
+            {['Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Third Place', 'Final'].includes(m.stage) && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!penaltiesScored[m.id]}
+                  onChange={e => setPenaltiesScored(prev => ({ ...prev, [m.id]: e.target.checked }))}
+                />
+                Went to penalty shootout
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function PatronSummaryRow({ patron }: { patron: PatronSummary }) {
+    const [expanded, setExpanded] = useState(false)
+    const isIneligible = ineligiblePhones.has(patron.phone)
+    const isToggling = togglingIneligible === patron.phone
+    return (
+      <div style={{ background: 'var(--white)', border: `1px solid ${isIneligible ? 'rgba(255,59,59,0.4)' : 'var(--gray-border)'}`, borderRadius: 10, marginBottom: 8, overflow: 'hidden', opacity: isIneligible ? 0.75 : 1 }}>
+        <div onClick={() => setExpanded(e => !e)} style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▶</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{patron.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--gray-bg)', padding: '1px 6px', borderRadius: 8 }}>
+                {patron.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              📞 {patron.phone}
+              {patron.email && <span style={{ marginLeft: 8 }}>✉️ {patron.email}</span>}
+            </div>
+            {(patron.golden_boot || patron.winner_pick) && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+                {patron.golden_boot && (
+                  <span style={{ fontSize: 11, color: 'var(--amber)' }}>
+                    🥇 {patron.golden_boot.player_name}
+                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓ +{patron.golden_boot.raffle_entries ?? 10}</span>}
+                    {patron.golden_boot.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
+                    {patron.golden_boot.is_correct === null && <span style={{ color: 'var(--amber)', opacity: 0.8 }}> ⏳+{patron.golden_boot.potential_raffle_entries ?? 10}</span>}
+                  </span>
+                )}
+                {patron.winner_pick && (
+                  <span style={{ fontSize: 11, color: 'var(--amber)' }}>
+                    🏆 <a href={`/world-cup/team?name=${encodeURIComponent(patron.winner_pick.team_name)}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>{patron.winner_pick.team_flag} {patron.winner_pick.team_name}</a>
+                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}> ✓ +{patron.winner_pick.raffle_entries}</span>}
+                    {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}> ✗</span>}
+                    {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)', opacity: 0.8 }}> ⏳+{patron.winner_pick.potential_raffle_entries ?? 15}</span>}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ textAlign: 'center', minWidth: 28 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>{patron.correct}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>✓</div>
+            </div>
+            <div style={{ textAlign: 'center', minWidth: 28 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--amber)' }}>{patron.pending}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>pend</div>
+            </div>
+            <div style={{ textAlign: 'center', minWidth: 28 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--red)' }}>{patron.wrong}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>✗</div>
+            </div>
+            <div style={{ textAlign: 'center', minWidth: 36, borderLeft: '1px solid var(--border)', paddingLeft: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: isIneligible ? 'var(--text-dim)' : 'var(--gold)', textDecoration: isIneligible ? 'line-through' : 'none' }}>{patron.raffle_entries}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>tickets</div>
+            </div>
+            <button
+              onClick={e => { e.stopPropagation(); toggleIneligible(patron.phone, patron.name) }}
+              disabled={isToggling}
+              title={isIneligible ? 'Remove ineligibility' : 'Mark ineligible (hidden from patron)'}
+              style={{ padding: '4px 7px', borderRadius: 6, border: `1px solid ${isIneligible ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`, background: isIneligible ? 'rgba(255,59,59,0.15)' : 'transparent', cursor: 'pointer', fontSize: 14, opacity: isToggling ? 0.5 : 1 }}
+            >
+              {isIneligible ? '🚫' : '☑'}
+            </button>
+          </div>
+        </div>
+        {expanded && (
+          <div style={{ borderTop: '1px solid var(--gray-border)', padding: '8px 14px' }}>
+            {patron.entries.map((e, i) => (
+              <div key={e.id} style={{ padding: '7px 0', borderBottom: i < patron.entries.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 13 }}>
+                {e.matches && (
+                  <>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
+                      {fmtFull(e.matches.kickoff_at)} · {e.matches.stage}
+                    </div>
+                    <div>
+                      {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
+                      {' · '}
+                      <strong>
+                        {e.pick === 'home' ? `${e.matches.home_team} win` :
+                         e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
+                      </strong>
+                      {e.home_score_pred != null && e.away_score_pred != null && (
+                        <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
+                          ({e.home_score_pred}–{e.away_score_pred})
+                        </span>
+                      )}
+                      {' · '}
+                      {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct {e.raffle_entries > 1 ? `· 🎟×${e.raffle_entries}` : ''}</span>}
+                      {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                      {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {(patron.golden_boot || patron.winner_pick) && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Bonus Picks</div>
+                {patron.golden_boot && (
+                  <div style={{ fontSize: 13, marginBottom: 6 }}>
+                    🥇 Golden Boot: <strong>{patron.golden_boot.player_name}</strong> ({patron.golden_boot.player_team})
+                    {' · '}
+                    {patron.golden_boot.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×{patron.golden_boot.raffle_entries ?? 10}</span>}
+                    {patron.golden_boot.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                    {patron.golden_boot.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ +{patron.golden_boot.potential_raffle_entries ?? 10} if correct</span>}
+                  </div>
+                )}
+                {patron.winner_pick && (
+                  <div style={{ fontSize: 13 }}>
+                    🏆 Champion: <strong>{patron.winner_pick.team_flag} {patron.winner_pick.team_name}</strong>
+                    {' · '}
+                    {patron.winner_pick.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct · 🎟×{patron.winner_pick.raffle_entries}</span>}
+                    {patron.winner_pick.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                    {patron.winner_pick.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ +{patron.winner_pick.potential_raffle_entries ?? 15} if correct</span>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -682,6 +983,12 @@ export default function AdminPage() {
                 )}
               </button>
             ))}
+            <Link href="/admin/checkins"
+              style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid var(--gray-border)',
+                background: 'transparent', color: 'var(--text)', fontWeight: 400,
+                fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              check-ins ↗
+            </Link>
           </div>
         )
       })()}
@@ -708,6 +1015,9 @@ export default function AdminPage() {
                     <div style={{ fontSize: 13, fontWeight: 600 }}>
                       {checkins.length} total · {byMatch.size} match{byMatch.size !== 1 ? 'es' : ''}
                     </div>
+                    <Link href="/admin/checkins" style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--red)', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}>
+                      Full check-in detail →
+                    </Link>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <label style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
@@ -727,59 +1037,73 @@ export default function AdminPage() {
                     <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)' }}>check-ins</span>
                   </div>
                 </div>
-                {Array.from(byMatch.entries()).map(([matchId, rows]) => {
-                  const m = rows[0].matches
-                  const alreadyDrawn = m?.checkin_winner_name
-                  return (
-                    <div key={matchId} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>
-                            {m?.home_flag} {m?.home_team} vs {m?.away_flag} {m?.away_team}
-                          </div>
-                          <div className="muted" style={{ fontSize: 12 }}>{m?.stage} · {rows.length} checked in</div>
-                        </div>
-                        {alreadyDrawn ? (
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>🏆 Winner Drawn</div>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{m.checkin_winner_name}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.checkin_winner_phone}</div>
-                            <button
-                              onClick={() => drawCheckinWinner(matchId)}
-                              disabled={drawingMatchId === matchId}
-                              style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
-                            >
-                              Re-draw
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            className="btn btn-primary"
-                            style={{ width: 'auto', padding: '7px 14px', fontSize: 13, background: 'var(--red)', borderColor: 'transparent' }}
-                            onClick={() => drawCheckinWinner(matchId)}
-                            disabled={drawingMatchId === matchId}
-                          >
-                            {drawingMatchId === matchId ? 'Drawing…' : `🎲 Draw Winner (${rows.length})`}
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {rows.slice(0, 10).map(c => (
-                          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>
-                            <span>·</span>
-                            <span>{c.phone}</span>
-                            {c.email && <><span>·</span><span style={{ color: 'var(--green)' }}>✉</span></>}
-                            {c.shared_to && <span style={{ color: 'var(--amber)', fontSize: 11 }}>shared via {c.shared_to}</span>}
-                          </div>
-                        ))}
-                        {rows.length > 10 && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>+ {rows.length - 10} more</div>
-                        )}
-                      </div>
-                    </div>
+                {(() => {
+                  const sorted = Array.from(byMatch.entries()).sort((a, b) =>
+                    (b[1][0].matches?.kickoff_at || '').localeCompare(a[1][0].matches?.kickoff_at || '')
                   )
-                })}
+                  const [latest, ...older] = sorted
+
+                  const renderMatch = ([matchId, rows]: [string, CheckInRow[]], isLatest: boolean) => {
+                    const m = rows[0].matches
+                    const alreadyDrawn = m?.checkin_winner_name
+                    return (
+                      <div key={matchId} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>
+                              {m?.home_flag} {m?.home_team} vs {m?.away_flag} {m?.away_team}
+                              {isLatest && <span style={{ marginLeft: 8, fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--green)', border: '1px solid rgba(0,200,122,0.4)', borderRadius: 4, padding: '2px 5px' }}>Latest</span>}
+                            </div>
+                            <div className="muted" style={{ fontSize: 12 }}>{m?.stage} · {rows.length} checked in</div>
+                          </div>
+                          {alreadyDrawn ? (
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 2 }}>🏆 Winner Drawn</div>
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{m.checkin_winner_name}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.checkin_winner_phone}</div>
+                              <button onClick={() => drawCheckinWinner(matchId)} disabled={drawingMatchId === matchId} style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>Re-draw</button>
+                            </div>
+                          ) : (
+                            <button className="btn btn-primary" style={{ width: 'auto', padding: '7px 14px', fontSize: 13, background: 'var(--red)', borderColor: 'transparent' }} onClick={() => drawCheckinWinner(matchId)} disabled={drawingMatchId === matchId}>
+                              {drawingMatchId === matchId ? 'Drawing…' : `🎲 Draw Winner (${rows.length})`}
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {rows.slice(0, 10).map(c => (
+                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{c.name}</span>
+                              <span>·</span><span>{c.phone}</span>
+                              {c.email && <><span>·</span><span style={{ color: 'var(--green)' }}>✉</span></>}
+                              {c.shared_to && <span style={{ color: 'var(--amber)', fontSize: 11 }}>shared via {c.shared_to}</span>}
+                            </div>
+                          ))}
+                          {rows.length > 10 && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>+ {rows.length - 10} more</div>}
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <>
+                      {latest && renderMatch(latest, true)}
+                      {older.length > 0 && (
+                        <>
+                          <button
+                            onClick={() => setCheckinEarlierOpen(o => !o)}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', marginBottom: checkinEarlierOpen ? 12 : 0 }}
+                          >
+                            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>
+                              Earlier matches ({older.length})
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{checkinEarlierOpen ? '▲' : '▼'}</span>
+                          </button>
+                          {checkinEarlierOpen && older.map(e => renderMatch(e, false))}
+                        </>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             )
           })()}
@@ -815,7 +1139,7 @@ export default function AdminPage() {
                   background: syncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
                   color: syncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
                   border: `1px solid ${syncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
-                  {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored${syncResult.events_loaded ? ` · ${syncResult.events_loaded} match event${syncResult.events_loaded !== 1 ? 's' : ''} loaded` : ''}`}
+                  {syncResult.message || `✅ ${syncResult.updated} match${syncResult.updated !== 1 ? 'es' : ''} updated · ${syncResult.entries_scored} entries scored${syncResult.events_loaded ? ` · ${syncResult.events_loaded} event${syncResult.events_loaded !== 1 ? 's' : ''} loaded` : ''}${syncResult.scores_corrected ? ` · ${syncResult.scores_corrected} score${syncResult.scores_corrected !== 1 ? 's' : ''} corrected` : ''}${syncResult.names_updated ? ` · ${syncResult.names_updated} team name${syncResult.names_updated !== 1 ? 's' : ''} resolved` : ''}`}
                 </div>
                 {syncResult.debug && (
                   <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, fontSize: 12, background: 'rgba(119,119,112,0.08)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
@@ -830,11 +1154,11 @@ export default function AdminPage() {
                         {syncResult.debug.unmatched.map((u, i) => (
                           <div key={i} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: i < syncResult.debug!.unmatched.length - 1 ? '1px solid var(--border)' : 'none' }}>
                             <div style={{ color: 'var(--text)', fontSize: 12 }}>{u.match}</div>
-                            <div>DB kickoff: {new Date(u.dbKickoff).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</div>
+                            <div>DB kickoff: {new Date(u.dbKickoff).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })}</div>
                             {u.nearestFd ? (
                               <>
                                 <div>Nearest FD: {u.nearestFd}</div>
-                                <div>FD kickoff: {new Date(u.nearestFdKickoff!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })} <span style={{ color: u.diffMin! > 5 ? 'var(--red)' : 'var(--green)' }}>({u.diffMin}m off)</span></div>
+                                <div>FD kickoff: {new Date(u.nearestFdKickoff!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })} <span style={{ color: u.diffMin! > 5 ? 'var(--red)' : 'var(--green)' }}>({u.diffMin}m off)</span></div>
                               </>
                             ) : (
                               <div style={{ color: 'var(--red)' }}>No FD finished matches at all</div>
@@ -845,6 +1169,81 @@ export default function AdminPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Resolve knockout team names</div>
+                <div className="muted" style={{ fontSize: 12 }}>Writes real team names into R32+ match records once groups are confirmed — also runs automatically on every Sync</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={knockoutNamesUpdating} onClick={triggerKnockoutNames}>
+                {knockoutNamesUpdating ? 'Updating…' : '🏷 Resolve names'}
+              </button>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Fix resolved results</div>
+                <div className="muted" style={{ fontSize: 12 }}>Re-syncs all recently-resolved matches from FD and re-scores every entry — fixes wrong results caused by simultaneous kickoffs</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={forceResyncing} onClick={forceResync}>
+                {forceResyncing ? 'Fixing…' : '⟳ Fix results'}
+              </button>
+            </div>
+            {forceResyncResult && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                background: forceResyncResult.updated > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
+                color: forceResyncResult.updated > 0 ? 'var(--green)' : 'var(--text-muted)',
+                border: `1px solid ${forceResyncResult.updated > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
+                {forceResyncResult.message || `✅ ${forceResyncResult.updated} match${forceResyncResult.updated !== 1 ? 'es' : ''} corrected · ${forceResyncResult.entries_scored} entries re-scored`}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Re-score entries from stored results</div>
+                <div className="muted" style={{ fontSize: 12 }}>Scores all entries for resolved matches using the result already in the DB — use when entries are pending despite a result being set</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={rescoring} onClick={rescoreEntries}>
+                {rescoring ? 'Scoring…' : '✓ Re-score entries'}
+              </button>
+            </div>
+            {rescoreResult && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                background: rescoreResult.entries_scored > 0 ? 'rgba(0,200,122,0.1)' : 'rgba(119,119,112,0.1)',
+                color: rescoreResult.entries_scored > 0 ? 'var(--green)' : 'var(--text-muted)',
+                border: `1px solid ${rescoreResult.entries_scored > 0 ? 'rgba(0,200,122,0.3)' : 'var(--border)'}` }}>
+                ✅ {rescoreResult.entries_scored} entries re-scored
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Re-fetch all match scorers</div>
+                <div className="muted" style={{ fontSize: 12 }}>Forces ESPN re-fetch for every resolved match — fixes missing goals</div>
+              </div>
+              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px', flexShrink: 0 }}
+                disabled={refreshingEvents} onClick={refreshAllEvents}>
+                {refreshingEvents ? 'Refreshing…' : '⟳ All scorers'}
+              </button>
+            </div>
+            {refreshEventsResult && (
+              <div style={{ marginTop: 10, fontSize: 12, fontFamily: 'monospace', background: 'rgba(119,119,112,0.08)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', maxHeight: 200, overflowY: 'auto' }}>
+                {refreshEventsResult.detail.map((line, i) => (
+                  <div key={i} style={{ color: line.startsWith('✓') ? 'var(--green)' : 'var(--red)', lineHeight: 1.7 }}>{line}</div>
+                ))}
               </div>
             )}
           </div>
@@ -979,96 +1378,169 @@ export default function AdminPage() {
       )}
 
       {/* ENTRANTS TAB */}
-      {tab === 'entrants' && (
-        <>
-          <div className="card">
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="date" value={selectedDate}
-                onChange={e => { setSelectedDate(e.target.value); loadEntrants(e.target.value) }}
-                style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 14 }}
-              />
-              <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }}
-                onClick={() => { setSelectedDate(''); loadEntrants() }}>
-                Show all
-              </button>
-              <a href={`/api/admin-data?password=${encodeURIComponent(password)}&action=export-csv`}
-                className="btn btn-primary"
-                style={{ width: 'auto', padding: '8px 14px', fontSize: 13, textDecoration: 'none', display: 'inline-block' }}>
-                ↓ Export CSV
-              </a>
-            </div>
-            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              {entrants.length} entries shown
-            </p>
-          </div>
+      {tab === 'entrants' && (() => {
+        const scorerByPhone = new Map(scorerPicks.map(s => [s.phone, s]))
+        const winnerByPhone = new Map(winnerPicks.map(w => [w.phone, w]))
 
-          {loadingEntrants
-            ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
-            : entrants.map((e) => (
-              <div key={e.id} style={{
-                background: 'var(--white)', border: '1px solid var(--gray-border)',
-                borderRadius: 10, padding: '12px 14px', marginBottom: 8
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start' }}>
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
-                    <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-                      {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
-                    {confirmDeleteId === e.id ? (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          onClick={() => deleteEntry(e.id)}
-                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'rgba(255,59,59,0.12)', color: 'var(--red)', cursor: 'pointer', fontWeight: 700 }}>
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmDeleteId(e.id)}
-                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
-                        title="Delete entry">
-                        🗑
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                  📞 {e.phone}
-                  {e.email && <span style={{ marginLeft: 12 }}>✉️ {e.email}</span>}
-                </div>
-                {e.matches && (
-                  <div style={{ marginTop: 6, fontSize: 13 }}>
-                    {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
-                    {' · '}
-                    <strong>
-                      {e.pick === 'home' ? `${e.matches.home_team} win` :
-                       e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
-                    </strong>
-                    {e.home_score_pred != null && e.away_score_pred != null && (
-                      <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
-                        ({e.home_score_pred}–{e.away_score_pred})
-                      </span>
-                    )}
-                    {' · '}
-                    {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct</span>}
-                    {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
-                    {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
-                  </div>
-                )}
-              </div>
-            ))
+        const patronSummaries: PatronSummary[] = (() => {
+          const byPhone = new Map<string, PatronSummary>()
+          for (const e of entrants) {
+            if (!byPhone.has(e.phone)) {
+              byPhone.set(e.phone, {
+                phone: e.phone, name: e.name, email: e.email, pub_id: e.pub_id,
+                total: 0, correct: 0, pending: 0, wrong: 0, raffle_entries: 0,
+                golden_boot: scorerByPhone.get(e.phone) || null,
+                winner_pick: winnerByPhone.get(e.phone) || null,
+                entries: [],
+              })
+            }
+            const p = byPhone.get(e.phone)!
+            p.total++
+            p.raffle_entries += e.raffle_entries
+            if (e.is_correct === true) p.correct++
+            else if (e.is_correct === false) p.wrong++
+            else p.pending++
+            p.entries.push(e)
           }
-        </>
-      )}
+          return Array.from(byPhone.values()).sort((a, b) => b.raffle_entries - a.raffle_entries)
+        })()
+
+        const filteredEntrants = entrantFilter === 'all' ? entrants
+          : entrants.filter(e =>
+              entrantFilter === 'correct' ? e.is_correct === true :
+              entrantFilter === 'pending' ? e.is_correct === null :
+              e.is_correct === false
+            )
+
+        return (
+          <>
+            <div className="card">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                <input type="date" value={selectedDate}
+                  onChange={e => { setSelectedDate(e.target.value); loadEntrants(e.target.value) }}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--gray-border)', background: 'var(--white)', color: 'var(--text)', fontSize: 14 }}
+                />
+                <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }}
+                  onClick={() => { setSelectedDate(''); loadEntrants() }}>
+                  Show all
+                </button>
+                <a href={`/api/admin-data?password=${encodeURIComponent(password)}&action=export-csv`}
+                  className="btn btn-primary"
+                  style={{ width: 'auto', padding: '8px 14px', fontSize: 13, textDecoration: 'none', display: 'inline-block' }}>
+                  ↓ Export CSV
+                </a>
+              </div>
+
+              {/* View toggle */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                {(['entries', 'by-person'] as const).map(v => (
+                  <button key={v} onClick={() => setEntrantView(v)}
+                    style={{ padding: '6px 14px', borderRadius: 16, border: `1px solid ${entrantView === v ? 'var(--green)' : 'var(--gray-border)'}`, background: entrantView === v ? 'var(--green)' : 'transparent', color: entrantView === v ? '#fff' : 'var(--text)', fontWeight: entrantView === v ? 600 : 400, cursor: 'pointer', fontSize: 13 }}>
+                    {v === 'entries' ? 'All Entries' : 'By Person'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Status filter — only in entries view */}
+              {entrantView === 'entries' && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {([
+                    { key: 'all', label: 'All' },
+                    { key: 'correct', label: '✓ Correct' },
+                    { key: 'pending', label: '⏳ Pending' },
+                    { key: 'wrong', label: '✗ Wrong' },
+                  ] as const).map(({ key, label }) => (
+                    <button key={key} onClick={() => setEntrantFilter(key)}
+                      style={{ padding: '5px 12px', borderRadius: 14, fontSize: 12, cursor: 'pointer',
+                        border: `1px solid ${entrantFilter === key ? (key === 'correct' ? 'var(--green)' : key === 'pending' ? 'var(--amber)' : key === 'wrong' ? 'var(--red)' : 'var(--green)') : 'var(--gray-border)'}`,
+                        background: entrantFilter === key ? (key === 'correct' ? 'rgba(0,200,122,0.12)' : key === 'pending' ? 'rgba(245,197,24,0.12)' : key === 'wrong' ? 'rgba(255,59,59,0.12)' : 'rgba(0,200,122,0.12)') : 'transparent',
+                        color: entrantFilter === key ? (key === 'correct' ? 'var(--green)' : key === 'pending' ? 'var(--amber)' : key === 'wrong' ? 'var(--red)' : 'var(--green)') : 'var(--text-muted)',
+                        fontWeight: entrantFilter === key ? 600 : 400 }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                {entrantView === 'entries'
+                  ? `${filteredEntrants.length} entr${filteredEntrants.length !== 1 ? 'ies' : 'y'}`
+                  : `${patronSummaries.length} patron${patronSummaries.length !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+
+            {loadingEntrants ? (
+              <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
+            ) : entrantView === 'by-person' ? (
+              patronSummaries.length === 0
+                ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>No entries yet.</p>
+                : patronSummaries.map(patron => <PatronSummaryRow key={patron.phone} patron={patron} />)
+            ) : (
+              filteredEntrants.length === 0
+                ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>No entries match this filter.</p>
+                : filteredEntrants.map((e) => (
+                  <div key={e.id} style={{
+                    background: 'var(--white)', border: '1px solid var(--gray-border)',
+                    borderRadius: 10, padding: '12px 14px', marginBottom: 8
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
+                        <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+                          {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtFull(e.created_at)}</span>
+                        {confirmDeleteId === e.id ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => deleteEntry(e.id)}
+                              style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--red)', background: 'rgba(255,59,59,0.12)', color: 'var(--red)', cursor: 'pointer', fontWeight: 700 }}>
+                              Confirm
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(null)}
+                              style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDeleteId(e.id)}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--gray-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                            title="Delete entry">
+                            🗑
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                      📞 {e.phone}
+                      {e.email && <span style={{ marginLeft: 12 }}>✉️ {e.email}</span>}
+                    </div>
+                    {e.matches && (
+                      <div style={{ marginTop: 6, fontSize: 13 }}>
+                        {e.matches.home_flag} {e.matches.home_team} vs {e.matches.away_flag} {e.matches.away_team}
+                        {' · '}
+                        <strong>
+                          {e.pick === 'home' ? `${e.matches.home_team} win` :
+                           e.pick === 'away' ? `${e.matches.away_team} win` : 'Draw'}
+                        </strong>
+                        {e.home_score_pred != null && e.away_score_pred != null && (
+                          <span style={{ marginLeft: 6, color: 'var(--gold)', fontWeight: 700 }}>
+                            ({e.home_score_pred}–{e.away_score_pred})
+                          </span>
+                        )}
+                        {' · '}
+                        {e.is_correct === true && <span style={{ color: 'var(--green)' }}>✓ Correct</span>}
+                        {e.is_correct === false && <span style={{ color: 'var(--red)' }}>✗ Wrong</span>}
+                        {e.is_correct === null && <span style={{ color: 'var(--amber)' }}>⏳ Pending</span>}
+                      </div>
+                    )}
+                  </div>
+                ))
+            )}
+          </>
+        )
+      })()}
 
       {/* STATS TAB */}
       {tab === 'stats' && totals && (
@@ -1162,9 +1634,63 @@ export default function AdminPage() {
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 6 }}>
               How it works
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-              Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Wrong = 0 tickets. The draw is weighted — more tickets = better odds. Draw 1st, 2nd, and 3rd place winners.
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.6 }}>
+              Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Hat-trick bonus = <strong style={{ color: 'var(--gold)' }}>+7 tickets</strong>. Winner pick = <strong style={{ color: 'var(--gold)' }}>+15</strong>. Golden Boot = <strong style={{ color: 'var(--gold)' }}>+10</strong>. Wrong = 0 tickets.
             </p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.6 }}>
+              The draw is <strong style={{ color: 'var(--gold)' }}>weighted</strong> — each ticket is one entry in a virtual drum. A ticket is drawn at random. That patron wins 1st place and is removed. Repeat for 2nd and 3rd.
+            </p>
+            <p style={{ fontSize: 12, color: 'rgba(0,200,122,0.8)', margin: 0 }}>
+              ✓ <strong>Safe to test:</strong> Results are not saved anywhere and no email is sent from this draw. Re-draw as many times as you need before the official night.
+            </p>
+          </div>
+
+          {/* Score Golden Boot */}
+          <div className="card" style={{ marginBottom: 16, borderColor: 'rgba(245,197,24,0.3)' }}>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
+              🥇 Score Golden Boot (after the Final)
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Enter the exact Golden Boot winner name — fuzzy match awards picks who named this player. Each patron gets their locked-in ticket value (varies by when they submitted).
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={goldenBootPlayerInput}
+                onChange={e => setGoldenBootPlayerInput(e.target.value)}
+                placeholder="e.g. Kylian Mbappé"
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 14 }}
+              />
+              <button
+                disabled={!goldenBootPlayerInput.trim() || goldenBootScoring}
+                onClick={async () => {
+                  if (!goldenBootPlayerInput.trim()) return
+                  setGoldenBootScoring(true)
+                  setGoldenBootResult(null)
+                  const res = await fetch('/api/admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, action: 'score_golden_boot', payload: { player_name: goldenBootPlayerInput.trim() } })
+                  })
+                  const data = await res.json()
+                  setGoldenBootScoring(false)
+                  if (data.success) {
+                    setGoldenBootResult({ scored: data.scored })
+                    flash(`✅ Golden Boot scored — ${data.scored} correct picks awarded tickets`, 'success')
+                    setRafflePoolLoaded(false)
+                  } else {
+                    flash(`❌ Error: ${data.error}`, 'error')
+                  }
+                }}
+                style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: 'var(--gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 13, whiteSpace: 'nowrap' }}
+              >
+                {goldenBootScoring ? 'Scoring…' : 'Score'}
+              </button>
+            </div>
+            {goldenBootResult && (
+              <p style={{ marginTop: 8, fontSize: 13, color: 'var(--green)' }}>
+                ✓ {goldenBootResult.scored} patron{goldenBootResult.scored !== 1 ? 's' : ''} had the correct pick and were awarded tickets.
+              </p>
+            )}
           </div>
 
           {/* Pub filter */}
@@ -1193,6 +1719,11 @@ export default function AdminPage() {
             return (
               <>
                 {/* Pool stats */}
+                {ineligiblePhones.size > 0 && (
+                  <div style={{ padding: '8px 12px', background: 'rgba(255,59,59,0.08)', border: '1px solid rgba(255,59,59,0.25)', borderRadius: 8, marginBottom: 12, fontSize: 12, color: 'var(--red)' }}>
+                    🚫 {ineligiblePhones.size} patron{ineligiblePhones.size !== 1 ? 's' : ''} marked ineligible and excluded from this pool
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
                   {[
                     { label: 'Eligible players', value: filtered.length },

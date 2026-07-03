@@ -12,6 +12,7 @@ import { trackEvent } from '@/lib/analytics'
 import { loadPatron, clearPatron, firstName, savePubPref, loadPubPref } from '@/lib/patron'
 import { distanceMetres } from '@/lib/geo'
 import { getPredictableWindowEnd } from '@/lib/matchSchedule'
+import { getWinnerPickTickets, getScorerPickTickets } from '@/lib/bonusTickets'
 import { useLocale } from '@/lib/useLocale'
 import { type Translations } from '@/lib/i18n'
 import Link from 'next/link'
@@ -41,7 +42,7 @@ const SCHEDULE_ALIASES: Record<string, string> = {
 type SavedTeam = { id: string; name: string; logo?: string; savedAt: string }
 
 function fmtKickoff(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'long' })
 }
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -163,6 +164,50 @@ function MyTeamWidget({ t }: { t: Translations }) {
           {t.noUpcomingMatches}
         </p>
       )}
+    </div>
+  )
+}
+
+function NextMatchWidget({ t }: { t: Translations }) {
+  const [match, setMatch] = useState<Match | null>(null)
+
+  useEffect(() => {
+    supabase.from('matches')
+      .select('*')
+      .gt('kickoff_at', new Date().toISOString())
+      .neq('stage', 'Demo Match')
+      .order('kickoff_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setMatch(data))
+  }, [])
+
+  if (!match) return null
+
+  return (
+    <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #0d1520, #111)', borderColor: 'rgba(0,200,122,0.2)', textAlign: 'center' }}>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 10 }}>
+        {t.nextMatch}
+      </div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: 1, marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Flag emoji={match.home_flag} size={22} />
+          {match.home_team}
+        </span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 16 }}>vs</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {match.away_team}
+          <Flag emoji={match.away_flag} size={22} />
+        </span>
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>{match.stage}</div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+        {fmtDate(match.kickoff_at)} · {fmtKickoff(match.kickoff_at)}
+      </div>
+      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 14, marginBottom: 2 }}>
+        {t.nextMatchKickoffIn}
+      </div>
+      <MatchCountdown kickoffAt={match.kickoff_at} t={t} />
     </div>
   )
 }
@@ -293,18 +338,19 @@ function PatronWelcome({ onClear, t, selectedPub, pubCity }: {
 function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
   const { t } = useLocale()
   const pub = selectedPub || 'haverhill'
+  const scorerTickets = getScorerPickTickets()
   const items = [
     { href: `/leaderboard?pub=${pub}`, icon: '🏆', title: t.leaderboard, desc: t.leaderboardDesc },
-    { href: '/world-cup', icon: '⚽', title: t.worldCupHub, desc: t.worldCupHubDesc },
-    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDesc },
+    { href: '/world-cup/results', icon: '⚽', title: t.latestResults, desc: t.latestResultsDesc },
+    { href: '/world-cup', icon: '🌍', title: t.worldCupHub, desc: t.worldCupHubDesc },
+    { href: `/world-cup/top-scorer-pick?pub=${pub}`, icon: '🎯', title: t.goldenBoot, desc: t.goldenBootDescN.replace('{n}', String(scorerTickets)) },
   ]
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 0 12px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, padding: '0 0 12px' }}>
       {items.map(item => (
         <Link key={item.href} href={item.href} style={{
-          flex: '0 0 auto', width: 130,
           background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 10, padding: '12px 12px 14px',
+          borderRadius: 10, padding: '12px 10px 14px',
           textDecoration: 'none', display: 'block',
           transition: 'border-color 0.15s',
         }}>
@@ -317,6 +363,80 @@ function DiscoveryStrip({ selectedPub }: { selectedPub: string }) {
           </div>
         </Link>
       ))}
+    </div>
+  )
+}
+
+const WHATS_NEW_KEY = 'peddlers_bracket_v2'
+
+function WhatsNew() {
+  const { t } = useLocale()
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !localStorage.getItem(WHATS_NEW_KEY)) {
+      setShow(true)
+    }
+  }, [])
+
+  const dismiss = () => { localStorage.setItem(WHATS_NEW_KEY, '1'); setShow(false) }
+
+  if (!show) return null
+
+  return (
+    <div style={{
+      background: 'rgba(245,197,24,0.08)',
+      border: '1px solid rgba(245,197,24,0.35)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      marginBottom: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
+            {t.whatsNewTitle}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Link
+              href="/world-cup/bracket"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'flex-start', gap: 8 }}
+              onClick={dismiss}
+            >
+              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3 }}>🏆</span>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 1 }}>
+                  {t.whatsNewBracketTitle} →
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  {t.whatsNewBracketDesc}
+                </div>
+              </div>
+            </Link>
+            <Link
+              href="/world-cup/best-3rd"
+              style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'flex-start', gap: 8 }}
+              onClick={dismiss}
+            >
+              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3 }}>🥉</span>
+              <div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 1 }}>
+                  {t.whatsNewBest3rdTitle} →
+                </div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  {t.whatsNewBest3rdDesc}
+                </div>
+              </div>
+            </Link>
+          </div>
+        </div>
+        <button
+          onClick={dismiss}
+          style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 4px', flexShrink: 0 }}
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }
@@ -362,6 +482,8 @@ function FirstTimeCard() {
   const { t } = useLocale()
   const [show, setShow] = useState(false)
   const [expanded, setExpanded] = useState(true)
+  const winnerTickets = getWinnerPickTickets()
+  const scorerTickets = getScorerPickTickets()
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !localStorage.getItem('peddlers_toured')) {
@@ -379,8 +501,8 @@ function FirstTimeCard() {
   const steps = [
     t.onboardStep1,
     t.onboardStep2,
-    t.onboardStep3,
-    t.onboardStep4,
+    t.onboardStep3N.replace('{n}', String(scorerTickets)),
+    t.onboardStep4N.replace('{n}', String(winnerTickets)),
     t.onboardStep5,
   ]
 
@@ -432,6 +554,7 @@ function FirstTimeCard() {
 
 function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
   const { t } = useLocale()
+  const winnerTickets = getWinnerPickTickets()
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -467,7 +590,7 @@ function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
             {t.winnerPickCalloutTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {t.winnerPickCalloutDesc}
+            {t.winnerPickCalloutDescN.replace('{n}', String(winnerTickets))}
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--green)', flexShrink: 0 }}>
@@ -480,6 +603,7 @@ function WinnerPickCallout({ selectedPub }: { selectedPub: string }) {
 
 function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
   const { t } = useLocale()
+  const scorerTickets = getScorerPickTickets()
   const [hasPick, setHasPick] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -515,7 +639,7 @@ function GoldenBootCallout({ selectedPub }: { selectedPub: string }) {
             {t.goldenBootCalloutTitle}
           </div>
           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {t.goldenBootCalloutDesc}
+            {t.goldenBootCalloutDescN.replace('{n}', String(scorerTickets))}
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>
@@ -832,6 +956,9 @@ function HomeContent() {
         </div>
       </div>
 
+      {/* What's New — dismissible new feature announcement */}
+      <WhatsNew />
+
       {/* Flag tip — dismissible notice about clicking flags */}
       <FlagTip />
 
@@ -850,8 +977,11 @@ function HomeContent() {
       {/* First-time visitor explainer */}
       <FirstTimeCard />
 
-      {/* Countdown */}
+      {/* Countdown to tournament start — hidden once tournament begins */}
       <Countdown t={t} />
+
+      {/* Next match countdown — shown once tournament is underway */}
+      <NextMatchWidget t={t} />
 
       {/* Winner pick callout — shown before matches so it's the first thing seen */}
       {selectedPub && <WinnerPickCallout selectedPub={selectedPub} />}
@@ -872,28 +1002,6 @@ function HomeContent() {
 
       {selectedPub && !loading && pub && (() => {
         const pubObj = { id: pub.id, name: pub.name, city: `${pub.city}, ${pub.state}`, lat: pub.lat, lng: pub.lng, radius_m: pub.radius_m, daily_code: '' }
-
-        if (selectedMatch) {
-          return (
-            <div>
-              <button
-                onClick={() => setSelectedMatch(null)}
-                style={{ background: 'none', border: 'none', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-muted)', cursor: 'pointer', padding: '8px 0 12px 0', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                {t.backToMatches}
-              </button>
-              <EntryForm
-                pubId={selectedPub}
-                match={selectedMatch}
-                pub={pubObj}
-                onComplete={() => {
-                  setCompletedIds(prev => new Set(Array.from(prev).concat(selectedMatch.id)))
-                  setSelectedMatch(null)
-                }}
-              />
-            </div>
-          )
-        }
 
         if (predictableMatches.length === 0) {
           return (
@@ -942,46 +1050,64 @@ function HomeContent() {
                     return (
                       <div key={m.id} style={{
                         background: done ? 'rgba(255,255,255,0.02)' : 'var(--surface)',
-                        border: `1px solid ${done ? 'rgba(255,255,255,0.06)' : 'var(--border)'}`,
+                        border: `1px solid ${selectedMatch?.id === m.id ? 'var(--green)' : done ? 'rgba(255,255,255,0.06)' : 'var(--border)'}`,
                         borderRadius: 10,
-                        padding: '14px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        opacity: done ? 0.55 : 1,
+                        opacity: done && selectedMatch?.id !== m.id ? 0.55 : 1,
+                        overflow: 'hidden',
                       }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
-                            <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
-                              <Flag emoji={m.home_flag} size={16} />{m.home_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
-                            </Link>
-                            <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>vs</span>
-                            <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
-                              <Flag emoji={m.away_flag} size={16} />{m.away_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
-                            </Link>
-                          </div>
-                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                            {m.stage} · {fmtKickoff(m.kickoff_at)}
-                          </div>
-                          {total > 0 && (
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}{t.pctHome}</span>
-                              <span>·</span>
-                              <span>{dp}{t.pctDraw}</span>
-                              <span>·</span>
-                              <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}{t.pctAway}</span>
-                              <span style={{ marginLeft: 2 }}>({total})</span>
+                        {/* Match header row — always visible */}
+                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 16, lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 6px' }}>
+                              <Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
+                                <Flag emoji={m.home_flag} size={16} />{m.home_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
+                              </Link>
+                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 12 }}>vs</span>
+                              <Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 6, color: 'var(--text)', textDecoration: 'none' }}>
+                                <Flag emoji={m.away_flag} size={16} />{m.away_team}<span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 1 }}>↗</span>
+                              </Link>
                             </div>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                              {m.stage} · {fmtKickoff(m.kickoff_at)}{m.venue ? ` · ${m.venue}` : ''}
+                            </div>
+                            {total > 0 && (
+                              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-muted)', marginTop: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ color: done ? 'var(--text-muted)' : 'var(--green)' }}>{hp}{t.pctHome}</span>
+                                <span>·</span>
+                                <span>{dp}{t.pctDraw}</span>
+                                <span>·</span>
+                                <span style={{ color: done ? 'var(--text-muted)' : 'var(--amber)' }}>{ap}{t.pctAway}</span>
+                                <span style={{ marginLeft: 2 }}>({total})</span>
+                              </div>
+                            )}
+                          </div>
+                          {done ? (
+                            <span style={{ flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 6, padding: '4px 10px' }}>
+                              {t.pickedBadge}
+                            </span>
+                          ) : selectedMatch?.id === m.id ? (
+                            <button onClick={() => setSelectedMatch(null)} style={{ flexShrink: 0, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>
+                              ✕
+                            </button>
+                          ) : (
+                            <button onClick={() => setSelectedMatch(m)} className="btn btn-primary" style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}>
+                              {t.pickArrow}
+                            </button>
                           )}
                         </div>
-                        {done ? (
-                          <span style={{ flexShrink: 0, fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: 'var(--green)', background: 'rgba(0,200,122,0.1)', border: '1px solid rgba(0,200,122,0.2)', borderRadius: 6, padding: '4px 10px' }}>
-                            {t.pickedBadge}
-                          </span>
-                        ) : (
-                          <button onClick={() => setSelectedMatch(m)} className="btn btn-primary" style={{ flexShrink: 0, width: 'auto', padding: '8px 14px', fontSize: 13 }}>
-                            {t.pickArrow}
-                          </button>
+                        {/* Inline entry form — shown when this match is selected */}
+                        {selectedMatch?.id === m.id && (
+                          <div style={{ borderTop: '1px solid var(--border)', padding: '16px 16px 4px' }}>
+                            <EntryForm
+                              pubId={selectedPub}
+                              match={m}
+                              pub={pubObj}
+                              onComplete={() => {
+                                setCompletedIds(prev => new Set(Array.from(prev).concat(m.id)))
+                                setSelectedMatch(null)
+                              }}
+                            />
+                          </div>
                         )}
                       </div>
                     )

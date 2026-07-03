@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { checkRateLimit, getIp } from '@/lib/rateLimit'
-import { getFdFixtures, FdRateLimitError } from '@/lib/footballData'
-import { fetchEspnEvents } from '@/lib/fetchEspnEvents'
+import { FdRateLimitError } from '@/lib/footballData'
+import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 import { toEspnDate, toEspnTeamName } from '@/lib/espnEvents'
+import { syncResults, resyncMatchIds, updateKnockoutNames } from '@/lib/syncResults'
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     // Set match result and score all entries
     if (action === 'set_result') {
-      const { match_id, result, home_score, away_score, auto_draw_min } = payload
+      const { match_id, result, home_score, away_score, penalties_scored, auto_draw_min } = payload
 
       if (!['home', 'draw', 'away'].includes(result)) {
         return NextResponse.json({ error: 'Invalid result' }, { status: 400 })
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
 
       const homeScore = home_score != null ? parseInt(String(home_score), 10) : null
       const awayScore = away_score != null ? parseInt(String(away_score), 10) : null
+      const penaltiesScored = penalties_scored === true ? true : penalties_scored === false ? false : null
 
       await supabaseAdmin
         .from('matches')
@@ -42,12 +44,20 @@ export async function POST(req: NextRequest) {
           result,
           home_score: homeScore != null && !isNaN(homeScore) ? homeScore : null,
           away_score: awayScore != null && !isNaN(awayScore) ? awayScore : null,
+          penalties_scored: penaltiesScored,
         })
         .eq('id', match_id)
 
+      // Fetch hat_trick_scored/scorer/penalties_scored if ESPN events were already loaded before result was set
+      const { data: matchForBonuses } = await supabaseAdmin
+        .from('matches').select('hat_trick_scored, hat_trick_scorer, penalties_scored').eq('id', match_id).single()
+      const hatTrickScored = matchForBonuses?.hat_trick_scored ?? null
+      const hatTrickScorer = (matchForBonuses as { hat_trick_scorer?: string | null } | null)?.hat_trick_scorer ?? null
+      const penaltiesScoredVal = penaltiesScored ?? (matchForBonuses as { penalties_scored?: boolean | null } | null)?.penalties_scored ?? null
+
       const { data: entries } = await supabaseAdmin
         .from('entries')
-        .select('id, pick, home_score_pred, away_score_pred')
+        .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, penalties_pred')
         .eq('match_id', match_id)
 
       if (entries) {
@@ -59,6 +69,14 @@ export async function POST(req: NextRequest) {
               homeScore != null && awayScore != null &&
               entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
             raffle_entries = scoreCorrect ? 3 : 1
+          }
+          const htPred = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
+          if (entry.hat_trick_pred === true && hatTrickScored === true && hatTrickScorer && htPred && scorerNameMatches(htPred, hatTrickScorer)) {
+            raffle_entries += 7
+          }
+          const penPred = (entry as typeof entry & { penalties_pred?: boolean | null }).penalties_pred
+          if (penPred === true && penaltiesScoredVal === true) {
+            raffle_entries += 2
           }
           await supabaseAdmin
             .from('entries')
@@ -121,9 +139,18 @@ export async function POST(req: NextRequest) {
         .from('matches').select('stage, home_team, away_team, kickoff_at').eq('id', match_id).single()
       if (finalMatchData?.stage === 'Final') {
         const champion = result === 'home' ? finalMatchData.home_team : finalMatchData.away_team
-        await supabaseAdmin.from('winner_picks')
-          .update({ is_correct: true, raffle_entries: 15 })
+        // Award each winner pick their locked-in potential_raffle_entries (varies by when pick was submitted)
+        const { data: championPicks } = await supabaseAdmin
+          .from('winner_picks')
+          .select('id, potential_raffle_entries')
           .eq('team_name', champion)
+        if (championPicks) {
+          for (const pick of championPicks) {
+            await supabaseAdmin.from('winner_picks')
+              .update({ is_correct: true, raffle_entries: pick.potential_raffle_entries ?? 15 })
+              .eq('id', pick.id)
+          }
+        }
         await supabaseAdmin.from('winner_picks')
           .update({ is_correct: false, raffle_entries: 0 })
           .neq('team_name', champion)
@@ -144,113 +171,118 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    if (action === 'sync_results') {
-      type FdFixture = {
-        fixture: { date: string; status: { short: string } }
-        teams: { home: { name: string; winner: boolean | null }; away: { name: string; winner: boolean | null } }
-        goals: { home: number | null; away: number | null }
-      }
+    // Score the Golden Boot — set is_correct + award potential_raffle_entries for correct pick
+    if (action === 'score_golden_boot') {
+      const { player_name } = payload
+      if (!player_name) return NextResponse.json({ error: 'player_name required' }, { status: 400 })
 
-      let fdFinished: FdFixture[] = []
+      // Correct picks: award their locked-in potential_raffle_entries
+      const { data: correctPicks } = await supabaseAdmin
+        .from('scorer_picks')
+        .select('id, potential_raffle_entries')
+        .ilike('player_name', `%${player_name}%`)
+      let scored = 0
+      if (correctPicks) {
+        for (const pick of correctPicks) {
+          await supabaseAdmin.from('scorer_picks')
+            .update({ is_correct: true, raffle_entries: pick.potential_raffle_entries ?? 10 })
+            .eq('id', pick.id)
+          scored++
+        }
+      }
+      // Wrong picks: mark false, 0 tickets
+      await supabaseAdmin.from('scorer_picks')
+        .update({ is_correct: false, raffle_entries: 0 })
+        .not('player_name', 'ilike', `%${player_name}%`)
+        .is('is_correct', null)
+
+      return NextResponse.json({ success: true, scored })
+    }
+
+    if (action === 'sync_results') {
       try {
-        const data = await getFdFixtures({ status: 'FT' }) as { response?: FdFixture[] }
-        fdFinished = (data.response || []).filter(f => f.fixture.status.short === 'FT')
+        const result = await syncResults()
+        return NextResponse.json({ success: true, ...result })
       } catch (e) {
         if (e instanceof FdRateLimitError) {
           return NextResponse.json({ error: 'Football data rate limited — try again in a minute' }, { status: 429 })
         }
         throw e
       }
+    }
 
-      if (fdFinished.length === 0) {
-        return NextResponse.json({ success: true, updated: 0, entries_scored: 0, message: 'No finished matches found from API' })
-      }
-
-      // Only consider matches that kicked off 2+ hours ago (safely finished) and have no result yet
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-      const { data: unresolved } = await supabaseAdmin
-        .from('matches')
-        .select('id, kickoff_at, home_team, away_team')
-        .is('result', null)
-        .lt('kickoff_at', twoHoursAgo)
-        .neq('stage', 'Demo Match')
-
-      if (!unresolved || unresolved.length === 0) {
-        return NextResponse.json({ success: true, updated: 0, entries_scored: 0, message: 'No unresolved finished matches' })
-      }
-
-      let updated = 0
-      let entries_scored = 0
-      type SyncDebugUnmatched = { match: string; dbKickoff: string; nearestFd: string | null; nearestFdKickoff: string | null; diffMin: number | null }
-      const unmatched: SyncDebugUnmatched[] = []
-      const resolvedForEspn: Array<{ id: string; kickoff_at: string; home_team: string; away_team: string }> = []
-
-      for (const match of unresolved) {
-        const matchMs = new Date(match.kickoff_at).getTime()
-        // Match by kickoff time within 5-minute tolerance
-        const fdMatch = fdFinished.find(f => Math.abs(new Date(f.fixture.date).getTime() - matchMs) <= 5 * 60 * 1000)
-
-        if (!fdMatch) {
-          // Find the nearest FD match by time for debugging
-          let nearestDiff = Infinity
-          let nearestFd: FdFixture | null = null
-          for (const f of fdFinished) {
-            const diff = Math.abs(new Date(f.fixture.date).getTime() - matchMs)
-            if (diff < nearestDiff) { nearestDiff = diff; nearestFd = f }
-          }
-          unmatched.push({
-            match: `${match.home_team} vs ${match.away_team}`,
-            dbKickoff: match.kickoff_at,
-            nearestFd: nearestFd ? `${nearestFd.teams.home.name} vs ${nearestFd.teams.away.name}` : null,
-            nearestFdKickoff: nearestFd ? nearestFd.fixture.date : null,
-            diffMin: nearestFd ? Math.round(nearestDiff / 60000) : null,
-          })
-          continue
+    if (action === 'update_knockout_names') {
+      try {
+        const names_updated = await updateKnockoutNames()
+        return NextResponse.json({ success: true, names_updated })
+      } catch (e) {
+        if (e instanceof FdRateLimitError) {
+          return NextResponse.json({ error: 'Football data rate limited — try again in a minute' }, { status: 429 })
         }
+        throw e
+      }
+    }
 
-        const result: 'home' | 'draw' | 'away' =
-          fdMatch.teams.home.winner === true ? 'home' :
-          fdMatch.teams.away.winner === true ? 'away' : 'draw'
-        const homeScore = fdMatch.goals.home ?? null
-        const awayScore = fdMatch.goals.away ?? null
+    if (action === 'force_resync') {
+      const { match_ids } = payload as { match_ids: string[] }
+      if (!Array.isArray(match_ids) || match_ids.length === 0) {
+        return NextResponse.json({ error: 'match_ids array required' }, { status: 400 })
+      }
+      try {
+        const result = await resyncMatchIds(match_ids)
+        return NextResponse.json({ success: true, ...result })
+      } catch (e) {
+        if (e instanceof FdRateLimitError) {
+          return NextResponse.json({ error: 'Football data rate limited — try again in a minute' }, { status: 429 })
+        }
+        throw e
+      }
+    }
 
-        await supabaseAdmin.from('matches').update({ result, home_score: homeScore, away_score: awayScore }).eq('id', match.id)
+    if (action === 'rescore_entries') {
+      const { match_ids } = payload as { match_ids: string[] }
+      if (!Array.isArray(match_ids) || match_ids.length === 0) {
+        return NextResponse.json({ error: 'match_ids array required' }, { status: 400 })
+      }
 
+      const { data: matches } = await supabaseAdmin
+        .from('matches')
+        .select('id, result, home_score, away_score, hat_trick_scored, hat_trick_scorer, penalties_scored')
+        .in('id', match_ids)
+        .not('result', 'is', null)
+
+      let entries_scored = 0
+      for (const match of matches || []) {
         const { data: entries } = await supabaseAdmin
           .from('entries')
-          .select('id, pick, home_score_pred, away_score_pred')
+          .select('id, pick, home_score_pred, away_score_pred, hat_trick_pred, hat_trick_scorer_pred, penalties_pred')
           .eq('match_id', match.id)
 
-        if (entries) {
-          for (const entry of entries) {
-            const is_correct = entry.pick === result
-            let raffle_entries = 0
-            if (is_correct) {
-              const scoreCorrect = homeScore != null && awayScore != null &&
-                entry.home_score_pred === homeScore && entry.away_score_pred === awayScore
-              raffle_entries = scoreCorrect ? 3 : 1
-            }
-            await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
-            entries_scored++
+        if (!entries) continue
+        for (const entry of entries) {
+          const is_correct = entry.pick === match.result
+          let raffle_entries = 0
+          if (is_correct) {
+            const scoreCorrect =
+              match.home_score != null && match.away_score != null &&
+              entry.home_score_pred === match.home_score && entry.away_score_pred === match.away_score
+            raffle_entries = scoreCorrect ? 3 : 1
           }
+          const htPred = (entry as typeof entry & { hat_trick_scorer_pred?: string | null }).hat_trick_scorer_pred
+          if (entry.hat_trick_pred === true && match.hat_trick_scored === true && match.hat_trick_scorer && htPred && scorerNameMatches(htPred, match.hat_trick_scorer)) {
+            raffle_entries += 7
+          }
+          const penPred = (entry as typeof entry & { penalties_pred?: boolean | null }).penalties_pred
+          const penScored = (match as typeof match & { penalties_scored?: boolean | null }).penalties_scored
+          if (penPred === true && penScored === true) {
+            raffle_entries += 2
+          }
+          await supabaseAdmin.from('entries').update({ is_correct, raffle_entries }).eq('id', entry.id)
+          entries_scored++
         }
-        updated++
-        resolvedForEspn.push(match)
       }
 
-      // Auto-load ESPN events for all newly resolved matches (parallel, errors suppressed)
-      let events_loaded = 0
-      if (resolvedForEspn.length > 0) {
-        const espnResults = await Promise.allSettled(
-          resolvedForEspn.map(m => fetchEspnEvents(m.id, m.kickoff_at, m.home_team, m.away_team))
-        )
-        events_loaded = espnResults.filter(r => r.status === 'fulfilled' && r.value !== null).length
-      }
-
-      return NextResponse.json({
-        success: true, updated, entries_scored, events_loaded,
-        debug: { fdFinishedCount: fdFinished.length, dbUnresolvedCount: unresolved.length, unmatched },
-      })
+      return NextResponse.json({ success: true, entries_scored })
     }
 
     if (action === 'draw_checkin_winner') {
@@ -307,6 +339,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
+    if (action === 'refresh_all_events') {
+      // Re-fetch ESPN events for every resolved match (force overwrite existing events)
+      const { data: resolvedMatches } = await supabaseAdmin
+        .from('matches')
+        .select('id, kickoff_at, home_team, away_team')
+        .not('result', 'is', null)
+        .neq('stage', 'Demo Match')
+        .order('kickoff_at', { ascending: true })
+
+      if (!resolvedMatches?.length) {
+        return NextResponse.json({ success: true, updated: 0, failed: 0, detail: [] })
+      }
+
+      const results = await Promise.allSettled(
+        resolvedMatches.map(m => fetchEspnEvents(m.id, m.kickoff_at, m.home_team, m.away_team))
+      )
+
+      const detail: string[] = []
+      let updated = 0
+      let failed = 0
+      results.forEach((r, i) => {
+        const m = resolvedMatches[i]
+        const label = `${m.home_team} vs ${m.away_team}`
+        if (r.status === 'fulfilled' && r.value) {
+          updated++
+          detail.push(`✓ ${label}: ${r.value.events.length} events`)
+        } else {
+          failed++
+          detail.push(`✗ ${label}: not found on ESPN`)
+        }
+      })
+
+      return NextResponse.json({ success: true, updated, failed, detail })
+    }
+
     if (action === 'load_match_events') {
       const { matchId } = payload as { matchId: string }
       if (!matchId) return NextResponse.json({ error: 'matchId required' }, { status: 400 })
@@ -326,6 +393,20 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, count: result.events.length, events: result.events, espn_event_id: result.espnEventId })
+    }
+
+    if (action === 'mark_ineligible') {
+      const { phone, name } = payload as { phone: string; name: string }
+      if (!phone) return NextResponse.json({ error: 'phone required' }, { status: 400 })
+      await supabaseAdmin.from('ineligible_patrons').upsert({ phone, name }, { onConflict: 'phone' })
+      return NextResponse.json({ success: true })
+    }
+
+    if (action === 'mark_eligible') {
+      const { phone } = payload as { phone: string }
+      if (!phone) return NextResponse.json({ error: 'phone required' }, { status: 400 })
+      await supabaseAdmin.from('ineligible_patrons').delete().eq('phone', phone)
+      return NextResponse.json({ success: true })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getDailyCode } from '@/lib/matchSchedule'
 import { checkRateLimit, getIp } from '@/lib/rateLimit'
 
 export async function GET(req: NextRequest) {
@@ -19,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many attempts — try again later' }, { status: 429 })
     }
 
-    const { pub_id, match_id, name, phone, email, code, shared_to } = await req.json()
+    const { pub_id, match_id, name, phone, email, shared_to } = await req.json()
 
     if (!pub_id || !match_id || !name || !phone) {
       return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 })
@@ -34,10 +33,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Name must be 2–100 characters' }, { status: 400 })
     }
 
-    const raw = String(phone).replace(/\D/g, '')
-    const digits = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
-    if (digits.length !== 10) {
-      return NextResponse.json({ error: 'Enter a valid 10-digit US phone number' }, { status: 400 })
+    const rawPhone = String(phone).trim()
+    let digits: string
+    if (rawPhone.startsWith('+')) {
+      const stripped = rawPhone.replace(/\D/g, '')
+      if (stripped.startsWith('1') && stripped.length === 11) {
+        digits = stripped.slice(1) // US +1 country code
+      } else {
+        digits = '+' + stripped
+        if (digits.length < 8) return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 })
+      }
+    } else {
+      const stripped = rawPhone.replace(/\D/g, '')
+      digits = stripped.length === 11 && stripped.startsWith('1') ? stripped.slice(1) : stripped
+      if (digits.length !== 10) return NextResponse.json({ error: 'Enter a valid US or international phone number' }, { status: 400 })
     }
 
     const { data: match } = await supabaseAdmin
@@ -55,14 +64,6 @@ export async function POST(req: NextRequest) {
       }
       if (match.result) {
         return NextResponse.json({ error: 'Match is already finished' }, { status: 400 })
-      }
-
-      const todayCode = getDailyCode(new Date())
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-      const yesterdayCode = getDailyCode(yesterday)
-      const enteredCode = (code || '').toLowerCase().trim()
-      if (enteredCode !== todayCode && enteredCode !== yesterdayCode) {
-        return NextResponse.json({ error: 'Wrong pub code — ask your bartender' }, { status: 400 })
       }
     }
 

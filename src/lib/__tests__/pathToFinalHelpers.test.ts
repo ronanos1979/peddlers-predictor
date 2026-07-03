@@ -108,3 +108,81 @@ describe('buildPathChains', () => {
     expect(buildPathChains(S, 'Z', '1st')).toHaveLength(0)
   })
 })
+
+// ESPN rewrites DB placeholders to different formats before groups settle.
+// "Group H Runner-up" → "Group H 2nd Place"
+// "3rd Place (C/D/F/G/H)" → "Third Place Group C/D/F/G/H"
+// getR32EntryMatches must handle both.
+// ESPN corrupts R16/QF/SF/Final "Match N Winner" slots with ordinal labels:
+// "Round of 32 N Winner", "Round of 16 N Winner", "Quarterfinal N Winner", "Semifinal N Winner"
+describe('tracePathToFinal — ESPN ordinal labels in R16/QF/SF/Final', () => {
+  const ordinalMatches = [
+    { id: 'g1', kickoff_at: '2026-06-13T18:00:00Z', stage: 'Group A', home_team: 'USA', away_team: 'England', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    // R32: M2 and M3 (ordinals 1 and 2 within R32)
+    { id: 'r32a', kickoff_at: '2026-06-28T19:00:00Z', stage: 'Round of 32', home_team: 'Group A Winner', away_team: 'Group B Runner-up', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r32b', kickoff_at: '2026-06-29T17:00:00Z', stage: 'Round of 32', home_team: 'Group C Winner', away_team: 'Group F Runner-up', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    // R16: uses ESPN ordinal format — "Round of 32 1 Winner vs Round of 32 2 Winner"
+    // r32a = global match 2, r32b = global match 3 → R32 ordinals 1 and 2
+    { id: 'r16',  kickoff_at: '2026-07-04T17:00:00Z', stage: 'Round of 16', home_team: 'Round of 32 1 Winner', away_team: 'Round of 32 2 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    // QF: "Round of 16 1 Winner vs ..."
+    { id: 'qf',   kickoff_at: '2026-07-09T20:00:00Z', stage: 'Quarter Final', home_team: 'Round of 16 1 Winner', away_team: 'Round of 16 2 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    // SF: "Quarterfinal 1 Winner vs ..."
+    { id: 'sf',   kickoff_at: '2026-07-14T20:00:00Z', stage: 'Semi Final', home_team: 'Quarterfinal 1 Winner', away_team: 'Quarterfinal 2 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    // Final: "Semifinal 1 Winner vs ..."
+    { id: 'fi',   kickoff_at: '2026-07-19T20:00:00Z', stage: 'Final', home_team: 'Semifinal 1 Winner', away_team: 'Semifinal 2 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+  ]
+  // Match numbers: g1=1, r32a=2, r32b=3, r16=4, qf=5, sf=6, fi=7
+
+  it('traces R32 → R16 → QF → SF → Final via ESPN ordinal labels', () => {
+    const steps = tracePathToFinal(ordinalMatches, ordinalMatches[1], true) // r32a, isHome
+    expect(steps.map(s => s.match.stage)).toEqual([
+      'Round of 32', 'Round of 16', 'Quarter Final', 'Semi Final', 'Final',
+    ])
+    expect(steps).toHaveLength(5)
+  })
+
+  it('correctly sets isHome through ordinal chain', () => {
+    const steps = tracePathToFinal(ordinalMatches, ordinalMatches[1], true) // home in r32a
+    expect(steps[0].isHome).toBe(true)   // R32: home slot
+    expect(steps[1].isHome).toBe(true)   // R16: "Round of 32 1 Winner" is home slot
+    expect(steps[2].isHome).toBe(true)   // QF: "Round of 16 1 Winner" is home slot
+    expect(steps[3].isHome).toBe(true)   // SF: "Quarterfinal 1 Winner" is home slot
+    expect(steps[4].isHome).toBe(true)   // Final: "Semifinal 1 Winner" is home slot
+  })
+})
+
+describe('getR32EntryMatches — ESPN-format placeholders', () => {
+  const espnCorrupted = [
+    { id: 'g1', kickoff_at: '2026-06-13T18:00:00Z', stage: 'Group H', home_team: 'Cape Verde', away_team: 'Saudi Arabia', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r1', kickoff_at: '2026-07-02T19:00:00Z', stage: 'Round of 32', home_team: 'Group H Winner', away_team: 'Group J 2nd Place', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r2', kickoff_at: '2026-07-03T22:00:00Z', stage: 'Round of 32', home_team: 'Argentina', away_team: 'Group H 2nd Place', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r3', kickoff_at: '2026-06-30T21:00:00Z', stage: 'Round of 32', home_team: 'Group I Winner', away_team: 'Third Place Group C/D/F/G/H', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r4', kickoff_at: '2026-07-01T16:00:00Z', stage: 'Round of 32', home_team: 'Group L Winner', away_team: 'Third Place Group E/H/I/J/K', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r5', kickoff_at: '2026-07-04T17:00:00Z', stage: 'Round of 16', home_team: 'Match 1 Winner', away_team: 'Match 2 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'r6', kickoff_at: '2026-07-07T20:00:00Z', stage: 'Round of 16', home_team: 'Match 4 Winner', away_team: 'Match 3 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'qf', kickoff_at: '2026-07-12T20:00:00Z', stage: 'Quarter Final', home_team: 'Match 5 Winner', away_team: 'Match 6 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'sf', kickoff_at: '2026-07-15T20:00:00Z', stage: 'Semi Final', home_team: 'Match 7 Winner', away_team: 'Match 8 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+    { id: 'fi', kickoff_at: '2026-07-19T20:00:00Z', stage: 'Final', home_team: 'Match 9 Winner', away_team: 'Match 10 Winner', home_flag: '', away_flag: '', result: null as null, venue: null as null },
+  ]
+
+  it('2nd — finds "Group H 2nd Place" (ESPN format)', () => {
+    const r = getR32EntryMatches(espnCorrupted, 'H', '2nd', 'Cape Verde')
+    expect(r).toHaveLength(1)
+    expect(r[0].match.id).toBe('r2')
+    expect(r[0].isHome).toBe(false)
+  })
+
+  it('best_3rd — finds "Third Place Group C/D/F/G/H" (ESPN format)', () => {
+    const r = getR32EntryMatches(espnCorrupted, 'H', 'best_3rd')
+    expect(r).toHaveLength(2)
+    expect(r.map(e => e.match.id).sort()).toEqual(['r3', 'r4'])
+    expect(r.every(e => !e.isHome)).toBe(true)
+  })
+
+  it('1st — still finds "Group H Winner" (original format unchanged)', () => {
+    const r = getR32EntryMatches(espnCorrupted, 'H', '1st')
+    expect(r).toHaveLength(1)
+    expect(r[0].match.id).toBe('r1')
+    expect(r[0].isHome).toBe(true)
+  })
+})

@@ -29,6 +29,9 @@ export type Match = {
   venue: string | null
   home_score: number | null
   away_score: number | null
+  hat_trick_scored: boolean | null
+  hat_trick_scorer: string | null
+  penalties_scored: boolean | null
 }
 
 export type Entry = {
@@ -44,4 +47,7 @@ export type Entry = {
   created_at: string
   home_score_pred: number | null
   away_score_pred: number | null
+  hat_trick_pred: boolean | null
+  hat_trick_scorer_pred: string | null
+  penalties_pred: boolean | null
 }

@@ -88,10 +88,15 @@ describe('mapEspnEventType', () => {
   it('maps regular goal types to Normal Goal', () => {
     expect(mapEspnEventType('goal')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
     expect(mapEspnEventType('goal---header')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
+    expect(mapEspnEventType('goal---volley')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
+    expect(mapEspnEventType('goal---free-kick')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
+    expect(mapEspnEventType('goal---chip')).toEqual({ type: 'Goal', detail: 'Normal Goal' })
   })
 
   it('maps penalty goal', () => {
     expect(mapEspnEventType('goal---penalty')).toEqual({ type: 'Goal', detail: 'Penalty' })
+    // penalty---scored appears in commentary plays but not keyEvents — same result
+    expect(mapEspnEventType('penalty---scored')).toEqual({ type: 'Goal', detail: 'Penalty' })
   })
 
   it('maps own goal', () => {

@@ -47,14 +47,16 @@ export function parseEspnMinute(display: string): { elapsed: number; extra: numb
  * Returns null for event types we don't store (substitutions, kickoffs, etc.).
  */
 export function mapEspnEventType(espnType: string): { type: 'Goal' | 'Card'; detail: string } | null {
+  // goal---penalty and penalty---scored both represent a scored penalty kick.
+  // ESPN uses penalty---scored in commentary plays (often absent from keyEvents).
+  if (espnType === 'goal---penalty' || espnType === 'penalty---scored') return { type: 'Goal', detail: 'Penalty' }
+  if (espnType === 'own-goal')       return { type: 'Goal', detail: 'Own Goal' }
+  // 'goal', 'goal---header', 'goal---volley', 'goal---free-kick', etc.
+  if (espnType === 'goal' || espnType.startsWith('goal---')) return { type: 'Goal', detail: 'Normal Goal' }
   switch (espnType) {
-    case 'goal':
-    case 'goal---header':     return { type: 'Goal', detail: 'Normal Goal' }
-    case 'goal---penalty':    return { type: 'Goal', detail: 'Penalty' }
-    case 'own-goal':          return { type: 'Goal', detail: 'Own Goal' }
-    case 'yellow-card':       return { type: 'Card', detail: 'Yellow Card' }
-    case 'yellow-red-card':   return { type: 'Card', detail: 'Yellow Red Card' }
-    case 'red-card':          return { type: 'Card', detail: 'Red Card' }
-    default:                  return null
+    case 'yellow-card':     return { type: 'Card', detail: 'Yellow Card' }
+    case 'yellow-red-card': return { type: 'Card', detail: 'Yellow Red Card' }
+    case 'red-card':        return { type: 'Card', detail: 'Red Card' }
+    default:                return null
   }
 }

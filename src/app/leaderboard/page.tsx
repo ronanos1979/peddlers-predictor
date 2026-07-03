@@ -9,7 +9,9 @@ import Link from 'next/link'
 
 type LeaderEntry = {
   name: string; pub_id: string; total_pts: number
-  correct: number; total: number; last_pick: string; last_correct: boolean | null
+  correct: number; score_exact: number; wrong: number; pending: number; total: number
+  hasWinnerPending: boolean; hasScorerPending: boolean
+  last_pick: string; last_correct: boolean | null
 }
 
 type AttendanceEntry = { name: string; pub_id: string; match_count: number }
@@ -31,27 +33,39 @@ function LeaderboardContent() {
   const [topScorer, setTopScorer] = useState<TopPick | null>(null)
 
   async function load() {
-    const [{ data: matchData }, { data: rawEntries }, { data: winnerBonuses }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
+    const [{ data: matchData }, { data: rawEntries }, { data: allWinnerPicks }, { data: allScorerPicks }, { data: winnerPicksData }, { data: scorerPicksData }] = await Promise.all([
       supabase.from('matches').select('*').eq('is_active', true).single(),
       supabase.from('entries').select('*').order('created_at', { ascending: false }),
-      supabase.from('winner_picks').select('phone, raffle_entries').gt('raffle_entries', 0),
+      supabase.from('winner_picks').select('phone, raffle_entries, is_correct'),
+      supabase.from('scorer_picks').select('phone, raffle_entries, is_correct'),
       supabase.from('winner_picks').select('team_name, team_flag'),
       supabase.from('scorer_picks').select('player_name, player_team'),
     ])
     setMatch(matchData)
     if (rawEntries) {
-      const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; total: number; last_pick: string; last_correct: boolean | null }> = {}
+      const byPhone: Record<string, { name: string; pub_id: string; pts: number; correct: number; score_exact: number; wrong: number; pending: number; total: number; hasWinnerPending: boolean; hasScorerPending: boolean; last_pick: string; last_correct: boolean | null }> = {}
       rawEntries.forEach((e: Entry) => {
-        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, total: 0, last_pick: e.pick, last_correct: e.is_correct }
+        if (!byPhone[e.phone]) byPhone[e.phone] = { name: e.name, pub_id: e.pub_id, pts: 0, correct: 0, score_exact: 0, wrong: 0, pending: 0, total: 0, hasWinnerPending: false, hasScorerPending: false, last_pick: e.pick, last_correct: e.is_correct }
         byPhone[e.phone].pts += e.raffle_entries
         byPhone[e.phone].total += 1
-        if (e.is_correct) byPhone[e.phone].correct += 1
+        if (e.is_correct === true) byPhone[e.phone].correct += 1
+        if (e.is_correct === false) byPhone[e.phone].wrong += 1
+        if (e.is_correct === null) byPhone[e.phone].pending += 1
+        // raffle_entries is 3 (result+score) or 10 (result+score+hat-trick) when exact score is correct
+        if (e.is_correct === true && (e.raffle_entries === 3 || e.raffle_entries === 10)) byPhone[e.phone].score_exact += 1
       })
-      winnerBonuses?.forEach(wp => {
-        if (byPhone[wp.phone]) byPhone[wp.phone].pts += wp.raffle_entries
+      allWinnerPicks?.forEach(wp => {
+        if (!byPhone[wp.phone]) return
+        if (wp.raffle_entries > 0) byPhone[wp.phone].pts += wp.raffle_entries
+        if (wp.is_correct === null) byPhone[wp.phone].hasWinnerPending = true
+      })
+      allScorerPicks?.forEach(sp => {
+        if (!byPhone[sp.phone]) return
+        if (sp.raffle_entries > 0) byPhone[sp.phone].pts += sp.raffle_entries
+        if (sp.is_correct === null) byPhone[sp.phone].hasScorerPending = true
       })
       const sorted = Object.values(byPhone)
-        .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, total: e.total, last_pick: e.last_pick, last_correct: e.last_correct }))
+        .map(e => ({ name: e.name, pub_id: e.pub_id, total_pts: e.pts, correct: e.correct, score_exact: e.score_exact, wrong: e.wrong, pending: e.pending, total: e.total, hasWinnerPending: e.hasWinnerPending, hasScorerPending: e.hasScorerPending, last_pick: e.last_pick, last_correct: e.last_correct }))
         .sort((a, b) => b.total_pts - a.total_pts || b.correct - a.correct)
       setEntries(sorted)
       setLastUpdated(new Date().toLocaleTimeString())
@@ -107,12 +121,13 @@ function LeaderboardContent() {
   const filteredAttendance = filter === 'this_pub' && pubId
     ? attendanceEntries.filter(e => e.pub_id === pubId)
     : attendanceEntries
+  const totalPoolTickets = filtered.reduce((s, e) => s + e.total_pts, 0)
   const medals = ['🥇', '🥈', '🥉']
 
   function pickLabel(pick: string, m: Match | null) {
     if (!m) return <>{pick}</>
-    if (pick === 'home') return <><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{m.home_team}</>
-    if (pick === 'away') return <><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{m.away_team}</>
+    if (pick === 'home') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.home_flag} size={14} style={{ marginRight: 4 }} />{m.home_team}</Link></>
+    if (pick === 'away') return <><Link href={`/world-cup/team?name=${encodeURIComponent(m.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={m.away_flag} size={14} style={{ marginRight: 4 }} />{m.away_team}</Link></>
     return <>{t.draw}</>
   }
 
@@ -124,8 +139,15 @@ function LeaderboardContent() {
         </div>
         <h1>{t.leaderboard}</h1>
         <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>{t.leaderboardSub}</p>
+        {view === 'predictions' && totalPoolTickets > 0 && (
+          <div style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px', background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.25)', borderRadius: 20 }}>
+            <span style={{ fontFamily: 'var(--font-cond)', fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>
+              🎟 {t.totalTicketsPool.replace('{n}', totalPoolTickets.toLocaleString())}
+            </span>
+          </div>
+        )}
         {match && view === 'predictions' && (
-          <p className="muted">{t.current}: <Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team} vs <Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</p>
+          <p className="muted">{t.current}: <Link href={`/world-cup/team?name=${encodeURIComponent(match.home_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.home_flag} size={14} style={{ marginRight: 4 }} />{match.home_team}</Link> vs <Link href={`/world-cup/team?name=${encodeURIComponent(match.away_team)}`} style={{ textDecoration: 'none', color: 'inherit' }}><Flag emoji={match.away_flag} size={14} style={{ marginRight: 4 }} />{match.away_team}</Link></p>
         )}
       </div>
 
@@ -181,8 +203,24 @@ function LeaderboardContent() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 15 }}>{e.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>
-                  {e.correct}/{e.total} {t.correct} · {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                <div style={{ fontSize: 11, marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: '0 6px', lineHeight: 1.8 }}>
+                  <span style={{ color: 'var(--green)', fontWeight: 600 }}>✓ {e.correct} {t.lbResultsCorrect}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>·</span>
+                  <span style={{ color: e.score_exact > 0 ? 'var(--gold)' : 'var(--text-dim)' }}>🎯 {e.score_exact} {t.lbExactScores}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>·</span>
+                  <span style={{ color: e.wrong > 0 ? '#e05' : 'var(--text-dim)' }}>✗ {e.wrong} {t.lbResultsWrong}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>·</span>
+                  <span style={{ color: 'var(--text-dim)' }}>{e.total} {t.lbMatchesPredicted}</span>
+                </div>
+                {(e.pending > 0 || e.hasWinnerPending || e.hasScorerPending) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 8px', fontSize: 10, marginTop: 2, color: 'var(--text-dim)' }}>
+                    {e.pending > 0 && <span>⏳ {e.pending} {t.lbMatchesPending}</span>}
+                    {e.hasWinnerPending && <span style={{ color: 'rgba(245,197,24,0.7)' }}>🏆 {t.lbChampionPick}</span>}
+                    {e.hasScorerPending && <span style={{ color: 'rgba(245,197,24,0.7)' }}>⚽ {t.lbGoldenBootPick}</span>}
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
+                  {e.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
                 </div>
                 {match && (
                   <span className={`pick-pill ${e.last_correct === true ? 'correct' : e.last_correct === false ? 'wrong' : ''}`}>
@@ -193,6 +231,11 @@ function LeaderboardContent() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="lb-pts">{e.total_pts}</div>
+                {totalPoolTickets > 0 && (
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.3, color: 'var(--text-dim)', marginTop: 1 }}>
+                    / {totalPoolTickets.toLocaleString()} · {(e.total_pts / totalPoolTickets * 100).toFixed(1)}%
+                  </div>
+                )}
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-cond)', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>{t.tickets}</div>
               </div>
             </div>

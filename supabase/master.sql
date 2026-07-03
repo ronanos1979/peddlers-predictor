@@ -31,12 +31,14 @@ create table if not exists matches (
   stage            text not null default 'Group Stage',
   result           text check (result in ('home','draw','away')) default null,
   is_active        boolean not null default false,
-  venue            text default null,  -- e.g. 'MetLife Stadium, East Rutherford, NJ'
+  venue            text default null,  -- e.g. 'New York aka MetLife Stadium'
   home_score            integer default null,
   away_score            integer default null,
   checkin_winner_name   text default null,
   checkin_winner_phone  text default null,
-  checkin_draw_at       timestamptz default null
+  checkin_draw_at       timestamptz default null,
+  hat_trick_scored      boolean default null,
+  penalties_scored      boolean default null
 );
 
 -- Entries
@@ -53,6 +55,8 @@ create table if not exists entries (
   created_at       timestamptz not null default now(),
   home_score_pred  integer default null,
   away_score_pred  integer default null,
+  hat_trick_pred   boolean default null,
+  penalties_pred   boolean default null,
   entry_lat        numeric(10,7) default null,
   entry_lng        numeric(10,7) default null,
   entry_distance_m integer default null,
@@ -77,29 +81,32 @@ create policy "Public insert check_ins" on check_ins for insert to anon with che
 
 -- Golden Boot (top scorer) picks
 create table if not exists scorer_picks (
-  id           uuid primary key default gen_random_uuid(),
-  pub_id       text references pubs(id),
-  phone        text not null,
-  name         text not null,
-  player_name  text not null,
-  player_team  text not null,
-  player_id    integer,
-  created_at   timestamptz not null default now(),
-  is_correct   boolean default null,
+  id                      uuid primary key default gen_random_uuid(),
+  pub_id                  text references pubs(id),
+  phone                   text not null,
+  name                    text not null,
+  player_name             text not null,
+  player_team             text not null,
+  player_id               integer,
+  created_at              timestamptz not null default now(),
+  is_correct              boolean default null,
+  potential_raffle_entries integer not null default 10,
+  raffle_entries          integer not null default 0,
   unique(phone)
 );
 
 -- Tournament winner picks (one per phone, locked once submitted)
 create table if not exists winner_picks (
-  id             uuid primary key default gen_random_uuid(),
-  pub_id         text references pubs(id),
-  phone          text not null,
-  name           text not null,
-  team_name      text not null,
-  team_flag      text not null default '',
-  is_correct     boolean default null,
-  raffle_entries integer not null default 0,
-  created_at     timestamptz not null default now(),
+  id                      uuid primary key default gen_random_uuid(),
+  pub_id                  text references pubs(id),
+  phone                   text not null,
+  name                    text not null,
+  team_name               text not null,
+  team_flag               text not null default '',
+  is_correct              boolean default null,
+  raffle_entries          integer not null default 0,
+  potential_raffle_entries integer not null default 15,
+  created_at              timestamptz not null default now(),
   unique(phone)
 );
 
@@ -262,156 +269,156 @@ delete from matches where stage != 'Demo Match';
 insert into matches (home_team, away_team, home_flag, away_flag, kickoff_at, entries_close_at, stage, is_active, venue) values
 
 -- ── JUNE 11 ──────────────────────────────────────────────────
-('Mexico',      'South Africa',        '🇲🇽','🇿🇦', '2026-06-11 19:00:00+00', '2026-06-11 20:45:00+00', 'Group A', false, 'Estadio Azteca, Mexico City'),
-('South Korea', 'Czechia',             '🇰🇷','🇨🇿', '2026-06-12 02:00:00+00', '2026-06-12 03:45:00+00', 'Group A', false, 'Estadio Akron, Guadalajara'),
+('Mexico',      'South Africa',        '🇲🇽','🇿🇦', '2026-06-11 19:00:00+00', '2026-06-11 20:45:00+00', 'Group A', false, 'Mexico City aka Estadio Azteca'),
+('South Korea', 'Czechia',             '🇰🇷','🇨🇿', '2026-06-12 02:00:00+00', '2026-06-12 03:45:00+00', 'Group A', false, 'Guadalajara aka Estadio Akron'),
 
 -- ── JUNE 12 ──────────────────────────────────────────────────
-('Canada',      'Bosnia & Herzegovina','🇨🇦','🇧🇦', '2026-06-12 19:00:00+00', '2026-06-12 20:45:00+00', 'Group B', false, 'BMO Field, Toronto, ON'),
-('USA',         'Paraguay',            '🇺🇸','🇵🇾', '2026-06-13 01:00:00+00', '2026-06-13 02:45:00+00', 'Group D', false, 'SoFi Stadium, Inglewood, CA'),
+('Canada',      'Bosnia & Herzegovina','🇨🇦','🇧🇦', '2026-06-12 19:00:00+00', '2026-06-12 20:45:00+00', 'Group B', false, 'Toronto aka BMO Field'),
+('USA',         'Paraguay',            '🇺🇸','🇵🇾', '2026-06-13 01:00:00+00', '2026-06-13 02:45:00+00', 'Group D', false, 'Los Angeles aka SoFi Stadium'),
 
 -- ── JUNE 13 ──────────────────────────────────────────────────
-('Qatar',       'Switzerland',         '🇶🇦','🇨🇭', '2026-06-13 19:00:00+00', '2026-06-13 20:45:00+00', 'Group B', false, 'Levi''s Stadium, Santa Clara, CA'),
-('Brazil',      'Morocco',             '🇧🇷','🇲🇦', '2026-06-13 22:00:00+00', '2026-06-13 23:45:00+00', 'Group C', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Haiti',       'Scotland',            '🇭🇹','🏴󠁧󠁢󠁳󠁣󠁴󠁿', '2026-06-14 01:00:00+00', '2026-06-14 02:45:00+00', 'Group C', false, 'Gillette Stadium, Foxborough, MA'),
-('Australia',   'Türkiye',             '🇦🇺','🇹🇷', '2026-06-14 04:00:00+00', '2026-06-14 05:45:00+00', 'Group D', false, 'BC Place, Vancouver, BC'),
+('Qatar',       'Switzerland',         '🇶🇦','🇨🇭', '2026-06-13 19:00:00+00', '2026-06-13 20:45:00+00', 'Group B', false, 'San Francisco Bay Area aka Levi''s Stadium'),
+('Brazil',      'Morocco',             '🇧🇷','🇲🇦', '2026-06-13 22:00:00+00', '2026-06-13 23:45:00+00', 'Group C', false, 'New York aka MetLife Stadium'),
+('Haiti',       'Scotland',            '🇭🇹','🏴󠁧󠁢󠁳󠁣󠁴󠁿', '2026-06-14 01:00:00+00', '2026-06-14 02:45:00+00', 'Group C', false, 'Boston aka Gillette Stadium'),
+('Australia',   'Türkiye',             '🇦🇺','🇹🇷', '2026-06-14 04:00:00+00', '2026-06-14 05:45:00+00', 'Group D', false, 'Vancouver aka BC Place'),
 
 -- ── JUNE 14 ──────────────────────────────────────────────────
-('Germany',     'Curaçao',             '🇩🇪','🇨🇼', '2026-06-14 17:00:00+00', '2026-06-14 18:45:00+00', 'Group E', false, 'NRG Stadium, Houston, TX'),
-('Netherlands', 'Japan',               '🇳🇱','🇯🇵', '2026-06-14 20:00:00+00', '2026-06-14 21:45:00+00', 'Group F', false, 'AT&T Stadium, Arlington, TX'),
-('Ivory Coast', 'Ecuador',             '🇨🇮','🇪🇨', '2026-06-14 23:00:00+00', '2026-06-15 00:45:00+00', 'Group E', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Sweden',      'Tunisia',             '🇸🇪','🇹🇳', '2026-06-15 02:00:00+00', '2026-06-15 03:45:00+00', 'Group F', false, 'Estadio Akron, Guadalajara'),
+('Germany',     'Curaçao',             '🇩🇪','🇨🇼', '2026-06-14 17:00:00+00', '2026-06-14 18:45:00+00', 'Group E', false, 'Houston aka NRG Stadium'),
+('Netherlands', 'Japan',               '🇳🇱','🇯🇵', '2026-06-14 20:00:00+00', '2026-06-14 21:45:00+00', 'Group F', false, 'Dallas aka AT&T Stadium'),
+('Ivory Coast', 'Ecuador',             '🇨🇮','🇪🇨', '2026-06-14 23:00:00+00', '2026-06-15 00:45:00+00', 'Group E', false, 'Philadelphia aka Lincoln Financial Field'),
+('Sweden',      'Tunisia',             '🇸🇪','🇹🇳', '2026-06-15 02:00:00+00', '2026-06-15 03:45:00+00', 'Group F', false, 'Guadalajara aka Estadio Akron'),
 
 -- ── JUNE 15 ──────────────────────────────────────────────────
-('Spain',       'Cape Verde',          '🇪🇸','🇨🇻', '2026-06-15 17:00:00+00', '2026-06-15 18:45:00+00', 'Group H', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Belgium',     'Egypt',               '🇧🇪','🇪🇬', '2026-06-15 22:00:00+00', '2026-06-15 23:45:00+00', 'Group G', false, 'Lumen Field, Seattle, WA'),
-('Saudi Arabia','Uruguay',             '🇸🇦','🇺🇾', '2026-06-15 22:00:00+00', '2026-06-15 23:45:00+00', 'Group H', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('Iran',        'New Zealand',         '🇮🇷','🇳🇿', '2026-06-16 04:00:00+00', '2026-06-16 05:45:00+00', 'Group G', false, 'SoFi Stadium, Inglewood, CA'),
+('Spain',       'Cape Verde',          '🇪🇸','🇨🇻', '2026-06-15 17:00:00+00', '2026-06-15 18:45:00+00', 'Group H', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Belgium',     'Egypt',               '🇧🇪','🇪🇬', '2026-06-15 22:00:00+00', '2026-06-15 23:45:00+00', 'Group G', false, 'Seattle aka Lumen Field'),
+('Saudi Arabia','Uruguay',             '🇸🇦','🇺🇾', '2026-06-15 22:00:00+00', '2026-06-15 23:45:00+00', 'Group H', false, 'Miami aka Hard Rock Stadium'),
+('Iran',        'New Zealand',         '🇮🇷','🇳🇿', '2026-06-16 04:00:00+00', '2026-06-16 05:45:00+00', 'Group G', false, 'Los Angeles aka SoFi Stadium'),
 
 -- ── JUNE 16 ──────────────────────────────────────────────────
-('France',      'Senegal',             '🇫🇷','🇸🇳', '2026-06-16 19:00:00+00', '2026-06-16 20:45:00+00', 'Group I', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Iraq',        'Norway',              '🇮🇶','🇳🇴', '2026-06-16 22:00:00+00', '2026-06-16 23:45:00+00', 'Group I', false, 'Gillette Stadium, Foxborough, MA'),
-('Argentina',   'Algeria',             '🇦🇷','🇩🇿', '2026-06-17 01:00:00+00', '2026-06-17 02:45:00+00', 'Group J', false, 'GEHA Field at Arrowhead Stadium, Kansas City, MO'),
-('Austria',     'Jordan',              '🇦🇹','🇯🇴', '2026-06-17 04:00:00+00', '2026-06-17 05:45:00+00', 'Group J', false, 'Levi''s Stadium, Santa Clara, CA'),
+('France',      'Senegal',             '🇫🇷','🇸🇳', '2026-06-16 19:00:00+00', '2026-06-16 20:45:00+00', 'Group I', false, 'New York aka MetLife Stadium'),
+('Iraq',        'Norway',              '🇮🇶','🇳🇴', '2026-06-16 22:00:00+00', '2026-06-16 23:45:00+00', 'Group I', false, 'Boston aka Gillette Stadium'),
+('Argentina',   'Algeria',             '🇦🇷','🇩🇿', '2026-06-17 01:00:00+00', '2026-06-17 02:45:00+00', 'Group J', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
+('Austria',     'Jordan',              '🇦🇹','🇯🇴', '2026-06-17 04:00:00+00', '2026-06-17 05:45:00+00', 'Group J', false, 'San Francisco Bay Area aka Levi''s Stadium'),
 
 -- ── JUNE 17 ──────────────────────────────────────────────────
-('Portugal',    'Congo DR',            '🇵🇹','🇨🇩', '2026-06-17 17:00:00+00', '2026-06-17 18:45:00+00', 'Group K', false, 'NRG Stadium, Houston, TX'),
-('England',     'Croatia',             '🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇭🇷', '2026-06-17 20:00:00+00', '2026-06-17 21:45:00+00', 'Group L', false, 'AT&T Stadium, Arlington, TX'),
-('Ghana',       'Panama',              '🇬🇭','🇵🇦', '2026-06-17 23:00:00+00', '2026-06-18 00:45:00+00', 'Group L', false, 'BMO Field, Toronto, ON'),
-('Uzbekistan',  'Colombia',            '🇺🇿','🇨🇴', '2026-06-18 02:00:00+00', '2026-06-18 03:45:00+00', 'Group K', false, 'Estadio Azteca, Mexico City'),
+('Portugal',    'Congo DR',            '🇵🇹','🇨🇩', '2026-06-17 17:00:00+00', '2026-06-17 18:45:00+00', 'Group K', false, 'Houston aka NRG Stadium'),
+('England',     'Croatia',             '🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇭🇷', '2026-06-17 20:00:00+00', '2026-06-17 21:45:00+00', 'Group L', false, 'Dallas aka AT&T Stadium'),
+('Ghana',       'Panama',              '🇬🇭','🇵🇦', '2026-06-17 23:00:00+00', '2026-06-18 00:45:00+00', 'Group L', false, 'Toronto aka BMO Field'),
+('Uzbekistan',  'Colombia',            '🇺🇿','🇨🇴', '2026-06-18 02:00:00+00', '2026-06-18 03:45:00+00', 'Group K', false, 'Mexico City aka Estadio Azteca'),
 
 -- ── JUNE 18 ──────────────────────────────────────────────────
-('Czechia',     'South Africa',        '🇨🇿','🇿🇦', '2026-06-18 16:00:00+00', '2026-06-18 17:45:00+00', 'Group A', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Switzerland', 'Bosnia & Herzegovina','🇨🇭','🇧🇦', '2026-06-18 19:00:00+00', '2026-06-18 20:45:00+00', 'Group B', false, 'SoFi Stadium, Inglewood, CA'),
-('Canada',      'Qatar',               '🇨🇦','🇶🇦', '2026-06-18 22:00:00+00', '2026-06-18 23:45:00+00', 'Group B', false, 'BC Place, Vancouver, BC'),
-('Mexico',      'South Korea',         '🇲🇽','🇰🇷', '2026-06-19 03:00:00+00', '2026-06-19 04:45:00+00', 'Group A', false, 'Estadio Akron, Guadalajara'),
+('Czechia',     'South Africa',        '🇨🇿','🇿🇦', '2026-06-18 16:00:00+00', '2026-06-18 17:45:00+00', 'Group A', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Switzerland', 'Bosnia & Herzegovina','🇨🇭','🇧🇦', '2026-06-18 19:00:00+00', '2026-06-18 20:45:00+00', 'Group B', false, 'Los Angeles aka SoFi Stadium'),
+('Canada',      'Qatar',               '🇨🇦','🇶🇦', '2026-06-18 22:00:00+00', '2026-06-18 23:45:00+00', 'Group B', false, 'Vancouver aka BC Place'),
+('Mexico',      'South Korea',         '🇲🇽','🇰🇷', '2026-06-19 01:00:00+00', '2026-06-19 02:45:00+00', 'Group A', false, 'Guadalajara aka Estadio Akron'),
 
 -- ── JUNE 19 ──────────────────────────────────────────────────
-('USA',         'Australia',           '🇺🇸','🇦🇺', '2026-06-19 19:00:00+00', '2026-06-19 20:45:00+00', 'Group D', false, 'Lumen Field, Seattle, WA'),
-('Scotland',    'Morocco',             '🏴󠁧󠁢󠁳󠁣󠁴󠁿','🇲🇦', '2026-06-19 22:00:00+00', '2026-06-19 23:45:00+00', 'Group C', false, 'Gillette Stadium, Foxborough, MA'),
-('Brazil',      'Haiti',               '🇧🇷','🇭🇹', '2026-06-20 01:00:00+00', '2026-06-20 02:45:00+00', 'Group C', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Türkiye',     'Paraguay',            '🇹🇷','🇵🇾', '2026-06-20 04:00:00+00', '2026-06-20 05:45:00+00', 'Group D', false, 'Levi''s Stadium, Santa Clara, CA'),
+('USA',         'Australia',           '🇺🇸','🇦🇺', '2026-06-19 19:00:00+00', '2026-06-19 20:45:00+00', 'Group D', false, 'Seattle aka Lumen Field'),
+('Scotland',    'Morocco',             '🏴󠁧󠁢󠁳󠁣󠁴󠁿','🇲🇦', '2026-06-19 22:00:00+00', '2026-06-19 23:45:00+00', 'Group C', false, 'Boston aka Gillette Stadium'),
+('Brazil',      'Haiti',               '🇧🇷','🇭🇹', '2026-06-20 00:30:00+00', '2026-06-20 02:15:00+00', 'Group C', false, 'Philadelphia aka Lincoln Financial Field'),
+('Türkiye',     'Paraguay',            '🇹🇷','🇵🇾', '2026-06-20 03:00:00+00', '2026-06-20 04:45:00+00', 'Group D', false, 'San Francisco Bay Area aka Levi''s Stadium'),
 
 -- ── JUNE 20 ──────────────────────────────────────────────────
-('Netherlands', 'Sweden',              '🇳🇱','🇸🇪', '2026-06-20 17:00:00+00', '2026-06-20 18:45:00+00', 'Group F', false, 'NRG Stadium, Houston, TX'),
-('Germany',     'Ivory Coast',         '🇩🇪','🇨🇮', '2026-06-20 20:00:00+00', '2026-06-20 21:45:00+00', 'Group E', false, 'BMO Field, Toronto, ON'),
-('Ecuador',     'Curaçao',             '🇪🇨','🇨🇼', '2026-06-21 00:00:00+00', '2026-06-21 01:45:00+00', 'Group E', false, 'GEHA Field at Arrowhead Stadium, Kansas City, MO'),
-('Tunisia',     'Japan',               '🇹🇳','🇯🇵', '2026-06-21 04:00:00+00', '2026-06-21 05:45:00+00', 'Group F', false, 'Estadio Akron, Guadalajara'),
+('Netherlands', 'Sweden',              '🇳🇱','🇸🇪', '2026-06-20 17:00:00+00', '2026-06-20 18:45:00+00', 'Group F', false, 'Houston aka NRG Stadium'),
+('Germany',     'Ivory Coast',         '🇩🇪','🇨🇮', '2026-06-20 20:00:00+00', '2026-06-20 21:45:00+00', 'Group E', false, 'Toronto aka BMO Field'),
+('Ecuador',     'Curaçao',             '🇪🇨','🇨🇼', '2026-06-21 00:00:00+00', '2026-06-21 01:45:00+00', 'Group E', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
+('Tunisia',     'Japan',               '🇹🇳','🇯🇵', '2026-06-21 04:00:00+00', '2026-06-21 05:45:00+00', 'Group F', false, 'Guadalajara aka Estadio Akron'),
 
 -- ── JUNE 21 ──────────────────────────────────────────────────
-('Spain',       'Saudi Arabia',        '🇪🇸','🇸🇦', '2026-06-21 16:00:00+00', '2026-06-21 17:45:00+00', 'Group H', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Belgium',     'Iran',                '🇧🇪','🇮🇷', '2026-06-21 19:00:00+00', '2026-06-21 20:45:00+00', 'Group G', false, 'SoFi Stadium, Inglewood, CA'),
-('Uruguay',     'Cape Verde',          '🇺🇾','🇨🇻', '2026-06-21 22:00:00+00', '2026-06-21 23:45:00+00', 'Group H', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('New Zealand', 'Egypt',               '🇳🇿','🇪🇬', '2026-06-22 01:00:00+00', '2026-06-22 02:45:00+00', 'Group G', false, 'BC Place, Vancouver, BC'),
+('Spain',       'Saudi Arabia',        '🇪🇸','🇸🇦', '2026-06-21 16:00:00+00', '2026-06-21 17:45:00+00', 'Group H', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Belgium',     'Iran',                '🇧🇪','🇮🇷', '2026-06-21 19:00:00+00', '2026-06-21 20:45:00+00', 'Group G', false, 'Los Angeles aka SoFi Stadium'),
+('Uruguay',     'Cape Verde',          '🇺🇾','🇨🇻', '2026-06-21 22:00:00+00', '2026-06-21 23:45:00+00', 'Group H', false, 'Miami aka Hard Rock Stadium'),
+('New Zealand', 'Egypt',               '🇳🇿','🇪🇬', '2026-06-22 01:00:00+00', '2026-06-22 02:45:00+00', 'Group G', false, 'Vancouver aka BC Place'),
 
 -- ── JUNE 22 ──────────────────────────────────────────────────
-('Argentina',   'Austria',             '🇦🇷','🇦🇹', '2026-06-22 17:00:00+00', '2026-06-22 18:45:00+00', 'Group J', false, 'AT&T Stadium, Arlington, TX'),
-('France',      'Iraq',                '🇫🇷','🇮🇶', '2026-06-22 21:00:00+00', '2026-06-22 22:45:00+00', 'Group I', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Norway',      'Senegal',             '🇳🇴','🇸🇳', '2026-06-23 00:00:00+00', '2026-06-23 01:45:00+00', 'Group I', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Jordan',      'Algeria',             '🇯🇴','🇩🇿', '2026-06-23 03:00:00+00', '2026-06-23 04:45:00+00', 'Group J', false, 'Levi''s Stadium, Santa Clara, CA'),
+('Argentina',   'Austria',             '🇦🇷','🇦🇹', '2026-06-22 17:00:00+00', '2026-06-22 18:45:00+00', 'Group J', false, 'Dallas aka AT&T Stadium'),
+('France',      'Iraq',                '🇫🇷','🇮🇶', '2026-06-22 21:00:00+00', '2026-06-22 22:45:00+00', 'Group I', false, 'Philadelphia aka Lincoln Financial Field'),
+('Norway',      'Senegal',             '🇳🇴','🇸🇳', '2026-06-23 00:00:00+00', '2026-06-23 01:45:00+00', 'Group I', false, 'New York aka MetLife Stadium'),
+('Jordan',      'Algeria',             '🇯🇴','🇩🇿', '2026-06-23 03:00:00+00', '2026-06-23 04:45:00+00', 'Group J', false, 'San Francisco Bay Area aka Levi''s Stadium'),
 
 -- ── JUNE 23 ──────────────────────────────────────────────────
-('Portugal',    'Uzbekistan',          '🇵🇹','🇺🇿', '2026-06-23 17:00:00+00', '2026-06-23 18:45:00+00', 'Group K', false, 'NRG Stadium, Houston, TX'),
-('England',     'Ghana',               '🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇬🇭', '2026-06-23 20:00:00+00', '2026-06-23 21:45:00+00', 'Group L', false, 'Gillette Stadium, Foxborough, MA'),
-('Panama',      'Croatia',             '🇵🇦','🇭🇷', '2026-06-23 23:00:00+00', '2026-06-24 00:45:00+00', 'Group L', false, 'BMO Field, Toronto, ON'),
-('Colombia',    'Congo DR',            '🇨🇴','🇨🇩', '2026-06-24 02:00:00+00', '2026-06-24 03:45:00+00', 'Group K', false, 'Estadio Akron, Guadalajara'),
+('Portugal',    'Uzbekistan',          '🇵🇹','🇺🇿', '2026-06-23 17:00:00+00', '2026-06-23 18:45:00+00', 'Group K', false, 'Houston aka NRG Stadium'),
+('England',     'Ghana',               '🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇬🇭', '2026-06-23 20:00:00+00', '2026-06-23 21:45:00+00', 'Group L', false, 'Boston aka Gillette Stadium'),
+('Panama',      'Croatia',             '🇵🇦','🇭🇷', '2026-06-23 23:00:00+00', '2026-06-24 00:45:00+00', 'Group L', false, 'Toronto aka BMO Field'),
+('Colombia',    'Congo DR',            '🇨🇴','🇨🇩', '2026-06-24 02:00:00+00', '2026-06-24 03:45:00+00', 'Group K', false, 'Guadalajara aka Estadio Akron'),
 
 -- ── JUNE 24 ──────────────────────────────────────────────────
-('Switzerland', 'Canada',              '🇨🇭','🇨🇦', '2026-06-24 19:00:00+00', '2026-06-24 20:45:00+00', 'Group B', false, 'BC Place, Vancouver, BC'),
-('Bosnia & Herzegovina','Qatar',       '🇧🇦','🇶🇦', '2026-06-24 19:00:00+00', '2026-06-24 20:45:00+00', 'Group B', false, 'Lumen Field, Seattle, WA'),
-('Scotland',    'Brazil',              '🏴󠁧󠁢󠁳󠁣󠁴󠁿','🇧🇷', '2026-06-24 22:00:00+00', '2026-06-24 23:45:00+00', 'Group C', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('Morocco',     'Haiti',               '🇲🇦','🇭🇹', '2026-06-24 22:00:00+00', '2026-06-24 23:45:00+00', 'Group C', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Czechia',     'Mexico',              '🇨🇿','🇲🇽', '2026-06-25 01:00:00+00', '2026-06-25 02:45:00+00', 'Group A', false, 'Estadio Azteca, Mexico City'),
-('South Africa','South Korea',         '🇿🇦','🇰🇷', '2026-06-25 01:00:00+00', '2026-06-25 02:45:00+00', 'Group A', false, 'Estadio Akron, Guadalajara'),
+('Switzerland', 'Canada',              '🇨🇭','🇨🇦', '2026-06-24 19:00:00+00', '2026-06-24 20:45:00+00', 'Group B', false, 'Vancouver aka BC Place'),
+('Bosnia & Herzegovina','Qatar',       '🇧🇦','🇶🇦', '2026-06-24 19:00:00+00', '2026-06-24 20:45:00+00', 'Group B', false, 'Seattle aka Lumen Field'),
+('Scotland',    'Brazil',              '🏴󠁧󠁢󠁳󠁣󠁴󠁿','🇧🇷', '2026-06-24 22:00:00+00', '2026-06-24 23:45:00+00', 'Group C', false, 'Miami aka Hard Rock Stadium'),
+('Morocco',     'Haiti',               '🇲🇦','🇭🇹', '2026-06-24 22:00:00+00', '2026-06-24 23:45:00+00', 'Group C', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Czechia',     'Mexico',              '🇨🇿','🇲🇽', '2026-06-25 01:00:00+00', '2026-06-25 02:45:00+00', 'Group A', false, 'Mexico City aka Estadio Azteca'),
+('South Africa','South Korea',         '🇿🇦','🇰🇷', '2026-06-25 01:00:00+00', '2026-06-25 02:45:00+00', 'Group A', false, 'Guadalajara aka Estadio Akron'),
 
 -- ── JUNE 25 ──────────────────────────────────────────────────
-('Ecuador',     'Germany',             '🇪🇨','🇩🇪', '2026-06-25 20:00:00+00', '2026-06-25 21:45:00+00', 'Group E', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Curaçao',     'Ivory Coast',         '🇨🇼','🇨🇮', '2026-06-25 20:00:00+00', '2026-06-25 21:45:00+00', 'Group E', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Japan',       'Sweden',              '🇯🇵','🇸🇪', '2026-06-25 23:00:00+00', '2026-06-26 00:45:00+00', 'Group F', false, 'AT&T Stadium, Arlington, TX'),
-('Tunisia',     'Netherlands',         '🇹🇳','🇳🇱', '2026-06-25 23:00:00+00', '2026-06-26 00:45:00+00', 'Group F', false, 'GEHA Field at Arrowhead Stadium, Kansas City, MO'),
-('Türkiye',     'USA',                 '🇹🇷','🇺🇸', '2026-06-26 02:00:00+00', '2026-06-26 03:45:00+00', 'Group D', false, 'SoFi Stadium, Inglewood, CA'),
-('Paraguay',    'Australia',           '🇵🇾','🇦🇺', '2026-06-26 02:00:00+00', '2026-06-26 03:45:00+00', 'Group D', false, 'Levi''s Stadium, Santa Clara, CA'),
+('Ecuador',     'Germany',             '🇪🇨','🇩🇪', '2026-06-25 20:00:00+00', '2026-06-25 21:45:00+00', 'Group E', false, 'New York aka MetLife Stadium'),
+('Curaçao',     'Ivory Coast',         '🇨🇼','🇨🇮', '2026-06-25 20:00:00+00', '2026-06-25 21:45:00+00', 'Group E', false, 'Philadelphia aka Lincoln Financial Field'),
+('Japan',       'Sweden',              '🇯🇵','🇸🇪', '2026-06-25 23:00:00+00', '2026-06-26 00:45:00+00', 'Group F', false, 'Dallas aka AT&T Stadium'),
+('Tunisia',     'Netherlands',         '🇹🇳','🇳🇱', '2026-06-25 23:00:00+00', '2026-06-26 00:45:00+00', 'Group F', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
+('Türkiye',     'USA',                 '🇹🇷','🇺🇸', '2026-06-26 02:00:00+00', '2026-06-26 03:45:00+00', 'Group D', false, 'Los Angeles aka SoFi Stadium'),
+('Paraguay',    'Australia',           '🇵🇾','🇦🇺', '2026-06-26 02:00:00+00', '2026-06-26 03:45:00+00', 'Group D', false, 'San Francisco Bay Area aka Levi''s Stadium'),
 
 -- ── JUNE 26 ──────────────────────────────────────────────────
-('Norway',      'France',              '🇳🇴','🇫🇷', '2026-06-26 19:00:00+00', '2026-06-26 20:45:00+00', 'Group I', false, 'Gillette Stadium, Foxborough, MA'),
-('Senegal',     'Iraq',                '🇸🇳','🇮🇶', '2026-06-26 19:00:00+00', '2026-06-26 20:45:00+00', 'Group I', false, 'BMO Field, Toronto, ON'),
-('Cape Verde',  'Saudi Arabia',        '🇨🇻','🇸🇦', '2026-06-27 00:00:00+00', '2026-06-27 01:45:00+00', 'Group H', false, 'NRG Stadium, Houston, TX'),
-('Uruguay',     'Spain',               '🇺🇾','🇪🇸', '2026-06-27 00:00:00+00', '2026-06-27 01:45:00+00', 'Group H', false, 'Estadio Akron, Guadalajara'),
-('Egypt',       'Iran',                '🇪🇬','🇮🇷', '2026-06-27 03:00:00+00', '2026-06-27 04:45:00+00', 'Group G', false, 'Lumen Field, Seattle, WA'),
-('New Zealand', 'Belgium',             '🇳🇿','🇧🇪', '2026-06-27 03:00:00+00', '2026-06-27 04:45:00+00', 'Group G', false, 'BC Place, Vancouver, BC'),
+('Norway',      'France',              '🇳🇴','🇫🇷', '2026-06-26 19:00:00+00', '2026-06-26 20:45:00+00', 'Group I', false, 'Boston aka Gillette Stadium'),
+('Senegal',     'Iraq',                '🇸🇳','🇮🇶', '2026-06-26 19:00:00+00', '2026-06-26 20:45:00+00', 'Group I', false, 'Toronto aka BMO Field'),
+('Cape Verde',  'Saudi Arabia',        '🇨🇻','🇸🇦', '2026-06-27 00:00:00+00', '2026-06-27 01:45:00+00', 'Group H', false, 'Houston aka NRG Stadium'),
+('Uruguay',     'Spain',               '🇺🇾','🇪🇸', '2026-06-27 00:00:00+00', '2026-06-27 01:45:00+00', 'Group H', false, 'Guadalajara aka Estadio Akron'),
+('Egypt',       'Iran',                '🇪🇬','🇮🇷', '2026-06-27 03:00:00+00', '2026-06-27 04:45:00+00', 'Group G', false, 'Seattle aka Lumen Field'),
+('New Zealand', 'Belgium',             '🇳🇿','🇧🇪', '2026-06-27 03:00:00+00', '2026-06-27 04:45:00+00', 'Group G', false, 'Vancouver aka BC Place'),
 
 -- ── JUNE 27 ──────────────────────────────────────────────────
-('Panama',      'England',             '🇵🇦','🏴󠁧󠁢󠁥󠁮󠁧󠁿', '2026-06-27 21:00:00+00', '2026-06-27 22:45:00+00', 'Group L', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Croatia',     'Ghana',               '🇭🇷','🇬🇭', '2026-06-27 21:00:00+00', '2026-06-27 22:45:00+00', 'Group L', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Colombia',    'Portugal',            '🇨🇴','🇵🇹', '2026-06-27 23:30:00+00', '2026-06-28 01:15:00+00', 'Group K', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('Congo DR',    'Uzbekistan',          '🇨🇩','🇺🇿', '2026-06-27 23:30:00+00', '2026-06-28 01:15:00+00', 'Group K', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Algeria',     'Austria',             '🇩🇿','🇦🇹', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'GEHA Field at Arrowhead Stadium, Kansas City, MO'),
-('Jordan',      'Argentina',           '🇯🇴','🇦🇷', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'AT&T Stadium, Arlington, TX'),
+('Panama',      'England',             '🇵🇦','🏴󠁧󠁢󠁥󠁮󠁧󠁿', '2026-06-27 21:00:00+00', '2026-06-27 22:45:00+00', 'Group L', false, 'New York aka MetLife Stadium'),
+('Croatia',     'Ghana',               '🇭🇷','🇬🇭', '2026-06-27 21:00:00+00', '2026-06-27 22:45:00+00', 'Group L', false, 'Philadelphia aka Lincoln Financial Field'),
+('Colombia',    'Portugal',            '🇨🇴','🇵🇹', '2026-06-27 23:30:00+00', '2026-06-28 01:15:00+00', 'Group K', false, 'Miami aka Hard Rock Stadium'),
+('Congo DR',    'Uzbekistan',          '🇨🇩','🇺🇿', '2026-06-27 23:30:00+00', '2026-06-28 01:15:00+00', 'Group K', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Algeria',     'Austria',             '🇩🇿','🇦🇹', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
+('Jordan',      'Argentina',           '🇯🇴','🇦🇷', '2026-06-28 02:00:00+00', '2026-06-28 03:45:00+00', 'Group J', false, 'Dallas aka AT&T Stadium'),
 
 -- ── ROUND OF 32 (June 28 – July 4) ───────────────────────────
 -- M73-M88 — teams filled in by admin as group stage completes
-('Group A Runner-up', 'Group B Runner-up',     '🏳','🏳', '2026-06-28 19:00:00+00', '2026-06-28 20:45:00+00', 'Round of 32', false, 'SoFi Stadium, Inglewood, CA'),
-('Group C Winner',    'Group F Runner-up',      '🏳','🏳', '2026-06-29 17:00:00+00', '2026-06-29 18:45:00+00', 'Round of 32', false, 'NRG Stadium, Houston, TX'),
-('Group E Winner',    '3rd Place (A/B/C/D/F)',  '🏳','🏳', '2026-06-29 20:30:00+00', '2026-06-29 22:15:00+00', 'Round of 32', false, 'Gillette Stadium, Foxborough, MA'),
-('Group F Winner',    'Group C Runner-up',       '🏳','🏳', '2026-06-30 01:00:00+00', '2026-06-30 02:45:00+00', 'Round of 32', false, 'Estadio BBVA, Monterrey'),
-('Group E Runner-up', 'Group I Runner-up',       '🏳','🏳', '2026-06-30 17:00:00+00', '2026-06-30 18:45:00+00', 'Round of 32', false, 'AT&T Stadium, Arlington, TX'),
-('Group I Winner',    '3rd Place (C/D/F/G/H)',   '🏳','🏳', '2026-06-30 21:00:00+00', '2026-06-30 22:45:00+00', 'Round of 32', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Group A Winner',    '3rd Place (C/E/F/H/I)',   '🏳','🏳', '2026-07-01 01:00:00+00', '2026-07-01 02:45:00+00', 'Round of 32', false, 'Estadio Azteca, Mexico City'),
-('Group L Winner',    '3rd Place (E/H/I/J/K)',   '🏳','🏳', '2026-07-01 16:00:00+00', '2026-07-01 17:45:00+00', 'Round of 32', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Group G Winner',    '3rd Place (A/E/H/I/J)',   '🏳','🏳', '2026-07-01 20:00:00+00', '2026-07-01 21:45:00+00', 'Round of 32', false, 'Lumen Field, Seattle, WA'),
-('Group D Winner',    '3rd Place (B/E/F/I/J)',   '🏳','🏳', '2026-07-02 00:00:00+00', '2026-07-02 01:45:00+00', 'Round of 32', false, 'Levi''s Stadium, Santa Clara, CA'),
-('Group H Winner',    'Group J Runner-up',        '🏳','🏳', '2026-07-02 19:00:00+00', '2026-07-02 20:45:00+00', 'Round of 32', false, 'SoFi Stadium, Inglewood, CA'),
-('Group K Runner-up', 'Group L Runner-up',        '🏳','🏳', '2026-07-02 23:00:00+00', '2026-07-03 00:45:00+00', 'Round of 32', false, 'BMO Field, Toronto, ON'),
-('Group B Winner',    '3rd Place (E/F/G/I/J)',    '🏳','🏳', '2026-07-03 03:00:00+00', '2026-07-03 04:45:00+00', 'Round of 32', false, 'BC Place, Vancouver, BC'),
-('Group D Runner-up', 'Group G Runner-up',        '🏳','🏳', '2026-07-03 18:00:00+00', '2026-07-03 19:45:00+00', 'Round of 32', false, 'AT&T Stadium, Arlington, TX'),
-('Group J Winner',    'Group H Runner-up',         '🏳','🏳', '2026-07-03 22:00:00+00', '2026-07-03 23:45:00+00', 'Round of 32', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('Group K Winner',    '3rd Place (D/E/I/J/L)',    '🏳','🏳', '2026-07-04 01:30:00+00', '2026-07-04 03:15:00+00', 'Round of 32', false, 'GEHA Field at Arrowhead Stadium, Kansas City, MO'),
+('Group A Runner-up', 'Group B Runner-up',     '🏳','🏳', '2026-06-28 19:00:00+00', '2026-06-28 20:45:00+00', 'Round of 32', false, 'Los Angeles aka SoFi Stadium'),
+('Group C Winner',    'Group F Runner-up',      '🏳','🏳', '2026-06-29 17:00:00+00', '2026-06-29 18:45:00+00', 'Round of 32', false, 'Houston aka NRG Stadium'),
+('Group E Winner',    '3rd Place (A/B/C/D/F)',  '🏳','🏳', '2026-06-29 20:30:00+00', '2026-06-29 22:15:00+00', 'Round of 32', false, 'Boston aka Gillette Stadium'),
+('Group F Winner',    'Group C Runner-up',       '🏳','🏳', '2026-06-30 01:00:00+00', '2026-06-30 02:45:00+00', 'Round of 32', false, 'Monterrey aka Estadio BBVA'),
+('Group E Runner-up', 'Group I Runner-up',       '🏳','🏳', '2026-06-30 17:00:00+00', '2026-06-30 18:45:00+00', 'Round of 32', false, 'Dallas aka AT&T Stadium'),
+('Group I Winner',    '3rd Place (C/D/F/G/H)',   '🏳','🏳', '2026-06-30 21:00:00+00', '2026-06-30 22:45:00+00', 'Round of 32', false, 'New York aka MetLife Stadium'),
+('Group A Winner',    '3rd Place (C/E/F/H/I)',   '🏳','🏳', '2026-07-01 01:00:00+00', '2026-07-01 02:45:00+00', 'Round of 32', false, 'Mexico City aka Estadio Azteca'),
+('Group L Winner',    '3rd Place (E/H/I/J/K)',   '🏳','🏳', '2026-07-01 16:00:00+00', '2026-07-01 17:45:00+00', 'Round of 32', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Group G Winner',    '3rd Place (A/E/H/I/J)',   '🏳','🏳', '2026-07-01 20:00:00+00', '2026-07-01 21:45:00+00', 'Round of 32', false, 'Seattle aka Lumen Field'),
+('Group D Winner',    '3rd Place (B/E/F/I/J)',   '🏳','🏳', '2026-07-02 00:00:00+00', '2026-07-02 01:45:00+00', 'Round of 32', false, 'San Francisco Bay Area aka Levi''s Stadium'),
+('Group H Winner',    'Group J Runner-up',        '🏳','🏳', '2026-07-02 19:00:00+00', '2026-07-02 20:45:00+00', 'Round of 32', false, 'Los Angeles aka SoFi Stadium'),
+('Group K Runner-up', 'Group L Runner-up',        '🏳','🏳', '2026-07-02 23:00:00+00', '2026-07-03 00:45:00+00', 'Round of 32', false, 'Toronto aka BMO Field'),
+('Group B Winner',    '3rd Place (E/F/G/I/J)',    '🏳','🏳', '2026-07-03 03:00:00+00', '2026-07-03 04:45:00+00', 'Round of 32', false, 'Vancouver aka BC Place'),
+('Group D Runner-up', 'Group G Runner-up',        '🏳','🏳', '2026-07-03 18:00:00+00', '2026-07-03 19:45:00+00', 'Round of 32', false, 'Dallas aka AT&T Stadium'),
+('Group J Winner',    'Group H Runner-up',         '🏳','🏳', '2026-07-03 22:00:00+00', '2026-07-03 23:45:00+00', 'Round of 32', false, 'Miami aka Hard Rock Stadium'),
+('Group K Winner',    '3rd Place (D/E/I/J/L)',    '🏳','🏳', '2026-07-04 01:30:00+00', '2026-07-04 03:15:00+00', 'Round of 32', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
 
 -- ── ROUND OF 16 (July 4–7) ────────────────────────────────────
 -- M89-M96 — references R32 matches M73-M88 by global match number
-('Match 73 Winner','Match 75 Winner','🏳','🏳', '2026-07-04 17:00:00+00', '2026-07-04 18:45:00+00', 'Round of 16', false, 'NRG Stadium, Houston, TX'),
-('Match 74 Winner','Match 77 Winner','🏳','🏳', '2026-07-04 21:00:00+00', '2026-07-04 22:45:00+00', 'Round of 16', false, 'Lincoln Financial Field, Philadelphia, PA'),
-('Match 76 Winner','Match 78 Winner','🏳','🏳', '2026-07-05 20:00:00+00', '2026-07-05 21:45:00+00', 'Round of 16', false, 'MetLife Stadium, East Rutherford, NJ'),
-('Match 79 Winner','Match 80 Winner','🏳','🏳', '2026-07-06 00:00:00+00', '2026-07-06 01:45:00+00', 'Round of 16', false, 'Estadio Azteca, Mexico City'),
-('Match 83 Winner','Match 84 Winner','🏳','🏳', '2026-07-06 19:00:00+00', '2026-07-06 20:45:00+00', 'Round of 16', false, 'AT&T Stadium, Arlington, TX'),
-('Match 81 Winner','Match 82 Winner','🏳','🏳', '2026-07-06 21:00:00+00', '2026-07-06 22:45:00+00', 'Round of 16', false, 'Lumen Field, Seattle, WA'),
-('Match 86 Winner','Match 88 Winner','🏳','🏳', '2026-07-07 16:00:00+00', '2026-07-07 17:45:00+00', 'Round of 16', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
-('Match 85 Winner','Match 87 Winner','🏳','🏳', '2026-07-07 20:00:00+00', '2026-07-07 21:45:00+00', 'Round of 16', false, 'BC Place, Vancouver, BC'),
+('Match 73 Winner','Match 75 Winner','🏳','🏳', '2026-07-04 17:00:00+00', '2026-07-04 18:45:00+00', 'Round of 16', false, 'Houston aka NRG Stadium'),
+('Match 74 Winner','Match 77 Winner','🏳','🏳', '2026-07-04 21:00:00+00', '2026-07-04 22:45:00+00', 'Round of 16', false, 'Philadelphia aka Lincoln Financial Field'),
+('Match 76 Winner','Match 78 Winner','🏳','🏳', '2026-07-05 20:00:00+00', '2026-07-05 21:45:00+00', 'Round of 16', false, 'New York aka MetLife Stadium'),
+('Match 79 Winner','Match 80 Winner','🏳','🏳', '2026-07-06 00:00:00+00', '2026-07-06 01:45:00+00', 'Round of 16', false, 'Mexico City aka Estadio Azteca'),
+('Match 83 Winner','Match 84 Winner','🏳','🏳', '2026-07-06 19:00:00+00', '2026-07-06 20:45:00+00', 'Round of 16', false, 'Dallas aka AT&T Stadium'),
+('Match 81 Winner','Match 82 Winner','🏳','🏳', '2026-07-06 21:00:00+00', '2026-07-06 22:45:00+00', 'Round of 16', false, 'Seattle aka Lumen Field'),
+('Match 86 Winner','Match 88 Winner','🏳','🏳', '2026-07-07 16:00:00+00', '2026-07-07 17:45:00+00', 'Round of 16', false, 'Atlanta aka Mercedes-Benz Stadium'),
+('Match 85 Winner','Match 87 Winner','🏳','🏳', '2026-07-07 20:00:00+00', '2026-07-07 21:45:00+00', 'Round of 16', false, 'Vancouver aka BC Place'),
 
 -- ── QUARTER FINALS (July 9–12) ────────────────────────────────
 -- M97-M100 — references R16 matches M89-M96
-('Match 89 Winner','Match 90 Winner','🏳','🏳', '2026-07-09 20:00:00+00', '2026-07-09 21:45:00+00', 'Quarter Final', false, 'Gillette Stadium, Foxborough, MA'),
-('Match 93 Winner','Match 94 Winner','🏳','🏳', '2026-07-10 19:00:00+00', '2026-07-10 20:45:00+00', 'Quarter Final', false, 'SoFi Stadium, Inglewood, CA'),
-('Match 91 Winner','Match 92 Winner','🏳','🏳', '2026-07-11 21:00:00+00', '2026-07-11 22:45:00+00', 'Quarter Final', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('Match 95 Winner','Match 96 Winner','🏳','🏳', '2026-07-12 01:00:00+00', '2026-07-12 02:45:00+00', 'Quarter Final', false, 'GEHA Field at Arrowhead Stadium, Kansas City, MO'),
+('Match 89 Winner','Match 90 Winner','🏳','🏳', '2026-07-09 20:00:00+00', '2026-07-09 21:45:00+00', 'Quarter Final', false, 'Boston aka Gillette Stadium'),
+('Match 93 Winner','Match 94 Winner','🏳','🏳', '2026-07-10 19:00:00+00', '2026-07-10 20:45:00+00', 'Quarter Final', false, 'Los Angeles aka SoFi Stadium'),
+('Match 91 Winner','Match 92 Winner','🏳','🏳', '2026-07-11 21:00:00+00', '2026-07-11 22:45:00+00', 'Quarter Final', false, 'Miami aka Hard Rock Stadium'),
+('Match 95 Winner','Match 96 Winner','🏳','🏳', '2026-07-12 01:00:00+00', '2026-07-12 02:45:00+00', 'Quarter Final', false, 'Kansas City aka GEHA Field at Arrowhead Stadium'),
 
 -- ── SEMI FINALS (July 14–15) ──────────────────────────────────
 -- M101-M102 — references QF matches M97-M100
-('Match 97 Winner','Match 98 Winner','🏳','🏳', '2026-07-14 19:00:00+00', '2026-07-14 20:45:00+00', 'Semi Final', false, 'AT&T Stadium, Arlington, TX'),
-('Match 99 Winner','Match 100 Winner','🏳','🏳', '2026-07-15 19:00:00+00', '2026-07-15 20:45:00+00', 'Semi Final', false, 'Mercedes-Benz Stadium, Atlanta, GA'),
+('Match 97 Winner','Match 98 Winner','🏳','🏳', '2026-07-14 19:00:00+00', '2026-07-14 20:45:00+00', 'Semi Final', false, 'Dallas aka AT&T Stadium'),
+('Match 99 Winner','Match 100 Winner','🏳','🏳', '2026-07-15 19:00:00+00', '2026-07-15 20:45:00+00', 'Semi Final', false, 'Atlanta aka Mercedes-Benz Stadium'),
 
 -- ── THIRD PLACE & FINAL ───────────────────────────────────────
-('Match 101 Loser','Match 102 Loser','🏳','🏳', '2026-07-18 21:00:00+00', '2026-07-18 22:45:00+00', 'Third Place', false, 'Hard Rock Stadium, Miami Gardens, FL'),
-('Match 101 Winner','Match 102 Winner','🏳','🏳', '2026-07-19 19:00:00+00', '2026-07-19 20:45:00+00', 'Final', false, 'MetLife Stadium, East Rutherford, NJ');
+('Match 101 Loser','Match 102 Loser','🏳','🏳', '2026-07-18 21:00:00+00', '2026-07-18 22:45:00+00', 'Third Place', false, 'Miami aka Hard Rock Stadium'),
+('Match 101 Winner','Match 102 Winner','🏳','🏳', '2026-07-19 19:00:00+00', '2026-07-19 20:45:00+00', 'Final', false, 'New York aka MetLife Stadium');
 
 -- =============================================================
 -- 6. HELPFUL VIEWS (optional — useful for admin queries)

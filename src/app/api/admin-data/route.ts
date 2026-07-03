@@ -63,8 +63,12 @@ export async function GET(req: NextRequest) {
       query = query.gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
     }
 
-    const { data } = await query
-    return NextResponse.json({ entries: data || [] })
+    const [{ data }, { data: scorerPicks }, { data: winnerPicks }] = await Promise.all([
+      query,
+      supabaseAdmin.from('scorer_picks').select('phone, player_name, player_team, is_correct, potential_raffle_entries, raffle_entries'),
+      supabaseAdmin.from('winner_picks').select('phone, team_name, team_flag, is_correct, raffle_entries, potential_raffle_entries'),
+    ])
+    return NextResponse.json({ entries: data || [], scorer_picks: scorerPicks || [], winner_picks: winnerPicks || [] })
   }
 
   if (action === 'export-csv') {
@@ -105,6 +109,14 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(200)
     return NextResponse.json({ feedback: data || [] })
+  }
+
+  if (action === 'ineligible') {
+    const { data } = await supabaseAdmin
+      .from('ineligible_patrons')
+      .select('phone, name, created_at')
+      .order('created_at', { ascending: false })
+    return NextResponse.json({ ineligible: data || [] })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

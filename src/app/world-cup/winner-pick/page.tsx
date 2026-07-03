@@ -4,20 +4,36 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { loadPatron, savePatron } from '@/lib/patron'
 import { useLocale } from '@/lib/useLocale'
+import { getWinnerPickTickets, BONUS_TIERS, MAX_WINNER_TICKETS, getActiveTierIndex } from '@/lib/bonusTickets'
 import Flag from '@/components/Flag'
 import Link from 'next/link'
 
 type Team = { name: string; flag: string }
+
+const STAGE_LABEL_KEYS: Record<string, 'bonusPickStageGroupMD3' | 'bonusPickStageR32' | 'bonusPickStageR16' | 'bonusPickStageQF' | 'bonusPickStageSF'> = {
+  'Group Stage MD3': 'bonusPickStageGroupMD3',
+  'Round of 32':     'bonusPickStageR32',
+  'Round of 16':     'bonusPickStageR16',
+  'Quarter Finals':  'bonusPickStageQF',
+  'Semi Finals':     'bonusPickStageSF',
+}
+
+function fmtTierDate(d: Date) {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 function WinnerPickContent() {
   const { t } = useLocale()
   const searchParams = useSearchParams()
   const pubId = searchParams.get('pub') || 'haverhill'
 
+  const currentTickets = getWinnerPickTickets()
+  const activeTierIdx = getActiveTierIndex()
+
   const [teams, setTeams] = useState<Team[]>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Team | null>(null)
-  const [existingPick, setExistingPick] = useState<{ team_name: string; team_flag: string; is_correct: boolean | null } | null>(null)
+  const [existingPick, setExistingPick] = useState<{ team_name: string; team_flag: string; is_correct: boolean | null; potential_raffle_entries: number | null } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -47,7 +63,7 @@ function WinnerPickContent() {
         if (phone.length === 10) {
           const { data } = await supabase
             .from('winner_picks')
-            .select('team_name, team_flag, is_correct')
+            .select('team_name, team_flag, is_correct, potential_raffle_entries')
             .eq('phone', phone)
             .maybeSingle()
           if (data) setExistingPick(data)
@@ -65,19 +81,32 @@ function WinnerPickContent() {
     const name  = patron?.name  || guestName.trim()
     const phone = patron?.phone || guestPhone.trim()
     if (!name || !phone) { setError(t.pleaseEnterNamePhone); return }
-    const raw = phone.replace(/\D/g, '')
-    const cleanPhone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
-    if (cleanPhone.length !== 10) { setError('Enter a valid 10-digit US phone number.'); return }
+    const trimmedPhone = phone.trim()
+    let cleanPhone: string
+    if (trimmedPhone.startsWith('+')) {
+      const stripped = trimmedPhone.replace(/\D/g, '')
+      if (stripped.startsWith('1') && stripped.length === 11) {
+        cleanPhone = stripped.slice(1) // US +1 country code
+      } else {
+        cleanPhone = '+' + stripped
+        if (cleanPhone.length < 8) { setError('Enter a valid phone number.'); return }
+      }
+    } else {
+      const raw = trimmedPhone.replace(/\D/g, '')
+      cleanPhone = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+      if (cleanPhone.length !== 10) { setError('Enter a valid US or international phone number.'); return }
+    }
 
     setSubmitting(true)
     setError('')
     try {
       const { error: err } = await supabase.from('winner_picks').insert({
-        pub_id:    pubId,
-        phone:     cleanPhone,
+        pub_id:                  pubId,
+        phone:                   cleanPhone,
         name,
-        team_name: selected.name,
-        team_flag: selected.flag,
+        team_name:               selected.name,
+        team_flag:               selected.flag,
+        potential_raffle_entries: currentTickets,
       })
       if (err) {
         setError(err.code === '23505' ? t.onceSubmitted : err.message)
@@ -94,7 +123,8 @@ function WinnerPickContent() {
 
   // ── Already picked ──────────────────────────────────────────────────────
   if (submitted || existingPick) {
-    const pick = existingPick || (selected ? { team_name: selected.name, team_flag: selected.flag, is_correct: null } : null)
+    const pick = existingPick || (selected ? { team_name: selected.name, team_flag: selected.flag, is_correct: null, potential_raffle_entries: null } : null)
+    const pickTickets = pick?.potential_raffle_entries ?? currentTickets
     return (
       <div className="container">
         <div style={{ textAlign: 'center', paddingTop: 32 }}>
@@ -103,27 +133,27 @@ function WinnerPickContent() {
             <h1 style={{ marginBottom: 6 }}>{submitted ? t.pickLocked : t.yourChampionPick}</h1>
             <p className="muted" style={{ marginBottom: 20 }}>
               {pick?.is_correct === true
-                ? t.correctBonus
+                ? t.correctBonusN.replace('{n}', String(pickTickets))
                 : pick?.is_correct === false
                 ? t.wrongKeepStacking
-                : t.bonusIfTrophy}
+                : t.bonusIfTrophyN.replace('{n}', String(pickTickets))}
             </p>
           </div>
           <div className="slide-up-delay card" style={{ marginBottom: 20, border: '1px solid rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.05)', padding: '24px 20px' }}>
             <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>
               {t.yourWCChampionPick}
             </div>
-            {pick?.team_flag && (
-              <div style={{ marginBottom: 10 }}>
-                <Flag emoji={pick.team_flag} size={52} />
-              </div>
+            {pick?.team_name && (
+              <Link href={`/world-cup/team?name=${encodeURIComponent(pick.team_name)}`} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-block' }}>
+                {pick.team_flag && <div style={{ marginBottom: 10 }}><Flag emoji={pick.team_flag} size={52} /></div>}
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 1, color: 'var(--gold)', marginBottom: 8 }}>
+                  {pick.team_name}
+                </div>
+              </Link>
             )}
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 1, color: 'var(--gold)', marginBottom: 8 }}>
-              {pick?.team_name}
-            </div>
             {pick?.is_correct === true && (
               <span style={{ background: 'rgba(0,200,122,0.15)', color: 'var(--green)', border: '1px solid rgba(0,200,122,0.3)', borderRadius: 6, padding: '5px 14px', fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700 }}>
-                {t.correctPlus15}
+                {t.correctPlusN.replace('{n}', String(pickTickets))}
               </span>
             )}
             {pick?.is_correct === false && (
@@ -153,11 +183,91 @@ function WinnerPickContent() {
         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
           {t.bonusPickLabel}
         </div>
-        <h1>{t.predictChampion}</h1>
-        <p className="muted" style={{ marginBottom: 6 }}>
-          {t.whichTeamLifts}{' '}
-          <strong style={{ color: 'var(--gold)' }}>{t.correctPick15}</strong>
-        </p>
+        <h1 style={{ marginBottom: 4 }}>{t.predictChampion}</h1>
+        <p className="muted" style={{ marginBottom: 12 }}>{t.whichTeamLifts}</p>
+
+        {/* Ticket schedule */}
+        {(() => {
+          // Build full schedule including the pre-tournament row (before BONUS_TIERS[0].from)
+          const preTier = { label: 'preGroup', tickets: MAX_WINNER_TICKETS, isPre: true as const }
+          const allRowsActiveIdx = activeTierIdx + 1 // 0 = pre-tournament active, 1 = BONUS_TIERS[0] active, etc.
+
+          return (
+            <div style={{
+              background: 'rgba(245,197,24,0.07)',
+              border: '1px solid rgba(245,197,24,0.4)',
+              borderRadius: 10,
+              padding: '14px 16px',
+              marginBottom: 12,
+            }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                {t.ticketsDropEachRound}
+              </div>
+
+              {/* Pre-tournament row */}
+              {(() => {
+                const rowIdx = 0
+                const isPast = rowIdx < allRowsActiveIdx
+                const isActive = rowIdx === allRowsActiveIdx
+                const untilDate = new Date(BONUS_TIERS[0].from.getTime() - 24 * 60 * 60 * 1000)
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 2 }}>
+                    <span style={{
+                      fontFamily: 'var(--font-display)', fontSize: isActive ? 28 : 18, letterSpacing: 1, lineHeight: 1, minWidth: 36, textAlign: 'right',
+                      color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)',
+                      textDecoration: isPast ? 'line-through' : 'none',
+                      opacity: isPast ? 0.6 : 1,
+                    }}>
+                      +{preTier.tickets}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)', textDecoration: isPast ? 'line-through' : 'none', opacity: isPast ? 0.7 : 1 }}>
+                        {t.ticketBeforeDateStageN
+                          .replace('{date}', fmtTierDate(untilDate))
+                          .replace('{stage}', t.bonusPickStageGroupEarly)
+                          .replace('{n}', String(preTier.tickets))}
+                      </div>
+                    </div>
+                    {isPast && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--red)', opacity: 0.7, letterSpacing: 1, background: 'rgba(255,59,59,0.1)', borderRadius: 4, padding: '2px 5px' }}>{t.ticketExpiredBadge}</span>}
+                    {isActive && <span style={{ background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1 }}>{t.ticketNowBadge}</span>}
+                  </div>
+                )
+              })()}
+
+              {/* BONUS_TIERS rows */}
+              {BONUS_TIERS.map((tier, i) => {
+                const rowIdx = i + 1
+                const isPast = rowIdx < allRowsActiveIdx
+                const isActive = rowIdx === allRowsActiveIdx
+                return (
+                  <div key={tier.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{
+                      fontFamily: 'var(--font-display)', fontSize: isActive ? 28 : 18, letterSpacing: 1, lineHeight: 1, minWidth: 36, textAlign: 'right',
+                      color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)',
+                      textDecoration: isPast ? 'line-through' : 'none',
+                      opacity: isPast ? 0.6 : 1,
+                    }}>
+                      +{tier.winnerTickets}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: isPast ? 'var(--red)' : isActive ? 'var(--green)' : 'var(--text-muted)', textDecoration: isPast ? 'line-through' : 'none', opacity: isPast ? 0.7 : 1 }}>
+                        {t.ticketAfterDateStageN
+                          .replace('{date}', fmtTierDate(tier.from))
+                          .replace('{stage}', t[STAGE_LABEL_KEYS[tier.label]])
+                          .replace('{n}', String(tier.winnerTickets))}
+                      </div>
+                      {isActive && (
+                        <span style={{ background: 'var(--green)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, fontFamily: 'var(--font-cond)', letterSpacing: 1, display: 'inline-block', marginTop: 2 }}>{t.ticketNowBadge}</span>
+                      )}
+                    </div>
+                    {isPast && <span style={{ fontSize: 9, fontFamily: 'var(--font-cond)', fontWeight: 700, color: 'var(--red)', opacity: 0.7, letterSpacing: 1, background: 'rgba(255,59,59,0.1)', borderRadius: 4, padding: '2px 5px', flexShrink: 0 }}>{t.ticketExpiredBadge}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+
         <p style={{ fontFamily: 'var(--font-cond)', fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
           {t.onceSubmitted}
         </p>

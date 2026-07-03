@@ -29,14 +29,17 @@ export default function ResultsPage() {
   const [error, setError] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [stages, setStages] = useState<string[]>([])
-  type EventsState = { byId: Map<string, MatchEvent[]>; idByTeams: Map<string, string> }
-  const [eventsState, setEventsState] = useState<EventsState>({ byId: new Map(), idByTeams: new Map() })
+  type EventsState = { byId: Map<string, MatchEvent[]>; idByTeams: Map<string, string>; venueById: Map<string, string> }
+  const [eventsState, setEventsState] = useState<EventsState>({ byId: new Map(), idByTeams: new Map(), venueById: new Map() })
 
   // FD team name → normalised schedule name (only differences that survive norm())
   const FD_NORM_ALIASES: Record<string, string> = {
     unitedstates: 'usa',
     turkey: 'turkiye',
     capeverdeislands: 'capeverde',
+    czechrepublic: 'czechia',
+    korearepublic: 'southkorea',
+    cotedivoire: 'ivorycoast',
   }
   const normFd = (s: string) => { const n = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); return FD_NORM_ALIASES[n] ?? n }
   const normSched = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
@@ -54,7 +57,7 @@ export default function ResultsPage() {
         const [fdRes, sbEventsRes, sbMatchesRes] = await Promise.all([
           fetch('/api/football?endpoint=fixtures&status=FT'),
           supabase.from('match_events').select('match_id, events'),
-          supabase.from('matches').select('id, home_team, away_team'),
+          supabase.from('matches').select('id, home_team, away_team, venue'),
         ])
 
         const data = await fdRes.json()
@@ -71,10 +74,15 @@ export default function ResultsPage() {
         }
         // Build normed-team-pair → match_id map (bridges FD names to Supabase UUIDs)
         const idByTeams = new Map<string, string>()
+        const venueById = new Map<string, string>()
         for (const m of sbMatchesRes.data || []) {
-          idByTeams.set(`${normSched(m.home_team)}|${normSched(m.away_team)}`, m.id)
+          const h = normSched(m.home_team)
+          const a = normSched(m.away_team)
+          idByTeams.set(`${h}|${a}`, m.id)
+          idByTeams.set(`${a}|${h}`, m.id)
+          if (m.venue) venueById.set(m.id, m.venue as string)
         }
-        setEventsState({ byId, idByTeams })
+        setEventsState({ byId, idByTeams, venueById })
         setLoading(false)
 
         // Auto-load ESPN events for any completed matches that have no cached events.
@@ -98,7 +106,7 @@ export default function ResultsPage() {
               if (!fresh) return
               const byId2 = new Map<string, MatchEvent[]>()
               for (const row of fresh) byId2.set(row.match_id, (row.events as MatchEvent[]) || [])
-              setEventsState({ byId: byId2, idByTeams })
+              setEventsState({ byId: byId2, idByTeams, venueById })
             })
           ).catch(() => {})
         }
@@ -113,7 +121,10 @@ export default function ResultsPage() {
   const filtered = stageFilter === 'all' ? fixtures : fixtures.filter(f => f.league.round === stageFilter)
 
   function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    const d = new Date(iso)
+    const date = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' })
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+    return `${date} · ${time} ET`
   }
 
   function fmtMinute(e: MatchEvent) {
@@ -182,6 +193,9 @@ export default function ResultsPage() {
         const awayWon = home !== null && away !== null && away > home
         const events = getEvents(f)
         const hasEvents = events !== null && events.length > 0
+        const matchKey = `${normFd(f.teams.home.name)}|${normFd(f.teams.away.name)}`
+        const matchId = eventsState.idByTeams.get(matchKey)
+        const venue = matchId ? eventsState.venueById.get(matchId) : undefined
         const normTeam = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
         const isHome = (e: MatchEvent) => e.teamSide === 'home' || (!e.teamSide && normTeam(e.team.name) === normTeam(f.teams.home.name))
         const isAway = (e: MatchEvent) => e.teamSide === 'away' || (!e.teamSide && normTeam(e.team.name) === normTeam(f.teams.away.name))
@@ -251,9 +265,9 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {f.fixture.venue && (
+            {venue && (
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', fontFamily: 'var(--font-cond)' }}>
-                📍 {f.fixture.venue.name}, {f.fixture.venue.city}
+                📍 {venue}
               </div>
             )}
           </div>

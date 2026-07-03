@@ -14,6 +14,24 @@ describe('parseMatchNumber', () => {
     expect(parseMatchNumber('R32 M73 Winner')).toBe(73)
     expect(parseMatchNumber('R32 M88 Winner')).toBe(88)
   })
+  it('parses "Round of 32 N Winner/Loser" — relative R32 number offset by 72', () => {
+    expect(parseMatchNumber('Round of 32 1 Winner')).toBe(73)
+    expect(parseMatchNumber('Round of 32 3 Winner')).toBe(75)
+    expect(parseMatchNumber('Round of 32 16 Winner')).toBe(88)
+    expect(parseMatchNumber('Round of 32 1 Loser')).toBe(73)
+  })
+  it('parses "Round of 16 N Winner/Loser" — relative R16 number offset by 88', () => {
+    expect(parseMatchNumber('Round of 16 1 Winner')).toBe(89)
+    expect(parseMatchNumber('Round of 16 8 Winner')).toBe(96)
+  })
+  it('parses "Quarterfinal N Winner/Loser" — relative QF number offset by 96', () => {
+    expect(parseMatchNumber('Quarterfinal 1 Winner')).toBe(97)
+    expect(parseMatchNumber('Quarterfinal 4 Winner')).toBe(100)
+  })
+  it('parses "Semifinal N Winner/Loser" — relative SF number offset by 100', () => {
+    expect(parseMatchNumber('Semifinal 1 Winner')).toBe(101)
+    expect(parseMatchNumber('Semifinal 2 Loser')).toBe(102)
+  })
   it('returns null for group-based placeholders', () => {
     expect(parseMatchNumber('Group A Winner')).toBeNull()
     expect(parseMatchNumber('Group B Runner-up')).toBeNull()
@@ -86,6 +104,12 @@ describe('formatPlaceholder', () => {
   it('returns Match N cross-references unchanged', () => {
     expect(formatPlaceholder('Match 73 Winner')).toBe('Match 73 Winner')
     expect(formatPlaceholder('Match 101 Loser')).toBe('Match 101 Loser')
+  })
+  it('formats legacy "Round of 32/16" and "Quarterfinal/Semifinal" placeholders', () => {
+    expect(formatPlaceholder('Round of 32 1 Winner')).toBe('R32 Match 1 Winner')
+    expect(formatPlaceholder('Round of 16 3 Winner')).toBe('R16 Match 3 Winner')
+    expect(formatPlaceholder('Quarterfinal 2 Winner')).toBe('QF Match 2 Winner')
+    expect(formatPlaceholder('Semifinal 1 Loser')).toBe('SF Match 1 Loser')
   })
   it('is case-insensitive for group letters', () => {
     expect(formatPlaceholder('Group a Winner')).toBe('1st · Group A')
