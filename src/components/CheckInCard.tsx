@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { type Match } from '@/lib/supabase'
-import { isValidOverrideCode } from '@/lib/matchSchedule'
 import { loadPatron } from '@/lib/patron'
+import { getPosition, distanceMetres } from '@/lib/geo'
+import { PUB_DATA } from '@/lib/pubData'
 import Flag from '@/components/Flag'
 import { useLocale } from '@/lib/useLocale'
 
@@ -41,8 +42,8 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [codeError, setCodeError] = useState('')
+  const [geoStatus, setGeoStatus] = useState<'checking' | 'ok' | 'too_far' | 'unavailable'>('checking')
+  const [geoMessage, setGeoMessage] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [checkinCount, setCheckinCount] = useState<number | null>(null)
@@ -53,6 +54,33 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
     const p = loadPatron()
     if (p) { setName(p.name); setPhone(p.phone); if (p.email) setEmail(p.email) }
   }, [])
+
+  async function checkGeo() {
+    setGeoStatus('checking')
+    setGeoMessage(t.checkingLocation)
+    const pubInfo = PUB_DATA[pubId]
+    if (!pubInfo) { setGeoStatus('unavailable'); setGeoMessage(''); return }
+    try {
+      const pos = await getPosition()
+      const { latitude: lat, longitude: lng } = pos.coords
+      const dist = distanceMetres(lat, lng, pubInfo.lat, pubInfo.lng)
+      if (dist <= pubInfo.radius_m) {
+        setGeoStatus('ok')
+        setGeoMessage(`📍 ${t.locationVerified} — ${Math.round(dist * 3.28084)}ft`)
+      } else {
+        setGeoStatus('too_far')
+        setGeoMessage(t.checkInTooFar.replace('{distance}', String(Math.round(dist * 3.28084))))
+      }
+    } catch {
+      setGeoStatus('unavailable')
+      setGeoMessage(t.checkInLocationUnavailable)
+    }
+  }
+
+  // Attempt geolocation as soon as the check-in form opens
+  useEffect(() => {
+    if (step === 'form') checkGeo()
+  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load check-in count
   useEffect(() => {
@@ -86,11 +114,6 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
 
   async function handleSubmit() {
     setError('')
-    if (!isValidOverrideCode(code)) {
-      setCodeError(t.checkInCodeError)
-      return
-    }
-    setCodeError('')
     const digits = normalizePhone(phone)
     if (digits.length !== 10) { setError(t.enter10DigitPhone); return }
     if (!name.trim()) { setError(t.checkInNameError); return }
@@ -104,7 +127,6 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
           pub_id: pubId, match_id: match.id,
           name: name.trim(), phone: digits,
           email: email.trim() || null,
-          code: code.trim(),
           shared_to: sharedVia,
         })
       })
@@ -117,7 +139,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
     }
   }
 
-  const canSubmit = name.trim().length >= 2 && isValidPhone(phone) && !submitting
+  const canSubmit = name.trim().length >= 2 && isValidPhone(phone) && !submitting && geoStatus !== 'checking' && geoStatus !== 'too_far'
 
   if (step === 'idle') {
     return (
@@ -240,16 +262,17 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
         <label>{t.email} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInEmailNote}</span></label>
         <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder={t.emailPlaceholder} />
       </div>
-      <div className="field">
-        <label>{t.checkInCodeLabel} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInCodeNote}</span></label>
-        <input
-          value={code}
-          onChange={e => { setCode(e.target.value); setCodeError('') }}
-          placeholder={t.checkInCodePlaceholder}
-          autoComplete="off"
-          style={{ fontSize: 18, letterSpacing: 2, textTransform: 'lowercase' }}
-        />
-        {codeError && <p className="error" style={{ margin: '4px 0 0', fontSize: 12 }}>{codeError}</p>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, fontFamily: 'var(--font-cond)', fontSize: 12, color: geoStatus === 'too_far' ? 'var(--red)' : 'var(--text-muted)' }}>
+        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: geoStatus === 'ok' ? 'var(--green)' : geoStatus === 'too_far' ? 'var(--red)' : 'var(--text-dim)' }} />
+        <span>{geoMessage}</span>
+        {geoStatus === 'too_far' && (
+          <button
+            onClick={checkGeo}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--green)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline', flexShrink: 0 }}
+          >
+            {t.tryLocationAgain}
+          </button>
+        )}
       </div>
 
       {error && <p className="error" style={{ marginBottom: 12 }}>{error}</p>}

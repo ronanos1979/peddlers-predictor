@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { getDailyCode } from '@/lib/matchSchedule'
 import { checkRateLimit, getIp } from '@/lib/rateLimit'
 
 export async function GET(req: NextRequest) {
@@ -19,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many attempts — try again later' }, { status: 429 })
     }
 
-    const { pub_id, match_id, name, phone, email, code, shared_to } = await req.json()
+    const { pub_id, match_id, name, phone, email, shared_to } = await req.json()
 
     if (!pub_id || !match_id || !name || !phone) {
       return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 })
@@ -65,14 +64,6 @@ export async function POST(req: NextRequest) {
       }
       if (match.result) {
         return NextResponse.json({ error: 'Match is already finished' }, { status: 400 })
-      }
-
-      const todayCode = getDailyCode(new Date())
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-      const yesterdayCode = getDailyCode(yesterday)
-      const enteredCode = (code || '').toLowerCase().trim()
-      if (enteredCode !== todayCode && enteredCode !== yesterdayCode) {
-        return NextResponse.json({ error: 'Wrong pub code — ask your bartender' }, { status: 400 })
       }
     }
 
