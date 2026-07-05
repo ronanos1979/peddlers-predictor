@@ -1163,11 +1163,11 @@ function TeamContent() {
                     const homeEvents = events.filter(isHomeEvt)
                     const awayEvents = events.filter(isAwayEvt)
 
-                    // Score: DB first, then event count
-                    const homeGoalsFromEvents = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal' && isHomeEvt(e)).length
-                      + events.filter(e => e.detail === 'Own Goal' && isAwayEvt(e)).length
-                    const awayGoalsFromEvents = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal' && isAwayEvt(e)).length
-                      + events.filter(e => e.detail === 'Own Goal' && isHomeEvt(e)).length
+                    // Score: DB first, then event count. teamSide already reflects which
+                    // side the goal counts for (own goals are credited to the benefiting
+                    // team by ESPN), so no home/away flip is needed for Own Goal events.
+                    const homeGoalsFromEvents = events.filter(e => e.type === 'Goal' && isHomeEvt(e)).length
+                    const awayGoalsFromEvents = events.filter(e => e.type === 'Goal' && isAwayEvt(e)).length
                     const home = match.home_score ?? (hasEvents ? homeGoalsFromEvents : null)
                     const away = match.away_score ?? (hasEvents ? awayGoalsFromEvents : null)
                     const homeWon = home !== null && away !== null && home > away

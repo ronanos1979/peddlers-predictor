@@ -253,6 +253,21 @@ function pairWithFd(match: DbMatch, fdFinished: FdFixture[]): PairedResult | nul
   return { result, homeScore, awayScore, penaltiesScored }
 }
 
+export type MatchEventForTally = { type: string; detail: string; teamSide?: string }
+
+// Tally goals per side from stored match_events. teamSide already reflects which side
+// a goal counts for — ESPN credits own goals to the *benefiting* team, not the scorer's
+// own side, so no home/away flip is needed here (flipping again double-inverts them).
+// Events with no teamSide (penalty-shootout kicks — ESPN doesn't tie them to either
+// competitor's team id) are excluded so a shootout doesn't inflate the match score.
+export function tallyGoalsFromEvents(events: MatchEventForTally[]): { homeGoals: number; awayGoals: number } {
+  const goals = events.filter(e => e.type === 'Goal' && (e.teamSide === 'home' || e.teamSide === 'away'))
+  return {
+    homeGoals: goals.filter(e => e.teamSide === 'home').length,
+    awayGoals: goals.filter(e => e.teamSide === 'away').length,
+  }
+}
+
 // Cross-check all recently-resolved matches against their loaded ESPN events.
 // Fixes any match where FD returned a wrong/stale score (e.g. 0-0 when events show 3-2).
 // Returns the number of matches corrected.
@@ -261,7 +276,7 @@ async function reconcileFromEvents(): Promise<number> {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: recentMatches } = await supabaseAdmin
     .from('matches')
-    .select('id, kickoff_at, home_team, away_team, result, home_score, away_score, hat_trick_scored, hat_trick_scorer, stage')
+    .select('id, kickoff_at, home_team, away_team, result, home_score, away_score, hat_trick_scored, hat_trick_scorer, stage, penalties_scored')
     .not('result', 'is', null)
     .gte('kickoff_at', since)
     .neq('stage', 'Demo Match')
@@ -275,24 +290,15 @@ async function reconcileFromEvents(): Promise<number> {
 
   if (!eventRows || eventRows.length === 0) return 0
 
-  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
   let corrected = 0
 
   for (const row of eventRows) {
     const match = recentMatches.find(m => m.id === row.match_id)
     if (!match) continue
-    const events = (row.events as Array<{ type: string; detail: string; player: { name: string }; team: { name: string }; teamSide?: string }>) || []
+    const events = (row.events as MatchEventForTally[]) || []
     if (events.length === 0) continue
 
-    const normHome = norm(match.home_team)
-    const normAway = norm(match.away_team)
-    const isHome = (e: typeof events[0]) => e.teamSide === 'home' || (!e.teamSide && norm(e.team.name) === normHome)
-    const isAway = (e: typeof events[0]) => e.teamSide === 'away' || (!e.teamSide && norm(e.team.name) === normAway)
-
-    const goals = events.filter(e => e.type === 'Goal' && e.detail !== 'Own Goal')
-    const ownGoals = events.filter(e => e.detail === 'Own Goal')
-    const homeGoals = goals.filter(isHome).length + ownGoals.filter(isAway).length
-    const awayGoals = goals.filter(isAway).length + ownGoals.filter(isHome).length
+    const { homeGoals, awayGoals } = tallyGoalsFromEvents(events)
 
     // Only act when at least one goal was attributed — avoids false 0-0 positives
     if (homeGoals === 0 && awayGoals === 0) continue
@@ -305,7 +311,8 @@ async function reconcileFromEvents(): Promise<number> {
     const matchStage = (match as typeof match & { stage?: string }).stage ?? ''
     if (evtResult === 'draw' && (match.result === 'home' || match.result === 'away') && KNOCKOUT_STAGES.includes(matchStage)) continue
 
-    await applyAndScore(match as DbMatch, { result: evtResult, homeScore: homeGoals, awayScore: awayGoals, penaltiesScored: false })
+    const existingPenaltiesScored = (match as typeof match & { penalties_scored?: boolean | null }).penalties_scored ?? false
+    await applyAndScore(match as DbMatch, { result: evtResult, homeScore: homeGoals, awayScore: awayGoals, penaltiesScored: existingPenaltiesScored })
     corrected++
   }
   return corrected
