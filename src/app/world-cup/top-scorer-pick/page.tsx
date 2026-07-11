@@ -73,22 +73,17 @@ function TopScorerPickContent() {
 
   const norm = search.toLowerCase().trim()
 
-  // Filter top contenders by name or country
-  const filteredContenders = norm
-    ? TOP_CONTENDERS.filter(p =>
-        p.name.toLowerCase().includes(norm) ||
-        p.country.toLowerCase().includes(norm) ||
-        p.team.toLowerCase().includes(norm)
-      )
-    : TOP_CONTENDERS
+  // Filter top contenders by name or country; hide players already shown in live leaders
+  const liveLeaderNames = new Set(liveScorers.slice(0, 5).map(s => s.player.name.toLowerCase()))
+  const filteredContenders = TOP_CONTENDERS
+    .filter(p => !liveLeaderNames.has(p.name.toLowerCase()))
+    .filter(p => !norm || p.name.toLowerCase().includes(norm) || p.country.toLowerCase().includes(norm) || p.team.toLowerCase().includes(norm))
 
   // Custom pick: shown when user has typed something not matching any contender
   const showCustom = norm.length >= 2 && filteredContenders.length === 0
 
-  // Live scorers filtered (de-dupe against top contenders by name)
-  const contenderNames = new Set(TOP_CONTENDERS.map(p => p.name.toLowerCase()))
+  // Live scorers filtered by search only — show all regardless of contenders list
   const filteredLive = liveScorers
-    .filter(s => !contenderNames.has(s.player.name.toLowerCase()))
     .filter(s => !norm || s.player.name.toLowerCase().includes(norm) || s.player.nationality.toLowerCase().includes(norm))
 
   async function handleSubmit() {
