@@ -139,7 +139,7 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
     }
   }
 
-  const canSubmit = name.trim().length >= 2 && isValidPhone(phone) && !submitting && geoStatus !== 'checking' && geoStatus !== 'too_far'
+  const canSubmit = name.trim().length >= 2 && isValidPhone(phone) && !submitting && geoStatus !== 'checking'
 
   if (step === 'idle') {
     return (
@@ -262,8 +262,8 @@ export default function CheckInCard({ pubId, match, pubCity }: Props) {
         <label>{t.email} <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{t.checkInEmailNote}</span></label>
         <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder={t.emailPlaceholder} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, fontFamily: 'var(--font-cond)', fontSize: 12, color: geoStatus === 'too_far' ? 'var(--red)' : 'var(--text-muted)' }}>
-        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: geoStatus === 'ok' ? 'var(--green)' : geoStatus === 'too_far' ? 'var(--red)' : 'var(--text-dim)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, fontFamily: 'var(--font-cond)', fontSize: 12, color: geoStatus === 'too_far' ? 'var(--amber)' : 'var(--text-muted)' }}>
+        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: geoStatus === 'ok' ? 'var(--green)' : geoStatus === 'too_far' ? 'var(--amber)' : 'var(--text-dim)' }} />
         <span>{geoMessage}</span>
         {geoStatus === 'too_far' && (
           <button
