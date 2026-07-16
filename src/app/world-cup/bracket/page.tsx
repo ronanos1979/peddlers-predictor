@@ -253,9 +253,12 @@ function resolveCandidates(
     const m = matchByNum[matchNum]
     if (!m) return { teams: [], confirmed: false }
     if (m.result) {
-      const winner = m.result === 'home' ? m.home_team : m.result === 'away' ? m.away_team : null
-      if (!winner) return { teams: [], confirmed: false }
-      return resolveCandidates(winner, matchByNum, groupMap, depth + 1)
+      const wantsLoser = /\bLoser\b/i.test(slot)
+      const teamName = wantsLoser
+        ? (m.result === 'home' ? m.away_team : m.result === 'away' ? m.home_team : null)
+        : (m.result === 'home' ? m.home_team : m.result === 'away' ? m.away_team : null)
+      if (!teamName) return { teams: [], confirmed: false }
+      return resolveCandidates(teamName, matchByNum, groupMap, depth + 1)
     }
     // Match not yet played — collect all candidates from both sides
     const homeC = resolveCandidates(m.home_team, matchByNum, groupMap, depth + 1)

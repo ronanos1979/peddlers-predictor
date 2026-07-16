@@ -49,7 +49,7 @@ type StandingRow = { team: { name: string }; all: { played: number } }
 // ESPN's format ("Group H 2nd Place", "Third Place Group C/D/F/G/H") so Pass 2
 // never overwrites a real placeholder with an ESPN-format placeholder.
 function isPlaceholderName(name: string): boolean {
-  if (/\b(Winner|Runner-up|3rd\s*Place|TBD|Match\s*\d+)\b/i.test(name)) return true
+  if (/\b(Winner|Loser|Runner-up|3rd\s*Place|TBD|Match\s*\d+|Semifinal|Quarterfinal)\b/i.test(name)) return true
   // ESPN uses "Group H 2nd Place" / "Group K 1st Place" — catch ordinal+Place combos
   if (/\b\d+(?:st|nd|rd|th)\s+Place\b/i.test(name)) return true
   // ESPN uses "Third Place Group E/H/I/J/K" instead of our "3rd Place (E/H/I/J/K)"
@@ -98,6 +98,65 @@ export async function updateKnockoutNames(): Promise<number> {
     if (awayResolved) { updates.away_team = awayResolved; const f = flagMap.get(awayResolved); if (f) updates.away_flag = f }
     await supabaseAdmin.from('matches').update(updates).eq('id', m.id)
     updated++
+  }
+
+  // Pass 1.5 — result-based: resolve "Semifinal N Winner/Loser", "Quarterfinal N Winner/Loser",
+  // "Round of 16 N Winner/Loser", "Round of 32 N Winner/Loser", "Match N Winner/Loser" from
+  // already-played DB matches. This handles 3rd place (Semifinal Losers) and Final (Semifinal Winners)
+  // without needing to call ESPN.
+  {
+    // Build full match-number index (match 1 = first non-demo kickoff, 101/102 = SFs, etc.)
+    const { data: allNonDemo } = await supabaseAdmin
+      .from('matches')
+      .select('id, home_team, away_team, result')
+      .neq('stage', 'Demo Match')
+      .order('kickoff_at', { ascending: true })
+    const byNum: Record<number, { home_team: string; away_team: string; result: string | null }> = {}
+    ;(allNonDemo || []).forEach((m, i) => { byNum[i + 1] = m })
+
+    // Reload knockout matches in case Pass 1 just wrote new team names
+    const { data: freshKO } = await supabaseAdmin
+      .from('matches').select('id, home_team, away_team')
+      .not('stage', 'ilike', 'Group %').neq('stage', 'Demo Match')
+
+    const slotPatterns: Array<[RegExp, number]> = [
+      [/^Match (\d+) (Winner|Loser)$/i, 0],
+      [/^Semifinal (\d+) (Winner|Loser)$/i, 100],
+      [/^Quarterfinal (\d+) (Winner|Loser)$/i, 96],
+      [/^Round of 16 (\d+) (Winner|Loser)$/i, 88],
+      [/^Round of 32 (\d+) (Winner|Loser)$/i, 72],
+    ]
+
+    const slotRes = new Map<string, string>()
+    for (const m of freshKO || []) {
+      for (const slot of [m.home_team, m.away_team]) {
+        if (!isPlaceholderName(slot)) continue
+        let matchNum: number | null = null
+        let wantsLoser = false
+        for (const [re, offset] of slotPatterns) {
+          const mm = slot.match(re)
+          if (mm) { matchNum = offset + parseInt(mm[1], 10); wantsLoser = mm[2].toLowerCase() === 'loser'; break }
+        }
+        if (matchNum === null) continue
+        const src = byNum[matchNum]
+        if (!src?.result) continue
+        const winner = src.result === 'home' ? src.home_team : src.result === 'away' ? src.away_team : null
+        const loser  = src.result === 'home' ? src.away_team : src.result === 'away' ? src.home_team : null
+        const resolved = wantsLoser ? loser : winner
+        if (resolved && !isPlaceholderName(resolved)) slotRes.set(slot, resolved)
+      }
+    }
+
+    for (const m of freshKO || []) {
+      const homeR = slotRes.get(m.home_team)
+      const awayR = slotRes.get(m.away_team)
+      if (!homeR && !awayR) continue
+      const upd: Record<string, string> = {}
+      if (homeR) { upd.home_team = homeR; const f = flagMap.get(homeR); if (f) upd.home_flag = f }
+      if (awayR) { upd.away_team = awayR; const f = flagMap.get(awayR); if (f) upd.away_flag = f }
+      await supabaseAdmin.from('matches').update(upd).eq('id', m.id)
+      updated++
+    }
   }
 
   // Pass 2 — ESPN scoreboard: fill any remaining placeholders ("3rd Place (…)",
