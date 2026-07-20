@@ -202,9 +202,12 @@ export async function POST(req: NextRequest) {
     // Toggle the site-wide decommission splash (hides every patron page behind a single message)
     if (action === 'set_decommission') {
       const { enabled, message } = payload
-      await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from('app_settings')
         .upsert({ key: 'decommission', value: { enabled: !!enabled, message: String(message || '') }, updated_at: new Date().toISOString() })
+      if (error) {
+        return NextResponse.json({ error: `Could not save (${error.message}) — has supabase/app_settings.sql been run yet?` }, { status: 500 })
+      }
       return NextResponse.json({ success: true })
     }
 

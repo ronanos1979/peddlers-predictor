@@ -120,6 +120,7 @@ export default function AdminPage() {
   const [decommissionLoaded, setDecommissionLoaded] = useState(false)
   const [decommissionSaving, setDecommissionSaving] = useState(false)
   const [decommissionConfirming, setDecommissionConfirming] = useState(false)
+  const [decommissionTableMissing, setDecommissionTableMissing] = useState(false)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -224,6 +225,7 @@ export default function AdminPage() {
       .then(data => {
         setDecommissionEnabled(!!data.enabled)
         if (data.message) setDecommissionMessage(data.message)
+        setDecommissionTableMissing(!!data.tableMissing)
         setDecommissionLoaded(true)
       })
   }, [authed, decommissionLoaded, password])
@@ -1120,9 +1122,15 @@ export default function AdminPage() {
                 ? 'Every patron page is hidden — visitors only see the message below.'
                 : 'Live — patrons can enter predictions and view all pages normally.'}
             </p>
+            {decommissionTableMissing && (
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--red)' }}>
+                ⚠️ Database table not set up yet — run <code>supabase/app_settings.sql</code> in the Supabase SQL editor before this will do anything.
+              </p>
+            )}
           </div>
           {!decommissionEnabled && !decommissionConfirming && (
             <button className="btn btn-secondary" style={{ width: 'auto', borderColor: 'var(--red)', color: 'var(--red)' }}
+              disabled={decommissionTableMissing}
               onClick={() => setDecommissionConfirming(true)}>
               Decommission site…
             </button>

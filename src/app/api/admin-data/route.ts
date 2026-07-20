@@ -120,13 +120,17 @@ export async function GET(req: NextRequest) {
   }
 
   if (action === 'decommission') {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('app_settings')
       .select('value')
       .eq('key', 'decommission')
       .single()
     const value = (data?.value as { enabled?: boolean; message?: string } | undefined) || {}
-    return NextResponse.json({ enabled: value.enabled ?? false, message: value.message ?? '' })
+    return NextResponse.json({
+      enabled: value.enabled ?? false,
+      message: value.message ?? '',
+      tableMissing: !!error && error.code === 'PGRST205',
+    })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
