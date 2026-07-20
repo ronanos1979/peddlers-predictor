@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import LangSwitcher from '@/components/LangSwitcher'
@@ -18,7 +19,20 @@ export const viewport: Viewport = {
   themeColor: '#0a0a0a',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const h = await headers()
+  const decommissioned = h.get('x-decommissioned') === '1'
+
+  if (decommissioned) {
+    return (
+      <html lang="en">
+        <body>
+          <main>{children}</main>
+        </body>
+      </html>
+    )
+  }
+
   return (
     <html lang="en">
       <body>

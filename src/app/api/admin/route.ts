@@ -199,6 +199,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, scored })
     }
 
+    // Toggle the site-wide decommission splash (hides every patron page behind a single message)
+    if (action === 'set_decommission') {
+      const { enabled, message } = payload
+      await supabaseAdmin
+        .from('app_settings')
+        .upsert({ key: 'decommission', value: { enabled: !!enabled, message: String(message || '') }, updated_at: new Date().toISOString() })
+      return NextResponse.json({ success: true })
+    }
+
     if (action === 'sync_results') {
       try {
         const result = await syncResults()

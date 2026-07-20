@@ -75,6 +75,10 @@ export default function AdminPage() {
   const [revealedWinners, setRevealedWinners] = useState<RaffleWinner[]>([])
   const [drawPool, setDrawPool] = useState<RaffleEntrant[]>([])
   const [rollingName, setRollingName] = useState('')
+  const [raffleMode, setRaffleMode] = useState<'random' | 'announce'>('random')
+  const [announceSelections, setAnnounceSelections] = useState<{ 3: string; 2: string; 1: string }>({ 3: '', 2: '', 1: '' })
+  const [manualWinners, setManualWinners] = useState<RaffleWinner[] | null>(null)
+  const [isAnnouncing, setIsAnnouncing] = useState(false)
   const [teams, setTeams] = useState<TeamStatus[]>([])
   const [teamsLoading, setTeamsLoading] = useState(false)
   const [teamAction, setTeamAction] = useState<string | null>(null)
@@ -109,6 +113,13 @@ export default function AdminPage() {
   const [drawingMatchId, setDrawingMatchId] = useState<string | null>(null)
   const [ineligiblePhones, setIneligiblePhones] = useState<Set<string>>(new Set())
   const [togglingIneligible, setTogglingIneligible] = useState<string | null>(null)
+  const [decommissionEnabled, setDecommissionEnabled] = useState(false)
+  const [decommissionMessage, setDecommissionMessage] = useState(
+    "Thanks for entering. The winner will be announced on Tuesday July 21 at 8pm in Nashua."
+  )
+  const [decommissionLoaded, setDecommissionLoaded] = useState(false)
+  const [decommissionSaving, setDecommissionSaving] = useState(false)
+  const [decommissionConfirming, setDecommissionConfirming] = useState(false)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -205,6 +216,35 @@ export default function AdminPage() {
     loadFeedback()
     loadCheckins()
   }, [authed, loadMatches, loadStats, loadEntrants, loadFeedback, loadCheckins])
+
+  useEffect(() => {
+    if (!authed || decommissionLoaded) return
+    fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=decommission`)
+      .then(res => res.json())
+      .then(data => {
+        setDecommissionEnabled(!!data.enabled)
+        if (data.message) setDecommissionMessage(data.message)
+        setDecommissionLoaded(true)
+      })
+  }, [authed, decommissionLoaded, password])
+
+  async function saveDecommission(enabled: boolean) {
+    setDecommissionSaving(true)
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'set_decommission', payload: { enabled, message: decommissionMessage } })
+    })
+    const data = await res.json()
+    setDecommissionSaving(false)
+    setDecommissionConfirming(false)
+    if (data.success) {
+      setDecommissionEnabled(enabled)
+      flash(enabled ? '🔒 Site is now showing the decommission splash to patrons' : '✅ Site is back to normal', 'success')
+    } else {
+      flash(`❌ Error: ${data.error}`, 'error')
+    }
+  }
 
   useEffect(() => {
     if (authed && tab === 'raffle' && !rafflePoolLoaded) loadRafflePool()
@@ -375,12 +415,26 @@ export default function AdminPage() {
   // double-fired keystroke landing before React removes the waiting-key listener).
   const isDrawingRef = useRef(false)
 
-  // Draws one place at a time — 3rd, then 2nd, then 1st — gated by a keystroke between each.
-  // Reveals the pub first, then the winner's name a beat later.
+  // Shared reveal choreography for both modes: pub first, then the name a beat later,
+  // then either hand off to the next position or finish.
+  async function revealWinner(winner: RaffleWinner, alreadyWon: RaffleWinner[]) {
+    setPendingWinner(winner)
+    setDrawStep('pub') // pub revealed; name still hidden
+
+    await new Promise<void>(resolve => setTimeout(resolve, 1500))
+
+    setRevealedWinners([...alreadyWon, winner])
+    setPendingWinner(null)
+    setDrawStep(winner.place === 1 ? 'done' : 'waiting-key')
+  }
+
+  // Random weighted draw, one place at a time — 3rd, then 2nd, then 1st, gated by a
+  // keystroke between each.
   async function drawPlace(place: 3 | 2 | 1, pool: RaffleEntrant[], alreadyWon: RaffleWinner[]) {
     if (isDrawingRef.current) return
     isDrawingRef.current = true
     try {
+      setIsAnnouncing(false)
       const wonPhones = new Set(alreadyWon.map(w => w.phone))
       const remainingPool = pool.filter(p => !wonPhones.has(p.phone))
       if (remainingPool.length === 0) {
@@ -398,14 +452,31 @@ export default function AdminPage() {
       clearInterval(iv)
 
       const winner = { ...weightedDraw(remainingPool, 1)[0], place }
-      setPendingWinner(winner)
-      setDrawStep('pub') // pub revealed; name still hidden
+      await revealWinner(winner, alreadyWon)
+    } finally {
+      isDrawingRef.current = false
+    }
+  }
 
-      await new Promise<void>(resolve => setTimeout(resolve, 1500))
-
-      setRevealedWinners([...alreadyWon, winner])
+  // Announces winners already determined outside the app (e.g. a physical bucket draw),
+  // using the same pub-then-name choreography as the random draw.
+  async function announcePlace(place: 3 | 2 | 1, winners: RaffleWinner[], alreadyWon: RaffleWinner[]) {
+    if (isDrawingRef.current) return
+    isDrawingRef.current = true
+    try {
+      setIsAnnouncing(true)
+      setCurrentPlace(place)
       setPendingWinner(null)
-      setDrawStep(place === 1 ? 'done' : 'waiting-key')
+      setDrawStep('rolling')
+
+      await new Promise<void>(resolve => setTimeout(resolve, 1200))
+
+      const winner = winners.find(w => w.place === place)
+      if (!winner) {
+        setDrawStep('done')
+        return
+      }
+      await revealWinner(winner, alreadyWon)
     } finally {
       isDrawingRef.current = false
     }
@@ -416,10 +487,30 @@ export default function AdminPage() {
       ? rafflePool
       : rafflePool.filter(p => p.pub_id === raffleFilter)
     if (filtered.length === 0) return
+    setManualWinners(null)
     setDrawPool(filtered)
     setRevealedWinners([])
     setPendingWinner(null)
     drawPlace(3, filtered, [])
+  }
+
+  function startAnnouncement() {
+    const byPhone = new Map(rafflePool.map(p => [p.phone, p]))
+    const sel3 = byPhone.get(announceSelections[3])
+    const sel2 = byPhone.get(announceSelections[2])
+    const sel1 = byPhone.get(announceSelections[1])
+    if (!sel3 || !sel2 || !sel1) return
+    const phones = new Set([sel3.phone, sel2.phone, sel1.phone])
+    if (phones.size !== 3) return // must be three distinct patrons
+    const winners: RaffleWinner[] = [
+      { ...sel3, place: 3 },
+      { ...sel2, place: 2 },
+      { ...sel1, place: 1 },
+    ]
+    setManualWinners(winners)
+    setRevealedWinners([])
+    setPendingWinner(null)
+    announcePlace(3, winners, [])
   }
 
   function resetDraw() {
@@ -427,19 +518,24 @@ export default function AdminPage() {
     setCurrentPlace(null)
     setPendingWinner(null)
     setRevealedWinners([])
+    setManualWinners(null)
   }
 
-  // While waiting between positions, any keystroke advances to the next draw
+  // While waiting between positions, any keystroke advances to the next draw or announcement
   useEffect(() => {
     if (drawStep !== 'waiting-key' || currentPlace == null) return
     const nextPlace = currentPlace === 3 ? 2 : 1
     function handleKey() {
-      drawPlace(nextPlace, drawPool, revealedWinners)
+      if (manualWinners) {
+        announcePlace(nextPlace, manualWinners, revealedWinners)
+      } else {
+        drawPlace(nextPlace, drawPool, revealedWinners)
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawStep, currentPlace, drawPool, revealedWinners])
+  }, [drawStep, currentPlace, drawPool, revealedWinners, manualWinners])
 
   async function loadTeamFd(teamName: string) {
     setTeamAction(teamName + ':fd')
@@ -1007,6 +1103,66 @@ export default function AdminPage() {
     <div className="container">
       <h1 style={{ marginBottom: 4 }}>Admin Panel</h1>
       <p className="muted" style={{ marginBottom: 16 }}>The Peddler&apos;s Daughter — World Cup 2026</p>
+
+      {/* Site decommission control — hides every patron page behind a single message */}
+      <div className="card" style={{
+        marginBottom: 16,
+        borderColor: decommissionEnabled ? 'var(--red)' : 'var(--border)',
+        background: decommissionEnabled ? 'rgba(255,59,59,0.06)' : undefined,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: decommissionEnabled ? 'var(--red)' : 'var(--text-muted)', marginBottom: 4 }}>
+              {decommissionEnabled ? '🔒 Site is decommissioned' : 'Site status'}
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+              {decommissionEnabled
+                ? 'Every patron page is hidden — visitors only see the message below.'
+                : 'Live — patrons can enter predictions and view all pages normally.'}
+            </p>
+          </div>
+          {!decommissionEnabled && !decommissionConfirming && (
+            <button className="btn btn-secondary" style={{ width: 'auto', borderColor: 'var(--red)', color: 'var(--red)' }}
+              onClick={() => setDecommissionConfirming(true)}>
+              Decommission site…
+            </button>
+          )}
+          {decommissionEnabled && (
+            <button className="btn btn-primary" style={{ width: 'auto' }} disabled={decommissionSaving}
+              onClick={() => saveDecommission(false)}>
+              {decommissionSaving ? 'Restoring…' : '✅ Bring site back'}
+            </button>
+          )}
+        </div>
+
+        {(decommissionConfirming || decommissionEnabled) && (
+          <div style={{ marginTop: 14 }}>
+            <label style={{ display: 'block', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+              Message shown to patrons
+            </label>
+            <textarea
+              value={decommissionMessage}
+              onChange={e => setDecommissionMessage(e.target.value)}
+              rows={2}
+              disabled={decommissionEnabled && !decommissionConfirming}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical' }}
+            />
+          </div>
+        )}
+
+        {decommissionConfirming && (
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setDecommissionConfirming(false)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--red)', borderColor: 'transparent' }}
+              disabled={decommissionSaving || !decommissionMessage.trim()}
+              onClick={() => saveDecommission(true)}>
+              {decommissionSaving ? 'Applying…' : 'Confirm — hide the whole site'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {msg && (
         <div style={{
@@ -1700,10 +1856,10 @@ export default function AdminPage() {
               Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Hat-trick bonus = <strong style={{ color: 'var(--gold)' }}>+7 tickets</strong>. Winner pick = <strong style={{ color: 'var(--gold)' }}>+15</strong>. Golden Boot = <strong style={{ color: 'var(--gold)' }}>+10</strong>. Wrong = 0 tickets.
             </p>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.6 }}>
-              The draw is <strong style={{ color: 'var(--gold)' }}>weighted</strong> — each ticket is one entry in a virtual drum. Draws happen in suspense order: <strong style={{ color: 'var(--gold)' }}>3rd place first</strong>, then 2nd, then 1st. Each reveal shows the winner&apos;s <strong style={{ color: 'var(--gold)' }}>pub first</strong>, then their name a beat later. Press any key to move on to the next draw.
+              <strong style={{ color: 'var(--gold)' }}>Random Draw</strong> is <strong style={{ color: 'var(--gold)' }}>weighted</strong> — each ticket is one entry in a virtual drum. <strong style={{ color: 'var(--gold)' }}>Announce Winners</strong> instead lets you type in three winners already determined outside the app (e.g. a physical bucket draw) and runs the same reveal for them. Either way, draws happen in suspense order — <strong style={{ color: 'var(--gold)' }}>3rd place first</strong>, then 2nd, then 1st — and each reveal shows the winner&apos;s <strong style={{ color: 'var(--gold)' }}>pub first</strong>, then their name a beat later. Press any key to move on.
             </p>
             <p style={{ fontSize: 12, color: 'rgba(0,200,122,0.8)', margin: 0 }}>
-              ✓ <strong>Safe to test:</strong> Results are not saved anywhere and no email is sent from this draw. Re-draw as many times as you need before the official night.
+              ✓ <strong>Safe to test:</strong> Nothing here is saved anywhere and no email is sent. Re-run as many times as you need before the official night.
             </p>
           </div>
 
@@ -1755,20 +1911,42 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Pub filter */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-            {(['all', 'haverhill', 'nashua'] as const).map(f => (
-              <button key={f} onClick={() => { setRaffleFilter(f); resetDraw() }}
-                style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
-                  border: `1px solid ${raffleFilter === f ? 'var(--gold)' : 'var(--border)'}`,
-                  background: raffleFilter === f ? 'rgba(245,197,24,0.12)' : 'transparent',
-                  color: raffleFilter === f ? 'var(--gold)' : 'var(--text-muted)',
-                  fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
-                  letterSpacing: 0.5, textTransform: 'capitalize' }}>
-                {f === 'all' ? 'All pubs' : f === 'haverhill' ? 'Haverhill' : 'Nashua'}
-              </button>
-            ))}
-          </div>
+          {/* Mode toggle */}
+          {drawStep === 'idle' && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              {([
+                { key: 'random' as const, label: '🎲 Random Draw' },
+                { key: 'announce' as const, label: '📣 Announce Winners' },
+              ]).map(m => (
+                <button key={m.key} onClick={() => { setRaffleMode(m.key); if (m.key === 'announce') setRaffleFilter('all') }}
+                  style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
+                    border: `1px solid ${raffleMode === m.key ? 'var(--gold)' : 'var(--border)'}`,
+                    background: raffleMode === m.key ? 'rgba(245,197,24,0.12)' : 'transparent',
+                    color: raffleMode === m.key ? 'var(--gold)' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                    letterSpacing: 0.5 }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Pub filter — random draw mode only */}
+          {raffleMode === 'random' && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+              {(['all', 'haverhill', 'nashua'] as const).map(f => (
+                <button key={f} onClick={() => { setRaffleFilter(f); resetDraw() }}
+                  style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
+                    border: `1px solid ${raffleFilter === f ? 'var(--gold)' : 'var(--border)'}`,
+                    background: raffleFilter === f ? 'rgba(245,197,24,0.12)' : 'transparent',
+                    color: raffleFilter === f ? 'var(--gold)' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-cond)', fontWeight: 700, fontSize: 12,
+                    letterSpacing: 0.5, textTransform: 'capitalize' }}>
+                  {f === 'all' ? 'All pubs' : f === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {!rafflePoolLoaded ? (
             <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading raffle pool…</p>
@@ -1798,12 +1976,57 @@ export default function AdminPage() {
                   ))}
                 </div>
 
-                {filtered.length === 0 ? (
+                {raffleMode === 'random' && filtered.length === 0 ? (
                   <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
                     <p className="muted">No eligible entrants yet. Correct predictions needed.</p>
                   </div>
                 ) : (
                   <>
+                    {/* Announce Winners — pick three patrons already determined outside the app */}
+                    {raffleMode === 'announce' && drawStep === 'idle' && (() => {
+                      const sortedPool = [...rafflePool].sort((a, b) => a.name.localeCompare(b.name))
+                      const values = [announceSelections[3], announceSelections[2], announceSelections[1]]
+                      const allFilled = values.every(v => v)
+                      const allDistinct = new Set(values).size === 3
+
+                      return (
+                        <div className="card" style={{ marginBottom: 16 }}>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 10 }}>
+                            📣 Pick the winners to announce
+                          </div>
+                          {([3, 2, 1] as const).map(place => (
+                            <div key={place} style={{ marginBottom: 10 }}>
+                              <label style={{ display: 'block', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: RAFFLE_PLACE_META[place].color, marginBottom: 4 }}>
+                                {RAFFLE_PLACE_META[place].label}
+                              </label>
+                              <select
+                                value={announceSelections[place]}
+                                onChange={e => setAnnounceSelections(prev => ({ ...prev, [place]: e.target.value }))}
+                                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 14 }}
+                              >
+                                <option value="">Select a patron…</option>
+                                {sortedPool.map(p => (
+                                  <option key={p.phone} value={p.phone}>
+                                    {p.name} — {p.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'} — {p.tickets} tickets
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                          {allFilled && !allDistinct && (
+                            <p style={{ color: 'var(--red)', fontSize: 12, margin: '4px 0 10px' }}>Each position needs a different patron.</p>
+                          )}
+                          <button
+                            className="btn btn-gold"
+                            disabled={!allFilled || !allDistinct}
+                            style={{ marginTop: 4 }}
+                            onClick={startAnnouncement}>
+                            📣 Start the Announcement
+                          </button>
+                        </div>
+                      )
+                    })()}
+
                     {/* Winners revealed so far (3rd first, then 2nd, then 1st) */}
                     {revealedWinners.length > 0 && (
                       <div style={{ marginBottom: 16 }}>
@@ -1840,15 +2063,17 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    {/* Rolling animation */}
+                    {/* Rolling animation (random draw) / brief pause (announce) */}
                     {drawStep === 'rolling' && currentPlace != null && (
                       <div className="card" style={{ textAlign: 'center', padding: '32px 20px', background: 'linear-gradient(135deg, #0d1f16, #111)', borderColor: 'rgba(0,200,122,0.3)', marginBottom: 16 }}>
                         <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 12 }}>
-                          🎲 Drawing {RAFFLE_PLACE_META[currentPlace].label}…
+                          {isAnnouncing ? `📣 Announcing ${RAFFLE_PLACE_META[currentPlace].label}…` : `🎲 Drawing ${RAFFLE_PLACE_META[currentPlace].label}…`}
                         </div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 2, color: 'var(--text)', minHeight: 40, transition: 'none' }}>
-                          {rollingName}
-                        </div>
+                        {!isAnnouncing && (
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 2, color: 'var(--text)', minHeight: 40, transition: 'none' }}>
+                            {rollingName}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1882,7 +2107,7 @@ export default function AdminPage() {
                     )}
 
                     {/* Start / reset button */}
-                    {drawStep === 'idle' && (
+                    {raffleMode === 'random' && drawStep === 'idle' && (
                       <button className="btn btn-gold" onClick={startDraw}>
                         🎲 Start the Draw — {filtered.length} players, {totalTickets} tickets
                       </button>
@@ -1894,7 +2119,7 @@ export default function AdminPage() {
                     )}
 
                     {/* Top entrants preview */}
-                    {drawStep === 'idle' && filtered.length > 0 && (
+                    {raffleMode === 'random' && drawStep === 'idle' && filtered.length > 0 && (
                       <div className="card" style={{ marginTop: 16 }}>
                         <h2 style={{ marginBottom: 8, fontSize: 14 }}>Top entrants by tickets</h2>
                         {filtered.slice(0, 10).map((p, i) => (
