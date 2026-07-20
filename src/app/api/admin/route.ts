@@ -5,6 +5,7 @@ import { FdRateLimitError } from '@/lib/footballData'
 import { fetchEspnEvents, scorerNameMatches } from '@/lib/fetchEspnEvents'
 import { toEspnDate, toEspnTeamName } from '@/lib/espnEvents'
 import { syncResults, resyncMatchIds, updateKnockoutNames } from '@/lib/syncResults'
+import { emailsAreBlocked, logEmailAttempt } from '@/lib/emailGuard'
 
 export async function POST(req: NextRequest) {
   try {
@@ -108,27 +109,33 @@ export async function POST(req: NextRequest) {
               const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
               const matchLabel = matchData ? `${matchData.home_team} vs ${matchData.away_team}` : 'tonight\'s match'
               const pubLabel = winner.pub_id === 'haverhill' ? 'Haverhill' : winner.pub_id === 'nashua' ? 'Nashua' : winner.pub_id || 'Unknown'
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  from,
-                  to: ['ronan.osullivan@ronanos.com', 'mike@thepeddlersdaughter.com'],
-                  subject: `🏆 Attendance Draw Winner — ${matchLabel}`,
-                  html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
-                    <div style="font-size:24px;font-weight:900;color:#FF9500;margin-bottom:4px;">🏆 Attendance Draw Winner</div>
-                    <div style="font-size:14px;color:#aaa;margin-bottom:20px;">${matchLabel} · ${pubLabel}</div>
-                    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;width:70px;">Name</td><td style="padding:8px 0;font-size:15px;font-weight:700;">${winner.name}</td></tr>
-                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Phone</td><td style="padding:8px 0;font-size:14px;">${winner.phone}</td></tr>
-                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Email</td><td style="padding:8px 0;font-size:14px;">${winner.email || 'Not provided'}</td></tr>
-                      <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Pub</td><td style="padding:8px 0;font-size:14px;">${pubLabel}</td></tr>
-                    </table>
-                    <p style="font-size:12px;color:#555;">Auto-draw triggered by check-in threshold · The Peddler's Daughter</p>
-                  </div>`
-                })
-              }).catch(() => {})
+              const recipients = ['ronan.osullivan@ronanos.com', 'mike@thepeddlersdaughter.com']
+              const subject = `🏆 Attendance Draw Winner — ${matchLabel}`
+              const blocked = await emailsAreBlocked()
+              await logEmailAttempt('checkin_auto_draw', recipients, subject, blocked)
+              if (!blocked) {
+                await fetch('https://api.resend.com/emails', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    from,
+                    to: recipients,
+                    subject,
+                    html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
+                      <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
+                      <div style="font-size:24px;font-weight:900;color:#FF9500;margin-bottom:4px;">🏆 Attendance Draw Winner</div>
+                      <div style="font-size:14px;color:#aaa;margin-bottom:20px;">${matchLabel} · ${pubLabel}</div>
+                      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                        <tr><td style="padding:8px 0;color:#777770;font-size:13px;width:70px;">Name</td><td style="padding:8px 0;font-size:15px;font-weight:700;">${winner.name}</td></tr>
+                        <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Phone</td><td style="padding:8px 0;font-size:14px;">${winner.phone}</td></tr>
+                        <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Email</td><td style="padding:8px 0;font-size:14px;">${winner.email || 'Not provided'}</td></tr>
+                        <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Pub</td><td style="padding:8px 0;font-size:14px;">${pubLabel}</td></tr>
+                      </table>
+                      <p style="font-size:12px;color:#555;">Auto-draw triggered by check-in threshold · The Peddler's Daughter</p>
+                    </div>`
+                  })
+                }).catch(() => {})
+              }
             }
           }
         }
@@ -207,6 +214,18 @@ export async function POST(req: NextRequest) {
         .upsert({ key: 'decommission', value: { enabled: !!enabled, message: String(message || '') }, updated_at: new Date().toISOString() })
       if (error) {
         return NextResponse.json({ error: `Could not save (${error.message}) — has supabase/app_settings.sql been run yet?` }, { status: 500 })
+      }
+      return NextResponse.json({ success: true })
+    }
+
+    // Toggle the global email kill switch (defaults to blocked; see src/lib/emailGuard.ts)
+    if (action === 'set_email_lockdown') {
+      const { enabled } = payload
+      const { error } = await supabaseAdmin
+        .from('app_settings')
+        .upsert({ key: 'email_lockdown', value: { enabled: !!enabled }, updated_at: new Date().toISOString() })
+      if (error) {
+        return NextResponse.json({ error: `Could not save (${error.message}) — has supabase/email_controls.sql been run yet?` }, { status: 500 })
       }
       return NextResponse.json({ success: true })
     }
@@ -311,36 +330,43 @@ export async function POST(req: NextRequest) {
         checkin_draw_at: new Date().toISOString(),
       }).eq('id', match_id)
       let emailed = false
+      let emailBlocked = false
       if (process.env.RESEND_API_KEY) {
         const { data: matchData } = await supabaseAdmin
           .from('matches').select('home_team, away_team').eq('id', match_id).single()
         const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
         const matchLabel = matchData ? `${matchData.home_team} vs ${matchData.away_team}` : 'tonight\'s match'
         const pubLabel = winner.pub_id === 'haverhill' ? 'Haverhill' : winner.pub_id === 'nashua' ? 'Nashua' : winner.pub_id || 'Unknown'
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from,
-            to: ['ronan.osullivan@ronanos.com', 'mike@thepeddlersdaughter.com'],
-            subject: `🏆 Attendance Draw Winner — ${matchLabel}`,
-            html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
-              <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
-              <div style="font-size:24px;font-weight:900;color:#FF9500;margin-bottom:4px;">🏆 Attendance Draw Winner</div>
-              <div style="font-size:14px;color:#aaa;margin-bottom:20px;">${matchLabel} · ${pubLabel}</div>
-              <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-                <tr><td style="padding:8px 0;color:#777770;font-size:13px;width:70px;">Name</td><td style="padding:8px 0;font-size:15px;font-weight:700;">${winner.name}</td></tr>
-                <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Phone</td><td style="padding:8px 0;font-size:14px;">${winner.phone}</td></tr>
-                <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Email</td><td style="padding:8px 0;font-size:14px;">${winner.email || 'Not provided'}</td></tr>
-                <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Pub</td><td style="padding:8px 0;font-size:14px;">${pubLabel}</td></tr>
-              </table>
-              <p style="font-size:12px;color:#555;">Manual draw · The Peddler's Daughter</p>
-            </div>`
-          })
-        }).catch(() => {})
-        emailed = true
+        const recipients = ['ronan.osullivan@ronanos.com', 'mike@thepeddlersdaughter.com']
+        const subject = `🏆 Attendance Draw Winner — ${matchLabel}`
+        emailBlocked = await emailsAreBlocked()
+        await logEmailAttempt('checkin_manual_draw', recipients, subject, emailBlocked)
+        if (!emailBlocked) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from,
+              to: recipients,
+              subject,
+              html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0a0a0a;color:#f0ede8;padding:28px 20px;border-radius:12px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#777770;margin-bottom:8px;">THE PEDDLER'S DAUGHTER</div>
+                <div style="font-size:24px;font-weight:900;color:#FF9500;margin-bottom:4px;">🏆 Attendance Draw Winner</div>
+                <div style="font-size:14px;color:#aaa;margin-bottom:20px;">${matchLabel} · ${pubLabel}</div>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                  <tr><td style="padding:8px 0;color:#777770;font-size:13px;width:70px;">Name</td><td style="padding:8px 0;font-size:15px;font-weight:700;">${winner.name}</td></tr>
+                  <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Phone</td><td style="padding:8px 0;font-size:14px;">${winner.phone}</td></tr>
+                  <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Email</td><td style="padding:8px 0;font-size:14px;">${winner.email || 'Not provided'}</td></tr>
+                  <tr><td style="padding:8px 0;color:#777770;font-size:13px;">Pub</td><td style="padding:8px 0;font-size:14px;">${pubLabel}</td></tr>
+                </table>
+                <p style="font-size:12px;color:#555;">Manual draw · The Peddler's Daughter</p>
+              </div>`
+            })
+          }).catch(() => {})
+          emailed = true
+        }
       }
-      return NextResponse.json({ success: true, winner_name: winner.name, winner_phone: winner.phone, emailed })
+      return NextResponse.json({ success: true, winner_name: winner.name, winner_phone: winner.phone, emailed, email_blocked: emailBlocked })
     }
 
     if (action === 'delete_entry') {

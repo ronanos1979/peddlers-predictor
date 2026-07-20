@@ -121,6 +121,15 @@ export default function AdminPage() {
   const [decommissionSaving, setDecommissionSaving] = useState(false)
   const [decommissionConfirming, setDecommissionConfirming] = useState(false)
   const [decommissionTableMissing, setDecommissionTableMissing] = useState(false)
+  const [emailBlocked, setEmailBlocked] = useState(true)
+  const [emailLockdownLoaded, setEmailLockdownLoaded] = useState(false)
+  const [emailLockdownSaving, setEmailLockdownSaving] = useState(false)
+  const [emailLockdownConfirming, setEmailLockdownConfirming] = useState(false)
+  const [emailTableMissing, setEmailTableMissing] = useState(false)
+  type EmailLogRow = { type: string; recipients: string[]; subject: string | null; blocked: boolean; created_at: string }
+  const [emailLog, setEmailLog] = useState<EmailLogRow[]>([])
+  const [emailLogOpen, setEmailLogOpen] = useState(false)
+  const [emailLogLoaded, setEmailLogLoaded] = useState(false)
   const dailyCode = getDailyCode()
 
   async function login() {
@@ -246,6 +255,42 @@ export default function AdminPage() {
     } else {
       flash(`❌ Error: ${data.error}`, 'error')
     }
+  }
+
+  useEffect(() => {
+    if (!authed || emailLockdownLoaded) return
+    fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=email_lockdown`)
+      .then(res => res.json())
+      .then(data => {
+        setEmailBlocked(data.enabled ?? true)
+        setEmailTableMissing(!!data.tableMissing)
+        setEmailLockdownLoaded(true)
+      })
+  }, [authed, emailLockdownLoaded, password])
+
+  async function saveEmailLockdown(blocked: boolean) {
+    setEmailLockdownSaving(true)
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'set_email_lockdown', payload: { enabled: blocked } })
+    })
+    const data = await res.json()
+    setEmailLockdownSaving(false)
+    setEmailLockdownConfirming(false)
+    if (data.success) {
+      setEmailBlocked(blocked)
+      flash(blocked ? '🔒 All email sending is now blocked' : '✉️ Email sending is allowed again', 'success')
+    } else {
+      flash(`❌ Error: ${data.error}`, 'error')
+    }
+  }
+
+  async function loadEmailLog() {
+    const res = await fetch(`/api/admin-data?password=${encodeURIComponent(password)}&action=email_log`)
+    const data = await res.json()
+    setEmailLog(data.log || [])
+    setEmailLogLoaded(true)
   }
 
   useEffect(() => {
@@ -1168,6 +1213,100 @@ export default function AdminPage() {
               onClick={() => saveDecommission(true)}>
               {decommissionSaving ? 'Applying…' : 'Confirm — hide the whole site'}
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Email kill switch — blocks every outbound email from this app, on by default */}
+      <div className="card" style={{
+        marginBottom: 16,
+        borderColor: emailBlocked ? 'var(--green)' : 'var(--red)',
+        background: emailBlocked ? undefined : 'rgba(255,59,59,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: emailBlocked ? 'var(--green)' : 'var(--red)', marginBottom: 4 }}>
+              {emailBlocked ? '🔒 Email sending is blocked' : '✉️ Email sending is allowed'}
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+              {emailBlocked
+                ? 'No reminder, winner-draw, or check-in-draw email will go out, regardless of admin actions.'
+                : 'Reminder and winner-draw emails can go out as usual. Block them if that\'s not intended.'}
+            </p>
+            {emailTableMissing && (
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--red)' }}>
+                ⚠️ Database table not set up yet — run <code>supabase/email_controls.sql</code> in the Supabase SQL editor. Until then, email sending is blocked by default regardless of this toggle.
+              </p>
+            )}
+          </div>
+          {emailBlocked && !emailLockdownConfirming && (
+            <button className="btn btn-secondary" style={{ width: 'auto' }}
+              onClick={() => setEmailLockdownConfirming(true)}>
+              Unlock email sending…
+            </button>
+          )}
+          {!emailBlocked && (
+            <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--red)', borderColor: 'transparent' }}
+              disabled={emailLockdownSaving}
+              onClick={() => saveEmailLockdown(true)}>
+              {emailLockdownSaving ? 'Blocking…' : '🔒 Block all email sending'}
+            </button>
+          )}
+        </div>
+
+        {emailLockdownConfirming && (
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setEmailLockdownConfirming(false)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" style={{ width: 'auto' }}
+              disabled={emailLockdownSaving}
+              onClick={() => saveEmailLockdown(false)}>
+              {emailLockdownSaving ? 'Unlocking…' : 'Confirm — allow email sending'}
+            </button>
+          </div>
+        )}
+
+        <button
+          className="btn btn-secondary"
+          style={{ width: 'auto', marginTop: 12, fontSize: 12 }}
+          onClick={() => {
+            const next = !emailLogOpen
+            setEmailLogOpen(next)
+            if (next && !emailLogLoaded) loadEmailLog()
+          }}>
+          {emailLogOpen ? 'Hide' : 'View'} recent email activity
+        </button>
+
+        {emailLogOpen && (
+          <div style={{ marginTop: 10 }}>
+            {!emailLogLoaded ? (
+              <p className="muted" style={{ fontSize: 12 }}>Loading…</p>
+            ) : emailLog.length === 0 ? (
+              <p className="muted" style={{ fontSize: 12 }}>No email attempts logged yet.</p>
+            ) : (
+              emailLog.map((row, i) => (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0',
+                  borderBottom: i < emailLog.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 12,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700 }}>{row.subject || row.type}</div>
+                    <div style={{ color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {row.type} · {Array.isArray(row.recipients) ? row.recipients.join(', ') : ''}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ color: row.blocked ? 'var(--text-dim)' : 'var(--green)', fontWeight: 700 }}>
+                      {row.blocked ? '🔒 Blocked' : '✓ Sent'}
+                    </div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                      {new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

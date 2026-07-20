@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { emailsAreBlocked, logEmailAttempt } from '@/lib/emailGuard'
 
 type Match = {
   id: string
@@ -152,6 +153,18 @@ export async function POST(req: NextRequest) {
 
     const from = process.env.RESEND_FROM_EMAIL ?? 'World Cup Predictor <noreply@peddlerspredictor.com>'
     const subject = buildSubject(matches as Match[])
+    const recipients = Array.from(emailMap.keys())
+
+    const blocked = await emailsAreBlocked()
+    await logEmailAttempt('reminder', recipients, subject, blocked)
+    if (blocked) {
+      return NextResponse.json({
+        sent: 0,
+        total: emailMap.size,
+        blocked: true,
+        error: 'Email sending is locked — no reminders were sent. Turn off the lockdown in the admin panel to allow this.',
+      })
+    }
 
     let sent = 0
     const errors: string[] = []

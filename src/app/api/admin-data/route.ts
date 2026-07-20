@@ -133,5 +133,31 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  if (action === 'email_lockdown') {
+    const { data, error } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'email_lockdown')
+      .single()
+    const value = (data?.value as { enabled?: boolean } | undefined) || {}
+    return NextResponse.json({
+      // Missing row/table = fail closed, matching the runtime guard's default.
+      enabled: value.enabled ?? true,
+      tableMissing: !!error && error.code === 'PGRST205',
+    })
+  }
+
+  if (action === 'email_log') {
+    const { data, error } = await supabaseAdmin
+      .from('email_log')
+      .select('type, recipients, subject, blocked, created_at')
+      .order('created_at', { ascending: false })
+      .limit(25)
+    return NextResponse.json({
+      log: data || [],
+      tableMissing: !!error && error.code === 'PGRST205',
+    })
+  }
+
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
