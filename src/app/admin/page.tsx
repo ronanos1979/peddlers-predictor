@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { supabase, type Match } from '@/lib/supabase'
 import { getDailyCode } from '@/lib/matchSchedule'
@@ -25,6 +25,11 @@ type FeedbackRow = { id: string; message: string; email: string | null; page: st
 type CheckInRow = { id: string; name: string; phone: string; email: string | null; pub_id: string; shared_to: string | null; created_at: string; match_id: string; matches: { home_team: string; away_team: string; home_flag: string; away_flag: string; kickoff_at: string; stage: string; checkin_winner_name: string | null; checkin_winner_phone: string | null; checkin_draw_at: string | null } | null }
 type RaffleEntrant = { name: string; phone: string; pub_id: string; tickets: number }
 type RaffleWinner = RaffleEntrant & { place: number }
+const RAFFLE_PLACE_META: Record<1 | 2 | 3, { label: string; medal: string; color: string; borderColor: string; bg: string }> = {
+  1: { label: '1st Place', medal: '🥇', color: 'var(--gold)', borderColor: 'var(--gold)', bg: 'linear-gradient(135deg, #1a1200, #111)' },
+  2: { label: '2nd Place', medal: '🥈', color: '#aaaaaa', borderColor: '#555', bg: 'var(--surface)' },
+  3: { label: '3rd Place', medal: '🥉', color: '#cd7f32', borderColor: '#4a3010', bg: 'var(--surface)' },
+}
 type TeamStatus = {
   name: string; flag: string; fd_loaded: boolean; coach_name: string | null
   player_count: number; number_count: number; photo_count: number; club_count: number
@@ -64,8 +69,11 @@ export default function AdminPage() {
   const [rafflePool, setRafflePool] = useState<RaffleEntrant[]>([])
   const [rafflePoolLoaded, setRafflePoolLoaded] = useState(false)
   const [raffleFilter, setRaffleFilter] = useState<'all' | 'haverhill' | 'nashua'>('all')
-  const [winners, setWinners] = useState<RaffleWinner[] | null>(null)
-  const [drawPhase, setDrawPhase] = useState<'idle' | 'rolling' | 'done'>('idle')
+  const [drawStep, setDrawStep] = useState<'idle' | 'rolling' | 'pub' | 'waiting-key' | 'done'>('idle')
+  const [currentPlace, setCurrentPlace] = useState<3 | 2 | 1 | null>(null)
+  const [pendingWinner, setPendingWinner] = useState<RaffleWinner | null>(null)
+  const [revealedWinners, setRevealedWinners] = useState<RaffleWinner[]>([])
+  const [drawPool, setDrawPool] = useState<RaffleEntrant[]>([])
   const [rollingName, setRollingName] = useState('')
   const [teams, setTeams] = useState<TeamStatus[]>([])
   const [teamsLoading, setTeamsLoading] = useState(false)
@@ -363,21 +371,75 @@ export default function AdminPage() {
     return drawn
   }
 
-  async function runDraw() {
+  // Guards against a draw being triggered twice in the same tick (e.g. a held or
+  // double-fired keystroke landing before React removes the waiting-key listener).
+  const isDrawingRef = useRef(false)
+
+  // Draws one place at a time — 3rd, then 2nd, then 1st — gated by a keystroke between each.
+  // Reveals the pub first, then the winner's name a beat later.
+  async function drawPlace(place: 3 | 2 | 1, pool: RaffleEntrant[], alreadyWon: RaffleWinner[]) {
+    if (isDrawingRef.current) return
+    isDrawingRef.current = true
+    try {
+      const wonPhones = new Set(alreadyWon.map(w => w.phone))
+      const remainingPool = pool.filter(p => !wonPhones.has(p.phone))
+      if (remainingPool.length === 0) {
+        setDrawStep('done')
+        return
+      }
+      setCurrentPlace(place)
+      setPendingWinner(null)
+      setDrawStep('rolling')
+
+      const names = remainingPool.map(p => p.name)
+      let i = 0
+      const iv = setInterval(() => { setRollingName(names[i++ % names.length]) }, 80)
+      await new Promise<void>(resolve => setTimeout(resolve, 2200))
+      clearInterval(iv)
+
+      const winner = { ...weightedDraw(remainingPool, 1)[0], place }
+      setPendingWinner(winner)
+      setDrawStep('pub') // pub revealed; name still hidden
+
+      await new Promise<void>(resolve => setTimeout(resolve, 1500))
+
+      setRevealedWinners([...alreadyWon, winner])
+      setPendingWinner(null)
+      setDrawStep(place === 1 ? 'done' : 'waiting-key')
+    } finally {
+      isDrawingRef.current = false
+    }
+  }
+
+  function startDraw() {
     const filtered = raffleFilter === 'all'
       ? rafflePool
       : rafflePool.filter(p => p.pub_id === raffleFilter)
     if (filtered.length === 0) return
-    setDrawPhase('rolling')
-    setWinners(null)
-    const names = filtered.map(p => p.name)
-    let i = 0
-    const iv = setInterval(() => { setRollingName(names[i++ % names.length]); }, 80)
-    await new Promise<void>(resolve => setTimeout(resolve, 2200))
-    clearInterval(iv)
-    setWinners(weightedDraw(filtered, 3))
-    setDrawPhase('done')
+    setDrawPool(filtered)
+    setRevealedWinners([])
+    setPendingWinner(null)
+    drawPlace(3, filtered, [])
   }
+
+  function resetDraw() {
+    setDrawStep('idle')
+    setCurrentPlace(null)
+    setPendingWinner(null)
+    setRevealedWinners([])
+  }
+
+  // While waiting between positions, any keystroke advances to the next draw
+  useEffect(() => {
+    if (drawStep !== 'waiting-key' || currentPlace == null) return
+    const nextPlace = currentPlace === 3 ? 2 : 1
+    function handleKey() {
+      drawPlace(nextPlace, drawPool, revealedWinners)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawStep, currentPlace, drawPool, revealedWinners])
 
   async function loadTeamFd(teamName: string) {
     setTeamAction(teamName + ':fd')
@@ -1638,7 +1700,7 @@ export default function AdminPage() {
               Correct result = <strong style={{ color: 'var(--gold)' }}>1 ticket</strong>. Correct result + exact score = <strong style={{ color: 'var(--gold)' }}>3 tickets</strong>. Hat-trick bonus = <strong style={{ color: 'var(--gold)' }}>+7 tickets</strong>. Winner pick = <strong style={{ color: 'var(--gold)' }}>+15</strong>. Golden Boot = <strong style={{ color: 'var(--gold)' }}>+10</strong>. Wrong = 0 tickets.
             </p>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.6 }}>
-              The draw is <strong style={{ color: 'var(--gold)' }}>weighted</strong> — each ticket is one entry in a virtual drum. A ticket is drawn at random. That patron wins 1st place and is removed. Repeat for 2nd and 3rd.
+              The draw is <strong style={{ color: 'var(--gold)' }}>weighted</strong> — each ticket is one entry in a virtual drum. Draws happen in suspense order: <strong style={{ color: 'var(--gold)' }}>3rd place first</strong>, then 2nd, then 1st. Each reveal shows the winner&apos;s <strong style={{ color: 'var(--gold)' }}>pub first</strong>, then their name a beat later. Press any key to move on to the next draw.
             </p>
             <p style={{ fontSize: 12, color: 'rgba(0,200,122,0.8)', margin: 0 }}>
               ✓ <strong>Safe to test:</strong> Results are not saved anywhere and no email is sent from this draw. Re-draw as many times as you need before the official night.
@@ -1696,7 +1758,7 @@ export default function AdminPage() {
           {/* Pub filter */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
             {(['all', 'haverhill', 'nashua'] as const).map(f => (
-              <button key={f} onClick={() => { setRaffleFilter(f); setWinners(null); setDrawPhase('idle') }}
+              <button key={f} onClick={() => { setRaffleFilter(f); resetDraw() }}
                 style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
                   border: `1px solid ${raffleFilter === f ? 'var(--gold)' : 'var(--border)'}`,
                   background: raffleFilter === f ? 'rgba(245,197,24,0.12)' : 'transparent',
@@ -1742,45 +1804,33 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Rolling animation */}
-                    {drawPhase === 'rolling' && (
-                      <div className="card" style={{ textAlign: 'center', padding: '32px 20px', background: 'linear-gradient(135deg, #0d1f16, #111)', borderColor: 'rgba(0,200,122,0.3)', marginBottom: 16 }}>
-                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 12 }}>
-                          🎲 Drawing…
-                        </div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 2, color: 'var(--text)', minHeight: 40, transition: 'none' }}>
-                          {rollingName}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Winners */}
-                    {drawPhase === 'done' && winners && (
+                    {/* Winners revealed so far (3rd first, then 2nd, then 1st) */}
+                    {revealedWinners.length > 0 && (
                       <div style={{ marginBottom: 16 }}>
-                        {winners.map((w) => {
-                          const medals = ['🥇', '🥈', '🥉']
-                          const placeLabels = ['1st Place', '2nd Place', '3rd Place']
-                          const colors = ['var(--gold)', '#aaaaaa', '#cd7f32']
+                        {revealedWinners.map((w) => {
+                          const meta = RAFFLE_PLACE_META[w.place as 1 | 2 | 3]
                           return (
                             <div key={w.place} className="card pop-in" style={{
                               marginBottom: 10,
-                              borderColor: w.place === 1 ? 'var(--gold)' : w.place === 2 ? '#555' : '#4a3010',
-                              background: w.place === 1 ? 'linear-gradient(135deg, #1a1200, #111)' : 'var(--surface)',
-                              animationDelay: `${(w.place - 1) * 0.15}s`,
+                              borderColor: meta.borderColor,
+                              background: meta.bg,
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                <div style={{ fontSize: 36, flexShrink: 0 }}>{medals[w.place - 1]}</div>
+                                <div style={{ fontSize: 36, flexShrink: 0 }}>{meta.medal}</div>
                                 <div style={{ flex: 1 }}>
-                                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: colors[w.place - 1], marginBottom: 3 }}>
-                                    {placeLabels[w.place - 1]}
+                                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: meta.color, marginBottom: 3 }}>
+                                    {meta.label}
+                                  </div>
+                                  <div style={{ fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, color: meta.color, marginBottom: 2 }}>
+                                    {w.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
                                   </div>
                                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>{w.name}</div>
                                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)' }}>
-                                    📞 {w.phone} · {w.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                                    📞 {w.phone}
                                   </div>
                                 </div>
                                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: colors[w.place - 1], letterSpacing: 1 }}>{w.tickets}</div>
+                                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: meta.color, letterSpacing: 1 }}>{w.tickets}</div>
                                   <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--text-dim)' }}>tickets</div>
                                 </div>
                               </div>
@@ -1790,18 +1840,61 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    {/* Draw / Re-draw button */}
-                    {drawPhase !== 'rolling' && (
-                      <button
-                        className={`btn ${drawPhase === 'done' ? 'btn-secondary' : 'btn-gold'}`}
-                        style={{ marginTop: drawPhase === 'done' ? 0 : 0 }}
-                        onClick={runDraw}>
-                        {drawPhase === 'done' ? '🔄 Re-draw' : `🎲 Draw Winners — ${filtered.length} players, ${totalTickets} tickets`}
+                    {/* Rolling animation */}
+                    {drawStep === 'rolling' && currentPlace != null && (
+                      <div className="card" style={{ textAlign: 'center', padding: '32px 20px', background: 'linear-gradient(135deg, #0d1f16, #111)', borderColor: 'rgba(0,200,122,0.3)', marginBottom: 16 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--green)', marginBottom: 12 }}>
+                          🎲 Drawing {RAFFLE_PLACE_META[currentPlace].label}…
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 2, color: 'var(--text)', minHeight: 40, transition: 'none' }}>
+                          {rollingName}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pub revealed, name still hidden */}
+                    {drawStep === 'pub' && pendingWinner && (
+                      <div className="card pop-in" style={{
+                        textAlign: 'center', padding: '28px 20px', marginBottom: 16,
+                        borderColor: RAFFLE_PLACE_META[pendingWinner.place as 1 | 2 | 3].borderColor,
+                        background: RAFFLE_PLACE_META[pendingWinner.place as 1 | 2 | 3].bg,
+                      }}>
+                        <div style={{ fontSize: 36, marginBottom: 6 }}>{RAFFLE_PLACE_META[pendingWinner.place as 1 | 2 | 3].medal}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: RAFFLE_PLACE_META[pendingWinner.place as 1 | 2 | 3].color, marginBottom: 8 }}>
+                          {RAFFLE_PLACE_META[pendingWinner.place as 1 | 2 | 3].label}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 34, letterSpacing: 1, marginBottom: 10 }}>
+                          {pendingWinner.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                        </div>
+                        <div className="pulse" style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                          revealing name…
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Waiting for keystroke to advance */}
+                    {drawStep === 'waiting-key' && currentPlace != null && (
+                      <div className="card pulse" style={{ textAlign: 'center', padding: '16px 20px', marginBottom: 16, borderColor: 'rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.06)' }}>
+                        <p style={{ margin: 0, fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--gold)' }}>
+                          ⌨️ Press any key to draw {RAFFLE_PLACE_META[currentPlace === 3 ? 2 : 1].label}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Start / reset button */}
+                    {drawStep === 'idle' && (
+                      <button className="btn btn-gold" onClick={startDraw}>
+                        🎲 Start the Draw — {filtered.length} players, {totalTickets} tickets
+                      </button>
+                    )}
+                    {drawStep === 'done' && (
+                      <button className="btn btn-secondary" onClick={resetDraw}>
+                        🔄 Start Over
                       </button>
                     )}
 
                     {/* Top entrants preview */}
-                    {drawPhase === 'idle' && filtered.length > 0 && (
+                    {drawStep === 'idle' && filtered.length > 0 && (
                       <div className="card" style={{ marginTop: 16 }}>
                         <h2 style={{ marginBottom: 8, fontSize: 14 }}>Top entrants by tickets</h2>
                         {filtered.slice(0, 10).map((p, i) => (

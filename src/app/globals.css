@@ -651,6 +651,14 @@ h3 {
 .pop-in { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 .slide-up { animation: slide-up 0.4s ease forwards; }
 .slide-up-delay { animation: slide-up 0.4s ease 0.15s both; }
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.pulse { animation: pulse-opacity 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pop-in, .slide-up, .slide-up-delay, .pulse { animation: none; }
+}
 .slide-up-delay-2 { animation: slide-up 0.4s ease 0.3s both; }
 
 /* Match card hero */
