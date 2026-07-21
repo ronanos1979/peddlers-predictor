@@ -1102,6 +1102,14 @@ export default function AdminPage() {
               <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>tickets</div>
             </div>
             <button
+              onClick={e => { e.stopPropagation(); movePub() }}
+              disabled={movingPub}
+              title={`Move to ${patron.pub_id === 'haverhill' ? 'Nashua' : 'Haverhill'}`}
+              style={{ padding: '4px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', opacity: movingPub ? 0.5 : 1, whiteSpace: 'nowrap' }}
+            >
+              {movingPub ? '…' : `⇄ ${patron.pub_id === 'haverhill' ? 'NH' : 'MA'}`}
+            </button>
+            <button
               onClick={e => { e.stopPropagation(); toggleIneligible(patron.phone, patron.name) }}
               disabled={isToggling}
               title={isIneligible ? 'Remove ineligibility' : 'Mark ineligible (hidden from patron)'}
