@@ -75,9 +75,10 @@ export default function AdminPage() {
   const [revealedWinners, setRevealedWinners] = useState<RaffleWinner[]>([])
   const [drawPool, setDrawPool] = useState<RaffleEntrant[]>([])
   const [rollingName, setRollingName] = useState('')
-  const [raffleMode, setRaffleMode] = useState<'random' | 'announce'>('random')
+  const [raffleMode, setRaffleMode] = useState<'random' | 'announce' | 'final'>('random')
   const [announceSelections, setAnnounceSelections] = useState<{ 3: string; 2: string; 1: string }>({ 3: '', 2: '', 1: '' })
   const [manualWinners, setManualWinners] = useState<RaffleWinner[] | null>(null)
+  const [finalSelections, setFinalSelections] = useState<{ 3: string; 2: string }>({ 3: '', 2: '' })
   const [isAnnouncing, setIsAnnouncing] = useState(false)
   const [teams, setTeams] = useState<TeamStatus[]>([])
   const [teamsLoading, setTeamsLoading] = useState(false)
@@ -560,6 +561,22 @@ export default function AdminPage() {
     announcePlace(3, winners, [])
   }
 
+  function startFinalNight() {
+    const byPhone = new Map(rafflePool.map(p => [p.phone, p]))
+    const sel3 = byPhone.get(finalSelections[3])
+    const sel2 = byPhone.get(finalSelections[2])
+    if (!sel3 || !sel2 || sel3.phone === sel2.phone) return
+    const winners: RaffleWinner[] = [
+      { ...sel3, place: 3 },
+      { ...sel2, place: 2 },
+    ]
+    setManualWinners(winners)
+    setDrawPool(rafflePool.filter(p => p.pub_id === 'nashua'))
+    setRevealedWinners([])
+    setPendingWinner(null)
+    announcePlace(3, winners, [])
+  }
+
   function resetDraw() {
     setDrawStep('idle')
     setCurrentPlace(null)
@@ -573,7 +590,10 @@ export default function AdminPage() {
     if (drawStep !== 'waiting-key' || currentPlace == null) return
     const nextPlace = currentPlace === 3 ? 2 : 1
     function handleKey() {
-      if (manualWinners) {
+      if (raffleMode === 'final' && nextPlace === 1) {
+        // 1st place: live weighted draw from Nashua pool
+        drawPlace(1, drawPool, revealedWinners)
+      } else if (manualWinners) {
         announcePlace(nextPlace, manualWinners, revealedWinners)
       } else {
         drawPlace(nextPlace, drawPool, revealedWinners)
@@ -582,7 +602,7 @@ export default function AdminPage() {
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawStep, currentPlace, drawPool, revealedWinners, manualWinners])
+  }, [drawStep, currentPlace, drawPool, revealedWinners, manualWinners, raffleMode])
 
   async function loadTeamFd(teamName: string) {
     setTeamAction(teamName + ':fd')
@@ -2060,12 +2080,13 @@ export default function AdminPage() {
 
           {/* Mode toggle */}
           {drawStep === 'idle' && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
               {([
                 { key: 'random' as const, label: '🎲 Random Draw' },
                 { key: 'announce' as const, label: '📣 Announce Winners' },
+                { key: 'final' as const, label: '🏆 Final Night' },
               ]).map(m => (
-                <button key={m.key} onClick={() => { setRaffleMode(m.key); if (m.key === 'announce') setRaffleFilter('all') }}
+                <button key={m.key} onClick={() => { setRaffleMode(m.key); if (m.key !== 'random') setRaffleFilter('all') }}
                   style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
                     border: `1px solid ${raffleMode === m.key ? 'var(--gold)' : 'var(--border)'}`,
                     background: raffleMode === m.key ? 'rgba(245,197,24,0.12)' : 'transparent',
@@ -2174,6 +2195,76 @@ export default function AdminPage() {
                       )
                     })()}
 
+                    {/* Final Night — announce 3rd (Nashua) + 2nd (Haverhill), live draw 1st (Nashua) */}
+                    {raffleMode === 'final' && drawStep === 'idle' && (() => {
+                      const nashuaPool = [...rafflePool].filter(p => p.pub_id === 'nashua').sort((a, b) => a.name.localeCompare(b.name))
+                      const haverhillPool = [...rafflePool].filter(p => p.pub_id === 'haverhill').sort((a, b) => a.name.localeCompare(b.name))
+                      const allFilled = !!finalSelections[3] && !!finalSelections[2]
+                      const allDistinct = finalSelections[3] !== finalSelections[2]
+                      const nashua1stPool = nashuaPool.filter(p => p.phone !== finalSelections[3])
+                      const nashua1stTickets = nashua1stPool.reduce((s, p) => s + p.tickets, 0)
+
+                      return (
+                        <div className="card" style={{ marginBottom: 16 }}>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>
+                            🏆 Final Night Draw Setup
+                          </div>
+
+                          <div style={{ marginBottom: 12 }}>
+                            <label style={{ display: 'block', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: RAFFLE_PLACE_META[3].color, marginBottom: 4 }}>
+                              🥉 3rd Place — Nashua
+                            </label>
+                            <select
+                              value={finalSelections[3]}
+                              onChange={e => setFinalSelections(prev => ({ ...prev, 3: e.target.value }))}
+                              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 14 }}
+                            >
+                              <option value="">Select Nashua patron…</option>
+                              {nashuaPool.map(p => (
+                                <option key={p.phone} value={p.phone}>{p.name} — {p.tickets} tickets</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div style={{ marginBottom: 12 }}>
+                            <label style={{ display: 'block', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: RAFFLE_PLACE_META[2].color, marginBottom: 4 }}>
+                              🥈 2nd Place — Haverhill
+                            </label>
+                            <select
+                              value={finalSelections[2]}
+                              onChange={e => setFinalSelections(prev => ({ ...prev, 2: e.target.value }))}
+                              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 14 }}
+                            >
+                              <option value="">Select Haverhill patron…</option>
+                              {haverhillPool.map(p => (
+                                <option key={p.phone} value={p.phone}>{p.name} — {p.tickets} tickets</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div style={{ padding: '10px 12px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.25)', borderRadius: 8, marginBottom: 14 }}>
+                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 3 }}>
+                              🥇 1st Place — Live Draw · Nashua Only
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                              {nashua1stPool.length} eligible Nashua entrants · {nashua1stTickets} tickets
+                              {finalSelections[3] ? ' (3rd place winner excluded)' : ''}
+                            </div>
+                          </div>
+
+                          {allFilled && !allDistinct && (
+                            <p style={{ color: 'var(--red)', fontSize: 12, margin: '0 0 10px' }}>3rd and 2nd place must be different patrons.</p>
+                          )}
+                          <button
+                            className="btn btn-gold"
+                            disabled={!allFilled || !allDistinct}
+                            onClick={startFinalNight}>
+                            🏆 Start the Final Night Draw
+                          </button>
+                        </div>
+                      )
+                    })()}
+
                     {/* Winners revealed so far (3rd first, then 2nd, then 1st) */}
                     {revealedWinners.length > 0 && (
                       <div style={{ marginBottom: 16 }}>
@@ -2248,7 +2339,9 @@ export default function AdminPage() {
                     {drawStep === 'waiting-key' && currentPlace != null && (
                       <div className="card pulse" style={{ textAlign: 'center', padding: '16px 20px', marginBottom: 16, borderColor: 'rgba(245,197,24,0.4)', background: 'rgba(245,197,24,0.06)' }}>
                         <p style={{ margin: 0, fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--gold)' }}>
-                          ⌨️ Press any key to draw {RAFFLE_PLACE_META[currentPlace === 3 ? 2 : 1].label}
+                          {raffleMode === 'final' && currentPlace === 2
+                            ? '⌨️ Press any key to draw 1st Place — live Nashua draw'
+                            : `⌨️ Press any key to draw ${RAFFLE_PLACE_META[currentPlace === 3 ? 2 : 1].label}`}
                         </p>
                       </div>
                     )}
