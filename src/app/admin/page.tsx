@@ -1026,8 +1026,28 @@ export default function AdminPage() {
 
   function PatronSummaryRow({ patron }: { patron: PatronSummary }) {
     const [expanded, setExpanded] = useState(false)
+    const [movingPub, setMovingPub] = useState(false)
     const isIneligible = ineligiblePhones.has(patron.phone)
     const isToggling = togglingIneligible === patron.phone
+
+    async function movePub() {
+      const newPub = patron.pub_id === 'haverhill' ? 'nashua' : 'haverhill'
+      setMovingPub(true)
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'move_patron_pub', payload: { phone: patron.phone, new_pub_id: newPub } }),
+      })
+      const data = await res.json()
+      setMovingPub(false)
+      if (data.success) {
+        flash(`✅ ${patron.name} moved to ${newPub === 'haverhill' ? 'Haverhill' : 'Nashua'}`, 'success')
+        loadEntrants(selectedDate || undefined)
+        setRafflePoolLoaded(false)
+      } else {
+        flash(`❌ ${data.error}`, 'error')
+      }
+    }
     return (
       <div style={{ background: 'var(--white)', border: `1px solid ${isIneligible ? 'rgba(255,59,59,0.4)' : 'var(--gray-border)'}`, borderRadius: 10, marginBottom: 8, overflow: 'hidden', opacity: isIneligible ? 0.75 : 1 }}>
         <div onClick={() => setExpanded(e => !e)} style={{ padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1144,6 +1164,14 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <button
+                onClick={movePub}
+                disabled={movingPub}
+                style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, opacity: movingPub ? 0.5 : 1 }}>
+                {movingPub ? 'Moving…' : `⇄ Move to ${patron.pub_id === 'haverhill' ? 'Nashua' : 'Haverhill'}`}
+              </button>
+            </div>
           </div>
         )}
       </div>

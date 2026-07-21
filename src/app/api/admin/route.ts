@@ -447,6 +447,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
+    if (action === 'move_patron_pub') {
+      const { phone, new_pub_id } = payload as { phone: string; new_pub_id: string }
+      if (!phone || !['haverhill', 'nashua'].includes(new_pub_id)) {
+        return NextResponse.json({ error: 'phone and valid new_pub_id required' }, { status: 400 })
+      }
+      await Promise.all([
+        supabaseAdmin.from('entries').update({ pub_id: new_pub_id }).eq('phone', phone),
+        supabaseAdmin.from('scorer_picks').update({ pub_id: new_pub_id }).eq('phone', phone),
+        supabaseAdmin.from('winner_picks').update({ pub_id: new_pub_id }).eq('phone', phone),
+        supabaseAdmin.from('check_ins').update({ pub_id: new_pub_id }).eq('phone', phone),
+      ])
+      return NextResponse.json({ success: true })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err) {
     console.error('Admin API error:', err)
