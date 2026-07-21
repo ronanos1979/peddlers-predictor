@@ -480,7 +480,7 @@ export default function AdminPage() {
 
   // Random weighted draw, one place at a time — 3rd, then 2nd, then 1st, gated by a
   // keystroke between each.
-  async function drawPlace(place: 3 | 2 | 1, pool: RaffleEntrant[], alreadyWon: RaffleWinner[]) {
+  async function drawPlace(place: 3 | 2 | 1, pool: RaffleEntrant[], alreadyWon: RaffleWinner[], displayPool?: RaffleEntrant[]) {
     if (isDrawingRef.current) return
     isDrawingRef.current = true
     try {
@@ -495,7 +495,7 @@ export default function AdminPage() {
       setPendingWinner(null)
       setDrawStep('rolling')
 
-      const names = remainingPool.map(p => p.name)
+      const names = (displayPool ?? remainingPool).map(p => p.name)
       let i = 0
       const iv = setInterval(() => { setRollingName(names[i++ % names.length]) }, 80)
       await new Promise<void>(resolve => setTimeout(resolve, 2200))
@@ -594,8 +594,8 @@ export default function AdminPage() {
     const nextPlace = currentPlace === 3 ? 2 : 1
     function handleKey() {
       if (raffleMode === 'final' && nextPlace === 1) {
-        // 1st place: live weighted draw from Nashua pool
-        drawPlace(1, drawPool, revealedWinners)
+        // draw from Nashua pool only; animation shows all eligible entrants
+        drawPlace(1, drawPool, revealedWinners, rafflePool)
       } else if (manualWinners) {
         announcePlace(nextPlace, manualWinners, revealedWinners)
       } else {
