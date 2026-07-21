@@ -79,6 +79,7 @@ export default function AdminPage() {
   const [announceSelections, setAnnounceSelections] = useState<{ 3: string; 2: string; 1: string }>({ 3: '', 2: '', 1: '' })
   const [manualWinners, setManualWinners] = useState<RaffleWinner[] | null>(null)
   const [finalSelections, setFinalSelections] = useState<{ 3: string; 2: string }>({ 3: '', 2: '' })
+  const [finalLocked, setFinalLocked] = useState(false)
   const [isAnnouncing, setIsAnnouncing] = useState(false)
   const [teams, setTeams] = useState<TeamStatus[]>([])
   const [teamsLoading, setTeamsLoading] = useState(false)
@@ -583,6 +584,7 @@ export default function AdminPage() {
     setPendingWinner(null)
     setRevealedWinners([])
     setManualWinners(null)
+    setFinalLocked(false)
   }
 
   // While waiting between positions, any keystroke advances to the next draw or announcement
@@ -2195,19 +2197,18 @@ export default function AdminPage() {
                       )
                     })()}
 
-                    {/* Final Night — announce 3rd (Nashua) + 2nd (Haverhill), live draw 1st (Nashua) */}
+                    {/* Final Night — two stages: setup (off-camera), then clean start screen (on-camera) */}
                     {raffleMode === 'final' && drawStep === 'idle' && (() => {
                       const nashuaPool = [...rafflePool].filter(p => p.pub_id === 'nashua').sort((a, b) => a.name.localeCompare(b.name))
                       const haverhillPool = [...rafflePool].filter(p => p.pub_id === 'haverhill').sort((a, b) => a.name.localeCompare(b.name))
                       const allFilled = !!finalSelections[3] && !!finalSelections[2]
                       const allDistinct = finalSelections[3] !== finalSelections[2]
-                      const nashua1stPool = nashuaPool.filter(p => p.phone !== finalSelections[3])
-                      const nashua1stTickets = nashua1stPool.reduce((s, p) => s + p.tickets, 0)
 
-                      return (
+                      // Stage 1: Setup (configure off-camera, selections visible)
+                      if (!finalLocked) return (
                         <div className="card" style={{ marginBottom: 16 }}>
                           <div style={{ fontFamily: 'var(--font-cond)', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>
-                            🏆 Final Night Draw Setup
+                            🏆 Final Night — Setup (off-camera)
                           </div>
 
                           <div style={{ marginBottom: 12 }}>
@@ -2226,7 +2227,7 @@ export default function AdminPage() {
                             </select>
                           </div>
 
-                          <div style={{ marginBottom: 12 }}>
+                          <div style={{ marginBottom: 14 }}>
                             <label style={{ display: 'block', fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: RAFFLE_PLACE_META[2].color, marginBottom: 4 }}>
                               🥈 2nd Place — Haverhill
                             </label>
@@ -2242,25 +2243,37 @@ export default function AdminPage() {
                             </select>
                           </div>
 
-                          <div style={{ padding: '10px 12px', background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.25)', borderRadius: 8, marginBottom: 14 }}>
-                            <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 3 }}>
-                              🥇 1st Place — Live Draw · Nashua Only
-                            </div>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                              {nashua1stPool.length} eligible Nashua entrants · {nashua1stTickets} tickets
-                              {finalSelections[3] ? ' (3rd place winner excluded)' : ''}
-                            </div>
-                          </div>
-
                           {allFilled && !allDistinct && (
                             <p style={{ color: 'var(--red)', fontSize: 12, margin: '0 0 10px' }}>3rd and 2nd place must be different patrons.</p>
                           )}
                           <button
                             className="btn btn-gold"
                             disabled={!allFilled || !allDistinct}
-                            onClick={startFinalNight}>
-                            🏆 Start the Final Night Draw
+                            onClick={() => setFinalLocked(true)}>
+                            ✓ Confirm — switch to draw screen
                           </button>
+                        </div>
+                      )
+
+                      // Stage 2: Clean draw screen (film this)
+                      const nashua1stPool = nashuaPool.filter(p => p.phone !== finalSelections[3])
+                      const nashua1stTickets = nashua1stPool.reduce((s, p) => s + p.tickets, 0)
+                      return (
+                        <div className="card" style={{ marginBottom: 16, textAlign: 'center', padding: '32px 24px', background: 'linear-gradient(135deg, #1a1200, #111)', borderColor: 'rgba(245,197,24,0.3)' }}>
+                          <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 2, marginBottom: 4 }}>Final Night Draw</div>
+                          <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, color: 'var(--text-muted)', marginBottom: 28 }}>
+                            {nashua1stPool.length} Nashua entrants · {nashua1stTickets} tickets in the 1st place draw
+                          </div>
+                          <button className="btn btn-gold" style={{ fontSize: 16, padding: '14px 32px' }} onClick={startFinalNight}>
+                            🎲 Start the Draw
+                          </button>
+                          <div style={{ marginTop: 16 }}>
+                            <button onClick={() => setFinalLocked(false)}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                              ← Change selections
+                            </button>
+                          </div>
                         </div>
                       )
                     })()}
