@@ -62,6 +62,7 @@ export default function AdminPage() {
   const [loadingEntrants, setLoadingEntrants] = useState(false)
   const [entrantView, setEntrantView] = useState<'entries' | 'by-person'>('entries')
   const [entrantFilter, setEntrantFilter] = useState<'all' | 'correct' | 'pending' | 'wrong'>('all')
+  const [entrantPubFilter, setEntrantPubFilter] = useState<'all' | 'haverhill' | 'nashua'>('all')
   const [feedback, setFeedback] = useState<FeedbackRow[]>([])
   const [selectedReminderIds, setSelectedReminderIds] = useState<Set<string>>(new Set())
   const [reminderSending, setReminderSending] = useState(false)
@@ -1793,12 +1794,18 @@ export default function AdminPage() {
           return Array.from(byPhone.values()).sort((a, b) => b.raffle_entries - a.raffle_entries)
         })()
 
-        const filteredEntrants = entrantFilter === 'all' ? entrants
-          : entrants.filter(e =>
-              entrantFilter === 'correct' ? e.is_correct === true :
-              entrantFilter === 'pending' ? e.is_correct === null :
-              e.is_correct === false
-            )
+        const pubFilteredEntrants = entrantPubFilter === 'all' ? entrants
+          : entrants.filter(e => e.pub_id === entrantPubFilter)
+
+        const filteredEntrants = pubFilteredEntrants.filter(e =>
+          entrantFilter === 'all' ? true :
+          entrantFilter === 'correct' ? e.is_correct === true :
+          entrantFilter === 'pending' ? e.is_correct === null :
+          e.is_correct === false
+        )
+
+        const filteredPatronSummaries = entrantPubFilter === 'all' ? patronSummaries
+          : patronSummaries.filter(p => p.pub_id === entrantPubFilter)
 
         return (
           <>
@@ -1829,6 +1836,24 @@ export default function AdminPage() {
                 ))}
               </div>
 
+              {/* Location filter — both views */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                {([
+                  { key: 'all', label: 'All locations' },
+                  { key: 'haverhill', label: 'Haverhill' },
+                  { key: 'nashua', label: 'Nashua' },
+                ] as const).map(({ key, label }) => (
+                  <button key={key} onClick={() => setEntrantPubFilter(key)}
+                    style={{ padding: '5px 12px', borderRadius: 14, fontSize: 12, cursor: 'pointer',
+                      border: `1px solid ${entrantPubFilter === key ? 'var(--gold)' : 'var(--gray-border)'}`,
+                      background: entrantPubFilter === key ? 'rgba(245,197,24,0.12)' : 'transparent',
+                      color: entrantPubFilter === key ? 'var(--gold)' : 'var(--text-muted)',
+                      fontWeight: entrantPubFilter === key ? 600 : 400 }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               {/* Status filter — only in entries view */}
               {entrantView === 'entries' && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1853,16 +1878,16 @@ export default function AdminPage() {
               <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
                 {entrantView === 'entries'
                   ? `${filteredEntrants.length} entr${filteredEntrants.length !== 1 ? 'ies' : 'y'}`
-                  : `${patronSummaries.length} patron${patronSummaries.length !== 1 ? 's' : ''}`}
+                  : `${filteredPatronSummaries.length} patron${filteredPatronSummaries.length !== 1 ? 's' : ''}`}
               </p>
             </div>
 
             {loadingEntrants ? (
               <p className="muted" style={{ textAlign: 'center', padding: 32 }}>Loading…</p>
             ) : entrantView === 'by-person' ? (
-              patronSummaries.length === 0
+              filteredPatronSummaries.length === 0
                 ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>No entries yet.</p>
-                : patronSummaries.map(patron => <PatronSummaryRow key={patron.phone} patron={patron} />)
+                : filteredPatronSummaries.map(patron => <PatronSummaryRow key={patron.phone} patron={patron} />)
             ) : (
               filteredEntrants.length === 0
                 ? <p className="muted" style={{ textAlign: 'center', padding: 32 }}>No entries match this filter.</p>
