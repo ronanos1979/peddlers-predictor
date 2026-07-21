@@ -1169,6 +1169,7 @@ export default function AdminPage() {
   }
 
   return (
+    <>
     <div className="container">
       <h1 style={{ marginBottom: 4 }}>Admin Panel</h1>
       <p className="muted" style={{ marginBottom: 16 }}>The Peddler&apos;s Daughter — World Cup 2026</p>
@@ -2683,5 +2684,112 @@ export default function AdminPage() {
         )
       })()}
     </div>
+
+    {/* ── Final Night full-screen draw overlay ─────────────────────────────── */}
+    {raffleMode === 'final' && finalLocked && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: '#0a0a0a',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }}>
+        {/* Exit — only visible when idle or done, small and out of the way */}
+        {(drawStep === 'idle' || drawStep === 'done') && (
+          <button onClick={resetDraw} style={{
+            position: 'absolute', top: 16, right: 16,
+            background: 'none', border: '1px solid var(--border)',
+            color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer',
+            borderRadius: 20, padding: '6px 14px',
+            fontFamily: 'var(--font-cond)', letterSpacing: 0.5,
+          }}>✕ Exit</button>
+        )}
+
+        <div style={{ width: '100%', maxWidth: 520 }}>
+
+          {/* Start screen */}
+          {drawStep === 'idle' && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 72, marginBottom: 16 }}>🏆</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 40, letterSpacing: 3, marginBottom: 8 }}>Final Night Draw</div>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 15, color: 'var(--text-muted)', marginBottom: 48 }}>
+                The Peddler&apos;s Daughter · World Cup 2026
+              </div>
+              <button className="btn btn-gold" style={{ fontSize: 20, padding: '18px 48px', letterSpacing: 1 }} onClick={startFinalNight}>
+                🎲 Start the Draw
+              </button>
+            </div>
+          )}
+
+          {/* Rolling animation */}
+          {drawStep === 'rolling' && currentPlace != null && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: isAnnouncing ? 'var(--gold)' : 'var(--green)', marginBottom: 24 }}>
+                {isAnnouncing ? `📣 Announcing ${RAFFLE_PLACE_META[currentPlace].label}…` : `🎲 Drawing ${RAFFLE_PLACE_META[currentPlace].label}…`}
+              </div>
+              {isAnnouncing
+                ? <div style={{ fontSize: 80 }}>{RAFFLE_PLACE_META[currentPlace].medal}</div>
+                : <div style={{ fontFamily: 'var(--font-display)', fontSize: 52, letterSpacing: 3, color: 'var(--text)', minHeight: 64, transition: 'none' }}>{rollingName}</div>
+              }
+            </div>
+          )}
+
+          {/* Pub revealed, name still hidden */}
+          {drawStep === 'pub' && pendingWinner && (() => {
+            const meta = RAFFLE_PLACE_META[pendingWinner.place as 1 | 2 | 3]
+            return (
+              <div className="card pop-in" style={{ textAlign: 'center', padding: '52px 32px', borderColor: meta.borderColor, background: meta.bg }}>
+                <div style={{ fontSize: 72, marginBottom: 16 }}>{meta.medal}</div>
+                <div style={{ fontFamily: 'var(--font-cond)', fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: meta.color, marginBottom: 20 }}>{meta.label}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 48, letterSpacing: 2, marginBottom: 20 }}>
+                  {pendingWinner.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}
+                </div>
+                <div className="pulse" style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                  revealing name…
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Winners revealed so far */}
+          {(drawStep === 'waiting-key' || drawStep === 'done') && revealedWinners.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {revealedWinners.map(w => {
+                const meta = RAFFLE_PLACE_META[w.place as 1 | 2 | 3]
+                return (
+                  <div key={w.place} className="card pop-in" style={{ marginBottom: 10, borderColor: meta.borderColor, background: meta.bg }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ fontSize: 40, flexShrink: 0 }}>{meta.medal}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: meta.color, marginBottom: 2 }}>{meta.label}</div>
+                        <div style={{ fontFamily: 'var(--font-cond)', fontSize: 14, fontWeight: 700, color: meta.color, marginBottom: 2 }}>{w.pub_id === 'haverhill' ? 'Haverhill' : 'Nashua'}</div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, letterSpacing: 1 }}>{w.name}</div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Waiting for keystroke */}
+          {drawStep === 'waiting-key' && currentPlace != null && (
+            <div className="pulse" style={{ textAlign: 'center', padding: 16, color: 'var(--gold)', fontFamily: 'var(--font-cond)', fontSize: 15, fontWeight: 700, letterSpacing: 0.5 }}>
+              {currentPlace === 2
+                ? '⌨️ Press any key to draw 1st Place'
+                : `⌨️ Press any key to draw ${RAFFLE_PLACE_META[currentPlace === 3 ? 2 : 1].label}`}
+            </div>
+          )}
+
+          {/* Done */}
+          {drawStep === 'done' && (
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button className="btn btn-secondary" onClick={resetDraw}>🔄 Start Over</button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    )}
+    </>
   )
 }
